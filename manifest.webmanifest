@@ -1,0 +1,37 @@
+{
+  "name": "Universal CAD Studio v0.20.0",
+  "short_name": "CAD Editor",
+  "description": "CAD/EDA workspace สำหรับเปิด e-PM/ODB++ เลือก ลาก คลุม หมุน ทำสำเนา และแก้ Component/Land บนบอร์ดโดยตรง",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080d17",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "id": "./",
+  "version": "0.20.0",
+  "lang": "th",
+  "dir": "ltr",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

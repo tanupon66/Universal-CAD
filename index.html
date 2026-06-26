@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="CAD/EDA editor แบบกราฟิกสำหรับ e-PM/ODB++ และ CAD XML เลือก ลาก หมุน ทำสำเนา และแก้ Land บนบอร์ดโดยตรง" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Universal CAD Studio v0.20.0</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="./icons/icon.svg" alt="" class="brand-icon" />
+      <div>
+        <h1>Universal CAD / Land Editor</h1>
+        <p>e-PM / ODB++ → XML · Full-board Visual Edit · Top / Bottom</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.20.0 · Schema 2</span>
+      <span id="projectStatus" class="status-pill muted">ยังไม่ได้เปิดโปรเจกต์</span>
+      <button id="appUpdateButton" class="ghost hidden" type="button">มีเวอร์ชันใหม่ · อัปเดต</button>
+      <button id="installButton" class="ghost hidden" type="button">ติดตั้งแอป</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="left-panel panel">
+      <section class="panel-section import-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">1. IMPORT</span>
+            <h2>นำเข้าไฟล์</h2>
+          </div>
+          <button id="resetButton" class="icon-button" type="button" title="ล้างโปรเจกต์">↺</button>
+        </div>
+        <label id="dropZone" class="drop-zone">
+          <input id="projectFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.job,.dat,.txt,.csv,.xlsx" hidden />
+          <span class="drop-icon">⌁</span>
+          <strong>วาง e-PM / ODB++ TGZ, ZIP, XML หรือ XLSX ที่นี่</strong>
+          <small>อ่าน components.Z และ eda/data.Z อัตโนมัติ แปลงเป็น XML แล้วเปิดทั้งบอร์ด</small>
+        </label>
+        <div class="mini-actions cad-file-actions">
+          <button id="originalCadButton" type="button">Original CAD</button>
+          <input id="originalCadFile" type="file" accept=".xml,.cpo,.cad,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
+          <button id="generatedCadButton" type="button">Generated CAD</button>
+          <input id="generatedCadFile" type="file" accept=".xml,.cpo,.cad,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
+          <button id="archiveCadButton" type="button">เปิด ZIP / TGZ / TAR</button>
+          <input id="archiveCadFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.job,.dat,.txt,application/zip,application/gzip,application/x-tar,application/xml" hidden />
+          <button id="restoreButton" type="button">นำเข้า Project / Mapping Backup</button>
+          <input id="restoreFile" type="file" accept=".json,application/json" hidden />
+          <button id="projectBackupButton" type="button" disabled>Export Project Backup</button>
+          <button id="recoveryButton" type="button" disabled>กู้คืน Autosave</button>
+          <button id="storageManagerButton" type="button">จัดการ Project</button>
+        </div>
+        <div class="file-row"><span>Original CAD</span><strong id="xmlFileName">—</strong></div>
+        <div class="file-row"><span>Generated CAD</span><strong id="generatedXmlFileName">—</strong></div>
+        <div class="file-row"><span>X-ray XLSX</span><strong id="xlsxFileName">—</strong></div>
+        <div class="file-row"><span>CAD package</span><strong id="archiveFileName">—</strong></div>
+        <div id="progressWrap" class="progress-wrap hidden"><div id="progressBar" class="progress-bar"></div></div>
+        <p id="importMessage" class="helper-text">ไฟล์จะถูกประมวลผลในเครื่อง ไม่อัปโหลดไปยังเซิร์ฟเวอร์</p>
+        <details id="archiveDiagnostics" class="archive-diagnostics hidden"><summary>รายละเอียดการตรวจไฟล์</summary><pre id="archiveDiagnosticsText">—</pre></details>
+      </section>
+
+      <section class="panel-section">
+        <span class="eyebrow">2. AUTO DETECT</span>
+        <h2>โครงสร้างข้อมูล X-ray</h2>
+        <div class="form-grid">
+          <label>Component<select id="componentColumn"></select></label>
+          <label>Package<select id="packageColumn"></select></label>
+          <label>Land identifier<select id="landColumn"></select></label>
+          <label>Measurement<select id="measurementColumn"></select></label>
+        </div>
+        <button id="remapButton" class="primary full" type="button" disabled>คำนวณ Mapping ใหม่</button>
+      </section>
+
+      <section class="panel-section stats-section">
+        <span class="eyebrow">3. SUMMARY</span>
+        <div class="stat-grid">
+          <div class="stat"><span>Mapped</span><strong id="mappedStat">0</strong></div>
+          <div class="stat"><span>Confirmed</span><strong id="verifiedStat">0</strong></div>
+          <div class="stat"><span>Unmapped</span><strong id="unmappedStat">0</strong></div>
+          <div class="stat"><span>CAD lands shown</span><strong id="xmlLandStat">0</strong></div>
+          <div class="stat"><span>Raw-data parts</span><strong id="componentStat">0</strong></div>
+        </div>
+        <div id="mappingFormula" class="formula-card">ยังไม่มีสูตร Mapping</div>
+      </section>
+
+      <section class="panel-section">
+        <span class="eyebrow">4. VIEW</span>
+        <label>CAD ที่แสดง
+          <select id="activeCadSelect"><option value="">— ยังไม่มี CAD —</option></select>
+        </label>
+        <label>Component
+          <select id="componentSelect"></select>
+        </label>
+        <label class="toggle-row"><input id="heatmapToggle" type="checkbox" checked /><span>Heatmap จาก Measurement</span></label>
+        <label class="toggle-row"><input id="labelToggle" type="checkbox" /><span>แสดงชื่อ CAD เมื่อซูมเข้า</span></label>
+        <label class="toggle-row duplicate-toggle"><input id="duplicateToggle" type="checkbox" checked /><span>ไฮไลต์ตำแหน่งชื่อ CAD ซ้ำ</span></label>
+        <label class="toggle-row"><input id="duplicateOnlyToggle" type="checkbox" /><span>ทำตำแหน่งที่ไม่ซ้ำให้จาง</span></label>
+        <label class="toggle-row"><input id="cadCompareOverlayToggle" type="checkbox" disabled /><span>ซ้อน Original ↔ Generated</span></label>
+        <label>ไปยังชื่อ CAD ซ้ำ
+          <select id="duplicateNameSelect"><option value="">— เลือกชื่อซ้ำ —</option></select>
+        </label>
+        <div id="duplicateSummaryMini" class="duplicate-summary-mini">ยังไม่มีข้อมูลชื่อซ้ำ</div>
+        <div class="button-grid">
+          <button id="fitButton" type="button">Fit</button>
+          <button id="zoomInButton" type="button">＋</button>
+          <button id="zoomOutButton" type="button">−</button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-toolbar panel">
+        <div class="search-wrap">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="ค้นหา 17660, L0A0A, XML ID หรือชื่อ CAD" />
+          <button id="searchButton" type="button">ค้นหา</button>
+        </div>
+        <div class="toolbar-actions">
+          <button id="cadEditorButton" class="primary" type="button" disabled>แก้ไข CAD</button>
+          <button id="detailPanelButton" class="detail-panel-button" type="button">รายละเอียด Land</button>
+          <button id="cadInspectorButton" type="button" disabled>ตรวจชื่อ CAD</button>
+          <button id="cadCompareButton" type="button" disabled>เปรียบเทียบ CAD</button>
+          <button id="manualButton" type="button" disabled>โหมด Edit</button>
+          <button id="teachButton" type="button" disabled>Manual Teach</button>
+          <button id="undoButton" type="button" disabled>Undo</button>
+          <button id="redoButton" type="button" disabled>Redo</button>
+          <button id="exportCsvButton" type="button" disabled>Export CSV</button>
+          <button id="exportExcelButton" class="primary" type="button" disabled>Component Excel</button>
+          <button id="exportJsonButton" type="button" disabled>Backup JSON</button>
+        </div>
+      </div>
+
+      <div class="viewer panel">
+        <canvas id="cadCanvas"></canvas>
+        <div class="viewer-hud top-left">
+          <span id="viewerTitle">ไม่มีข้อมูล</span>
+          <small id="viewerSubtitle">นำเข้าไฟล์เพื่อแสดงตำแหน่ง Land</small>
+        </div>
+        <div class="viewer-hud bottom-left legend">
+          <span class="measurement-gradient"></span>
+          <span>Measurement ต่ำ → สูง</span>
+          <span><i class="dot selected"></i> จุดที่เลือก</span>
+          <span><i class="dot confirmed"></i> ยืนยันด้วยตนเอง</span>
+          <span><i class="dot duplicate"></i> ชื่อ CAD ซ้ำ</span>
+          <span class="compare-legend"><i class="dot compare-original"></i> Original</span>
+          <span class="compare-legend"><i class="dot compare-generated"></i> Generated</span>
+        </div>
+        <div id="manualBanner" class="manual-banner edit-panel hidden">
+          <div class="edit-panel-heading"><strong>EDIT MODE</strong><button id="exitEditButton" class="edit-close" type="button" aria-label="ออกจากโหมด Edit">✕</button></div>
+          <span id="editCurrentLabel">เลือกรายการจากข้อมูลดิบในตารางหรือค้นหา</span>
+          <small>จากนั้นคลิกตำแหน่ง CAD บนกราฟิกเพื่อยืนยันคู่ Mapping ทันที</small>
+          <div class="edit-panel-actions">
+            <button id="editPrevButton" type="button">← ก่อนหน้า</button>
+            <button id="editNextButton" type="button">ถัดไป →</button>
+          </div>
+          <label class="edit-toggle"><input id="editAutoNext" type="checkbox" checked /> เลื่อนไป X-ray ถัดไปอัตโนมัติ</label>
+          <label class="edit-toggle"><input id="editLockConfirmed" type="checkbox" checked /> ล็อกจุดที่คลิกเป็น Confirmed</label>
+        </div>
+        <div id="tooltip" class="tooltip hidden"></div>
+      </div>
+
+      <div class="table-panel panel">
+        <div class="table-header">
+          <div>
+            <span class="eyebrow">MAPPING TABLE</span>
+            <strong id="tableSummary">0 รายการ</strong>
+          </div>
+          <div class="table-controls">
+            <select id="tableFilter">
+              <option value="all">ทั้งหมด</option>
+              <option value="duplicate">ชื่อ CAD ซ้ำ</option>
+              <option value="verified">Confirmed</option>
+              <option value="unverified">ยังไม่ยืนยัน</option>
+              <option value="unmapped">Unmapped</option>
+              <option value="cad-only">CAD only</option>
+            </select>
+            <button id="prevPage" type="button">‹</button>
+            <span id="pageLabel">1 / 1</span>
+            <button id="nextPage" type="button">›</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Raw identifier</th><th>Component</th><th>Package</th><th>CAD local</th><th>XML ID</th><th>CAD Name</th><th>X</th><th>Y</th><th>Width</th><th>Length</th><th>Measurement</th><th>Method</th><th>Confidence</th><th>Status</th></tr></thead>
+            <tbody id="mappingTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right-panel panel">
+      <section class="panel-section detail-header">
+        <div class="detail-header-row">
+          <div><span class="eyebrow">SELECTED LAND</span><h2 id="selectedTitle">ยังไม่ได้เลือก</h2></div>
+          <button id="detailPanelCloseButton" class="icon-button detail-panel-close" type="button" aria-label="ปิดรายละเอียด">✕</button>
+        </div>
+        <p id="selectedSubTitle">ค้นหาหรือคลิกตำแหน่งบนกราฟิก</p>
+      </section>
+      <section class="panel-section detail-grid" id="detailGrid">
+        <div><span>Raw identifier</span><strong id="dLocal">—</strong></div>
+        <div><span>XML global ID</span><strong id="dGlobal">—</strong></div>
+        <div><span>CAD name</span><strong id="dCad">—</strong></div>
+        <div><span>Component</span><strong id="dComponent">—</strong></div>
+        <div><span>Position X</span><strong id="dX">—</strong></div>
+        <div><span>Position Y</span><strong id="dY">—</strong></div>
+        <div><span>Measurement</span><strong id="dMeasurement">—</strong></div>
+        <div><span>Confidence</span><strong id="dConfidence">—</strong></div>
+        <div><span>Source row</span><strong id="dRow">—</strong></div>
+        <div><span>Mapping method</span><strong id="dMethod">—</strong></div>
+        <div><span>Confirmed</span><strong id="dVerified">—</strong></div>
+        <div><span>Anchor</span><strong id="dAnchor">—</strong></div>
+      </section>
+      <section id="duplicatePanel" class="panel-section duplicate-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">DUPLICATE CAD NAMES</span>
+            <h2>ตำแหน่งชื่อซ้ำ</h2>
+          </div>
+          <strong id="duplicateGroupCount" class="duplicate-count-badge">0</strong>
+        </div>
+        <p id="duplicatePanelMessage" class="helper-text">เลือก Land ที่มีชื่อ CAD ซ้ำ หรือเลือกชื่อจากเมนูด้านซ้าย</p>
+        <div id="duplicatePositionList" class="duplicate-position-list"><p class="empty-state">ยังไม่ได้เลือกกลุ่มชื่อซ้ำ</p></div>
+        <div class="duplicate-panel-actions">
+          <button id="fitDuplicateButton" type="button" disabled>Fit ทุกตำแหน่ง</button>
+          <button id="clearDuplicateButton" type="button" disabled>ล้างการเลือกกลุ่ม</button>
+        </div>
+      </section>
+      <section class="panel-section histogram-section">
+        <div class="section-heading histogram-heading">
+          <div>
+            <span class="eyebrow">MEASUREMENT</span>
+            <h2>Histogram</h2>
+          </div>
+          <div class="histogram-heading-actions">
+            <label class="compact-control">Bins
+              <select id="histogramBins">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="80">80</option>
+              </select>
+            </label>
+            <button id="expandHistogramButton" class="icon-button histogram-expand-button" type="button" title="ขยาย Histogram" aria-label="ขยาย Histogram">⛶</button>
+          </div>
+        </div>
+        <canvas id="measurementHistogram" height="170" aria-label="Measurement histogram" title="คลิกเพื่อเปิด Histogram แบบละเอียด"></canvas>
+        <div class="histogram-stats">
+          <div><span>Count</span><strong id="histCount">0</strong></div>
+          <div><span>Min</span><strong id="histMin">—</strong></div>
+          <div><span>Average</span><strong id="histAverage">—</strong></div>
+          <div><span>Median</span><strong id="histMedian">—</strong></div>
+          <div><span>Max</span><strong id="histMax">—</strong></div>
+        </div>
+        <p id="histogramMessage" class="helper-text">Histogram จะแสดง Measurement ของ Part ที่เลือกจากข้อมูลดิบเท่านั้น</p>
+      </section>
+      <section class="panel-section manual-actions-section">
+        <span class="eyebrow">MANUAL ACTIONS</span>
+        <div class="manual-action-grid">
+          <button id="anchorButton" type="button" disabled>ล็อกเป็น Anchor</button>
+          <button id="unmapButton" type="button" disabled>ยกเลิก Mapping</button>
+          <button id="nudgePrevButton" type="button" disabled>เลื่อน CAD −1</button>
+          <button id="nudgeNextButton" type="button" disabled>เลื่อน CAD +1</button>
+        </div>
+        <p class="helper-text">จุดที่คลิกใน Edit Mode เท่านั้นจะเป็น Confirmed ส่วน Auto order และ Pattern เป็นเพียงข้อเสนอจนกว่าจะยืนยันด้วยตนเอง</p>
+      </section>
+      <section class="panel-section">
+        <label>ชื่อแสดงผล / หมายเหตุ
+          <input id="aliasInput" type="text" placeholder="เช่น จุดที่ต้องตรวจซ้ำ" disabled />
+        </label>
+        <button id="saveAliasButton" class="full" type="button" disabled>บันทึกหมายเหตุ</button>
+        <p id="duplicateWarning" class="warning hidden"></p>
+      </section>
+      <section class="panel-section raw-section">
+        <div class="section-heading"><h2>ข้อมูลต้นทาง</h2><button id="copyRawButton" class="icon-button" type="button" disabled>⧉</button></div>
+        <pre id="rawData">—</pre>
+      </section>
+      <section class="panel-section about-section">
+        <strong>วิธี Mapping ของโปรเจกต์นี้</strong>
+        <p>โปรแกรมใช้ Component และ Package เพื่อเปิด CAD ที่เกี่ยวข้อง แต่ลำดับ XML เป็นเพียง Auto guess ไม่ถือว่าถูกต้อง จุดที่เป็น Confirmed ต้องมาจาก Edit Mode หรือ Anchor ที่ผู้ใช้ยืนยัน</p>
+      </section>
+    </aside>
+  </main>
+  <div id="detailPanelBackdrop" class="detail-panel-backdrop hidden" aria-hidden="true"></div>
+
+  <div id="teachOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="teachTitle">
+    <div class="teach-dialog panel">
+      <div class="teach-header">
+        <div>
+          <span class="eyebrow">SAFE PATTERN PREVIEW</span>
+          <h2 id="teachTitle">ตรวจ Pattern เฉพาะช่วงที่ปลอดภัย</h2>
+          <p id="teachComponentLabel">ต้องมี Anchor อย่างน้อย 2 จุด และจะเติมเฉพาะช่วงระหว่าง Anchor ที่ลำดับตรงกันพอดี</p>
+        </div>
+        <button id="closeTeachButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </div>
+      <div class="teach-layout">
+        <section class="teach-card">
+          <div class="teach-card-heading">
+            <div><span class="eyebrow">ANCHORS</span><strong id="anchorCountLabel">0 จุด</strong></div>
+            <button id="clearAnchorsButton" type="button">ปลด Anchor ทั้งหมด</button>
+          </div>
+          <div id="anchorList" class="anchor-list"><p class="empty-state">ยังไม่มี Anchor</p></div>
+          <p class="helper-text">เลือก Land ในตารางหรือกราฟิก กด “ล็อกเป็น Anchor” หรือใช้ “เลือก CAD ใหม่” เพื่อย้ายและล็อกจุดอ้างอิง</p>
+        </section>
+        <section class="teach-card">
+          <span class="eyebrow">PATTERN SETTINGS</span>
+          <div class="teach-form-grid">
+            <label>ทิศทาง
+              <select id="patternDirection">
+                <option value="auto">ตรวจอัตโนมัติจาก Anchor</option>
+                <option value="forward">Forward: เลขเพิ่มตาม CAD</option>
+                <option value="reverse">Reverse: เลขเพิ่มสวน CAD</option>
+              </select>
+            </label>
+            <label>Shift เพิ่มเติม<input id="patternShift" type="number" step="1" value="0" disabled title="Safe mode ไม่อนุญาต Shift" /></label>
+            <label>เริ่ม X-ray Land<input id="patternStart" type="number" step="1" placeholder="อัตโนมัติ" /></label>
+            <label>สิ้นสุด X-ray Land<input id="patternEnd" type="number" step="1" placeholder="อัตโนมัติ" /></label>
+          </div>
+          <label class="toggle-row"><input id="preserveAnchors" type="checkbox" checked /><span>รักษา Anchor ไว้เสมอ แม้สูตรขัดแย้ง</span></label>
+          <div class="teach-button-row">
+            <button id="previewPatternButton" class="primary" type="button">สร้าง Preview</button>
+            <button id="fillBetweenButton" type="button">Preview เฉพาะระหว่าง Anchor</button>
+            <button id="clearPreviewButton" type="button" disabled>ล้าง Preview</button>
+          </div>
+        </section>
+        <section class="teach-card preview-card">
+          <div class="teach-card-heading">
+            <div><span class="eyebrow">PREVIEW</span><strong id="previewTitle">ยังไม่มี Preview</strong></div>
+            <span id="previewDirectionBadge" class="status-pill muted">—</span>
+          </div>
+          <div class="preview-stats">
+            <div><span>ใช้ได้</span><strong id="previewApplicable">0</strong></div>
+            <div><span>มั่นใจสูง</span><strong id="previewHigh">0</strong></div>
+            <div><span>ต้องตรวจ</span><strong id="previewReview">0</strong></div>
+            <div><span>Conflict</span><strong id="previewConflict">0</strong></div>
+          </div>
+          <div id="previewFormula" class="formula-card">วาง Anchor แล้วกดสร้าง Preview</div>
+          <p id="previewWarning" class="warning hidden"></p>
+          <div class="teach-button-row apply-row">
+            <button id="applyPatternButton" class="primary" type="button" disabled>ใช้เป็นข้อเสนอ (ยังไม่ยืนยัน)</button>
+            <button id="applyHighButton" type="button" disabled>ใช้ข้อเสนอที่ปลอดภัย</button>
+          </div>
+        </section>
+        <section class="teach-card">
+          <span class="eyebrow">QUICK OPERATIONS</span>
+          <div class="quick-grid">
+            <button id="previewForwardButton" type="button">ตรวจ Forward ระหว่าง Anchor</button>
+            <button id="previewReverseButton" type="button">ตรวจ Reverse ระหว่าง Anchor</button>
+            <button id="shiftAllPrevButton" type="button">Shift ผลปัจจุบัน −1</button>
+            <button id="shiftAllNextButton" type="button">Shift ผลปัจจุบัน +1</button>
+            <button id="unmapRangeButton" class="danger-button" type="button">Unmap ช่วงที่กำหนด</button>
+          </div>
+          <p class="helper-text">Safe Pattern ไม่ขยายออกนอก Anchor และผลที่ Apply ยังไม่ถือว่า Confirmed จนกว่าจะคลิกยืนยันใน Edit Mode</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="componentReportOverlay" class="modal-overlay component-report-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="componentReportTitle">
+    <div class="component-report-dialog panel">
+      <header class="cad-inspector-header">
+        <div>
+          <span class="eyebrow">COMPONENT EXCEL REPORT</span>
+          <h2 id="componentReportTitle">สร้าง Excel พร้อมรูป Component</h2>
+          <p>สร้างภาพรวมตามพิกัด CAD ภาพขยายรายโซน ตาราง Land และ Histogram ในไฟล์ .xlsx เดียว</p>
+        </div>
+        <button id="closeComponentReportButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+
+      <div class="component-report-options">
+        <label>Component ที่ส่งออก
+          <select id="componentReportScope">
+            <option value="current">เฉพาะ Component ที่กำลังดู</option>
+            <option value="raw">ทุก Part ที่พบในข้อมูลดิบ</option>
+            <option value="all">ทุก Component ที่มี Land ใน CAD (ตารางรวม)</option>
+          </select>
+        </label>
+        <label>แบ่งภาพเป็นโซน
+          <select id="componentReportZones">
+            <option value="2">2 × 2</option>
+            <option value="3" selected>3 × 3</option>
+            <option value="4">4 × 4 (ละเอียดที่สุด)</option>
+          </select>
+        </label>
+        <label>ข้อความบนภาพขยาย
+          <select id="componentReportLabels">
+            <option value="cad">ชื่อ CAD</option>
+            <option value="xray">หมายเลข X-ray Land</option>
+            <option value="both" selected>ชื่อ CAD + X-ray Land</option>
+            <option value="none">ไม่แสดงข้อความ</option>
+          </select>
+        </label>
+        <label>ชื่อ CAD ที่ใช้ในรายงาน
+          <select id="componentReportNameSource">
+            <option value="active">CAD ที่กำลังแสดง</option>
+            <option value="original">Original CAD</option>
+            <option value="generated">Generated CAD</option>
+          </select>
+        </label>
+        <label>ความละเอียดภาพ
+          <select id="componentReportResolution">
+            <option value="1600">มาตรฐาน</option>
+            <option value="2200" selected>ละเอียด</option>
+            <option value="3000">ละเอียดสูง</option>
+          </select>
+        </label>
+        <label class="toggle-row component-report-toggle"><input id="componentReportHeatmap" type="checkbox" checked /><span>ใช้สี Heatmap จาก Measurement</span></label>
+        <label class="toggle-row component-report-toggle"><input id="componentReportCompatibility" type="checkbox" checked /><span>Excel Compatibility — ลดข้อมูลซ้ำในชีต Zone เพื่อให้เปิดได้ง่ายขึ้น</span></label>
+      </div>
+
+      <div class="component-report-preview">
+        <div><span>Component</span><strong id="componentReportPartCount">0</strong></div>
+        <div><span>Land</span><strong id="componentReportLandCount">0</strong></div>
+        <div><span>Zone sheets</span><strong id="componentReportZoneCount">0</strong></div>
+        <div><span>Measurement</span><strong id="componentReportMeasurementCount">0</strong></div>
+      </div>
+      <p id="componentReportMessage" class="helper-text">เลือก Component และรูปแบบรายงาน จากนั้นกดสร้าง Excel</p>
+      <div class="component-report-actions">
+        <button id="cancelComponentReportButton" type="button">ยกเลิก</button>
+        <button id="generateComponentReportButton" class="primary" type="button">สร้าง Component Report Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cadCompareOverlay" class="modal-overlay cad-compare-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cadCompareTitle">
+    <div class="cad-compare-dialog panel">
+      <header class="cad-inspector-header">
+        <div>
+          <span class="eyebrow">ORIGINAL ↔ GENERATED CAD</span>
+          <h2 id="cadCompareTitle">จับคู่ CAD ใหม่กับ CAD เดิม</h2>
+          <p>จับคู่ Component และ Land ด้วย XML ID ก่อน แล้วใช้พิกัดเป็นแผนสำรองเพื่อแสดงชื่อเดิมเทียบกับชื่อใหม่</p>
+        </div>
+        <button id="closeCadCompareButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+
+      <div class="cad-compare-toolbar">
+        <label>ระยะจับคู่พิกัดสูงสุด (mm)
+          <input id="cadCompareTolerance" type="number" min="0.0001" max="10" step="0.001" value="0.08" />
+        </label>
+        <label>ตัวกรอง
+          <select id="cadCompareFilter">
+            <option value="changed">เฉพาะที่เปลี่ยน/มีปัญหา</option>
+            <option value="all">ทั้งหมด</option>
+            <option value="renamed">เปลี่ยนชื่อ</option>
+            <option value="moved">ตำแหน่งเปลี่ยน</option>
+            <option value="missing">หาไม่พบ</option>
+          </select>
+        </label>
+        <label class="cad-inspector-search">ค้นหา
+          <input id="cadCompareSearch" type="search" placeholder="Part, XML ID, ชื่อเดิมหรือชื่อใหม่" />
+        </label>
+        <button id="rebuildCadCompareButton" type="button">คำนวณใหม่</button>
+      </div>
+
+      <div class="cad-compare-summary">
+        <div><span>Component จับคู่</span><strong id="cadCompareComponents">0</strong></div>
+        <div><span>Land จับคู่</span><strong id="cadCompareMatched">0</strong></div>
+        <div><span>ชื่อเปลี่ยน</span><strong id="cadCompareRenamed">0</strong></div>
+        <div><span>ตำแหน่งเปลี่ยน</span><strong id="cadCompareMoved">0</strong></div>
+        <div><span>หายใน CAD ใหม่</span><strong id="cadCompareMissing">0</strong></div>
+        <div><span>เกินมาใน CAD ใหม่</span><strong id="cadCompareExtra">0</strong></div>
+      </div>
+
+      <div class="cad-inspector-actions">
+        <button id="useOriginalCadButton" type="button">แสดง Original CAD</button>
+        <button id="useGeneratedCadButton" class="primary" type="button">แสดง Generated CAD</button>
+        <button id="fitCadCompareButton" type="button">Fit คู่ที่เลือก</button>
+        <button id="exportCadCompareButton" type="button">Export Mapping CSV</button>
+      </div>
+      <p id="cadCompareMessage" class="helper-text">อัปโหลด Original CAD และ Generated CAD เพื่อเริ่มเปรียบเทียบ</p>
+
+      <div class="cad-inspector-table-wrap">
+        <table class="cad-inspector-table cad-compare-table">
+          <thead><tr><th>Part</th><th>Original XML</th><th>ชื่อเดิม</th><th>Generated XML</th><th>ชื่อใหม่</th><th>ระยะ</th><th>วิธีจับคู่</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="cadCompareTableBody"></tbody>
+        </table>
+      </div>
+      <footer class="cad-inspector-footer">
+        <span id="cadCompareTableSummary">0 รายการ</span>
+        <div><button id="cadComparePrevPage" type="button">‹</button><span id="cadComparePageLabel">1 / 1</span><button id="cadCompareNextPage" type="button">›</button></div>
+      </footer>
+    </div>
+  </div>
+
+  <div id="cadInspectorOverlay" class="modal-overlay cad-inspector-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cadInspectorTitle">
+    <div class="cad-inspector-dialog panel">
+      <header class="cad-inspector-header">
+        <div>
+          <span class="eyebrow">CAD NAME INSPECTOR</span>
+          <h2 id="cadInspectorTitle">ตรวจและแก้ชื่อ Land ใน CAD</h2>
+          <p>ตรวจชื่อซ้ำภายใน Part เดียวกันและชื่อที่ยาวเกินข้อจำกัดของเครื่อง ก่อนส่งออก XML ฉบับแก้ไข</p>
+        </div>
+        <button id="closeCadInspectorButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+
+      <div class="cad-inspector-toolbar">
+        <label>ขอบเขต
+          <select id="cadInspectorScope">
+            <option value="all">ทั้ง CAD</option>
+            <option value="raw">เฉพาะ Part ในข้อมูลดิบ</option>
+            <option value="current">เฉพาะ Part ที่กำลังดู</option>
+          </select>
+        </label>
+        <label>ความยาวสูงสุด
+          <input id="cadMaxLength" type="number" min="2" max="12" step="1" value="5" />
+        </label>
+        <label>เมื่อตัวยาวเกินกำหนด
+          <select id="cadOverflowMode">
+            <option value="keep-start" selected>เก็บตัวหน้า · ตัดตัวหลัง</option>
+            <option value="keep-end">เก็บตัวหลัง · ตัดตัวหน้า</option>
+            <option value="regenerate">สร้าง A1 ใหม่แทน</option>
+          </select>
+        </label>
+        <label>เมื่อชื่อซ้ำ
+          <select id="cadDuplicateMode">
+            <option value="replace-character" selected>แทนอักขระด้วย 1, 2, 3…</option>
+            <option value="suffix">เติมเลขท้ายและตัดให้พอดี</option>
+            <option value="regenerate">สร้าง A1 ใหม่แทน</option>
+          </select>
+        </label>
+        <label>อักขระสำหรับแทนเลข
+          <input id="cadDuplicateCharacter" type="text" maxlength="1" value="_" inputmode="text" autocomplete="off" />
+        </label>
+        <label>ชื่อสำรองอัตโนมัติ
+          <input id="cadNamePrefix" type="hidden" value="A" />
+          <span class="cad-name-mode-readonly">A1, A2, A3… เริ่มใหม่ทุก Component</span>
+        </label>
+        <label>ตัวกรอง
+          <select id="cadIssueFilter">
+            <option value="all" selected>ทั้งหมด (รวมชื่อปกติ)</option>
+            <option value="issues">เฉพาะที่มีปัญหา</option>
+            <option value="duplicate">ชื่อซ้ำ</option>
+            <option value="too-long">เกินความยาว</option>
+            <option value="blank">ชื่อว่าง</option>
+            <option value="changed">แก้แล้ว</option>
+            <option value="valid">ผ่านแล้ว</option>
+          </select>
+        </label>
+        <label class="cad-inspector-search">ค้นหา
+          <input id="cadInspectorSearch" type="search" placeholder="Part, XML ID หรือชื่อ Land" />
+        </label>
+      </div>
+
+      <div class="cad-inspector-summary">
+        <div><span>Land ทั้งหมด</span><strong id="cadAuditTotal">0</strong></div>
+        <div><span>ผ่านแล้ว</span><strong id="cadAuditValid">0</strong></div>
+        <div><span>ยังมีปัญหา</span><strong id="cadAuditUnresolved">0</strong></div>
+        <div><span>กลุ่มชื่อซ้ำ</span><strong id="cadAuditDuplicateGroups">0</strong></div>
+        <div><span>จุดชื่อซ้ำ</span><strong id="cadAuditDuplicateLands">0</strong></div>
+        <div><span>เกินความยาว</span><strong id="cadAuditTooLong">0</strong></div>
+        <div><span>ชื่อว่าง</span><strong id="cadAuditBlank">0</strong></div>
+        <div><span>ชื่อที่เปลี่ยน</span><strong id="cadAuditChanged">0</strong></div>
+      </div>
+
+      <div class="cad-inspector-actions">
+        <button id="cadAutoFixButton" class="primary" type="button">แก้เฉพาะชื่อที่มีปัญหา</button>
+        <button id="cadRenameAllButton" type="button">สร้างชื่อใหม่ทั้งขอบเขต</button>
+        <button id="cadResetNamesButton" type="button">คืนชื่อเดิม</button>
+        <button id="cadExportReportButton" type="button">Export รายงาน CSV</button>
+        <button id="cadApplyNamesButton" type="button">ซิงก์ชื่อกับหน้า Viewer</button>
+        <button id="cadExportXmlButton" class="primary" type="button">Export CAD XML</button>
+      </div>
+      <div class="cad-rule-preview" id="cadRulePreview">
+        <strong>ตัวอย่างกฎ</strong><span>ABCDEFG → ABCDE · AB_CD, AB_CD → AB_CD, AB1CD</span>
+      </div>
+      <p id="cadInspectorMessage" class="helper-text">แสดง Land ทั้งหมด รวมชื่อปกติ และซิงก์ชื่อที่แก้กับหน้า Viewer โดยอัตโนมัติ</p>
+
+      <div class="cad-inspector-table-wrap">
+        <table class="cad-inspector-table">
+          <thead>
+            <tr><th>Part</th><th>Local</th><th>XML ID</th><th>ชื่อเดิม</th><th>ชื่อสุดท้าย</th><th>Length</th><th>สถานะ</th><th></th></tr>
+          </thead>
+          <tbody id="cadInspectorTableBody"></tbody>
+        </table>
+      </div>
+      <footer class="cad-inspector-footer">
+        <span id="cadInspectorTableSummary">0 รายการ</span>
+        <div><button id="cadInspectorPrevPage" type="button">‹</button><span id="cadInspectorPageLabel">1 / 1</span><button id="cadInspectorNextPage" type="button">›</button></div>
+      </footer>
+    </div>
+  </div>
+  <div id="cadEditorOverlay" class="modal-overlay cad-editor-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cadEditorTitle">
+    <div class="cad-editor-dialog cad-studio-shell">
+      <header class="cad-studio-titlebar">
+        <div class="cad-studio-brand">
+          <img src="./icons/icon.svg" alt="" />
+          <div>
+            <span class="eyebrow">UNIVERSAL CAD STUDIO</span>
+            <h2 id="cadEditorTitle">Board Editor</h2>
+          </div>
+        </div>
+        <div class="cad-studio-project">
+          <strong id="cadEditorSource">เปิด XML, ZIP หรือ TGZ เพื่อเริ่มแก้ไข</strong>
+          <span id="cadStudioDirtyBadge" class="cad-studio-dirty hidden">มีการแก้ไข</span>
+        </div>
+        <div class="cad-studio-window-actions">
+          <button id="cadStudioOpenButton" type="button" title="เปิดไฟล์ CAD ใหม่">เปิดไฟล์</button>
+          <button id="closeCadEditorButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+        </div>
+      </header>
+
+      <nav class="cad-studio-menubar" aria-label="เมนู CAD Editor">
+        <div class="cad-studio-menu-group">
+          <div class="cad-menu-root">
+            <button type="button" data-cad-menu="file" aria-haspopup="menu" aria-expanded="false">File</button>
+            <div class="cad-menu-dropdown hidden" data-cad-menu-panel="file" role="menu">
+              <button type="button" data-cad-command="open">เปิดไฟล์ CAD… <kbd>Ctrl+O</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="export-xml">Export XML… <kbd>Ctrl+E</kbd></button>
+              <button type="button" data-cad-command="export-archive">Export Archive…</button>
+              <hr />
+              <button type="button" data-cad-command="close">ปิด CAD Editor <kbd>Esc</kbd></button>
+            </div>
+          </div>
+          <div class="cad-menu-root">
+            <button type="button" data-cad-menu="edit" aria-haspopup="menu" aria-expanded="false">Edit</button>
+            <div class="cad-menu-dropdown hidden" data-cad-menu-panel="edit" role="menu">
+              <button type="button" data-cad-command="undo" data-requires-undo>Undo <kbd>Ctrl+Z</kbd></button>
+              <button type="button" data-cad-command="redo" data-requires-redo>Redo <kbd>Ctrl+Y</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="cut">Cut <kbd>Ctrl+X</kbd></button>
+              <button type="button" data-cad-command="copy">Copy <kbd>Ctrl+C</kbd></button>
+              <button type="button" data-cad-command="paste">Paste <kbd>Ctrl+V</kbd></button>
+              <button type="button" data-cad-command="duplicate">ทำสำเนา <kbd>Ctrl+D</kbd></button>
+              <button type="button" data-cad-command="delete" class="danger-menu">ลบที่เลือก <kbd>Del</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="select-all">เลือกทั้งหมดที่แสดง <kbd>Ctrl+A</kbd></button>
+              <button type="button" data-cad-command="clear-selection">ล้างการเลือก <kbd>Esc</kbd></button>
+            </div>
+          </div>
+          <div class="cad-menu-root">
+            <button type="button" data-cad-menu="view" aria-haspopup="menu" aria-expanded="false">View</button>
+            <div class="cad-menu-dropdown hidden" data-cad-menu-panel="view" role="menu">
+              <button type="button" data-cad-command="fit-board">Fit ทั้งบอร์ด <kbd>F</kbd></button>
+              <button type="button" data-cad-command="fit-selection">Fit ที่เลือก</button>
+              <button type="button" data-cad-command="zoom-in">Zoom In <kbd>+</kbd></button>
+              <button type="button" data-cad-command="zoom-out">Zoom Out <kbd>−</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="toggle-grid" data-cad-check="grid">แสดง Grid</button>
+              <button type="button" data-cad-command="toggle-labels" data-cad-check="labels">แสดงชื่อ</button>
+              <button type="button" data-cad-command="toggle-snap" data-cad-check="snap">Snap to Grid</button>
+              <hr />
+              <button type="button" data-cad-command="side-all" data-cad-check="side-all">Top + Bottom</button>
+              <button type="button" data-cad-command="side-top" data-cad-check="side-top">Top เท่านั้น</button>
+              <button type="button" data-cad-command="side-bottom" data-cad-check="side-bottom">Bottom เท่านั้น</button>
+              <hr />
+              <button type="button" data-cad-command="fullscreen">เต็มหน้าจอ</button>
+            </div>
+          </div>
+          <div class="cad-menu-root">
+            <button type="button" data-cad-menu="tools" aria-haspopup="menu" aria-expanded="false">Tools</button>
+            <div class="cad-menu-dropdown hidden" data-cad-menu-panel="tools" role="menu">
+              <button type="button" data-cad-command="select-tool" data-cad-check="select-tool">Select Tool <kbd>V</kbd></button>
+              <button type="button" data-cad-command="pan-tool" data-cad-check="pan-tool">Pan Tool <kbd>H</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="component-mode" data-cad-check="component-mode">Component Mode <kbd>C</kbd></button>
+              <button type="button" data-cad-command="land-mode" data-cad-check="land-mode">Land Mode <kbd>L</kbd></button>
+              <hr />
+              <button type="button" data-cad-command="rotate-left">หมุนซ้าย 90°</button>
+              <button type="button" data-cad-command="rotate-right">หมุนขวา 90° <kbd>R</kbd></button>
+              <button type="button" data-cad-command="flip-side">เปลี่ยน Top ↔ Bottom</button>
+              <hr />
+              <button type="button" data-cad-command="renumber-selected">เริ่มชื่อ A1 ที่เลือก</button>
+              <button type="button" data-cad-command="renumber-all">เริ่มชื่อ A1 ทุก Component</button>
+              <button type="button" data-cad-command="validate">ตรวจสอบ CAD</button>
+            </div>
+          </div>
+        </div>
+        <div class="cad-studio-summary" aria-label="สรุปบอร์ด">
+          <span><b id="cadEditorComponentCount">0</b> Components</span>
+          <span><b id="cadEditorLandCount">0</b> Lands</span>
+          <span class="layer-top"><b id="cadEditorTopCount">0</b> Top</span>
+          <span class="layer-bottom"><b id="cadEditorBottomCount">0</b> Bottom</span>
+          <span class="hidden"><b id="cadEditorUnknownCount">0</b></span>
+        </div>
+      </nav>
+
+      <div class="cad-studio-commandbar">
+        <div class="cad-command-primary">
+          <button id="cadEditorUndoButton" type="button" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+          <button id="cadEditorRedoButton" type="button" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" disabled>↷ Redo</button>
+          <span class="cad-command-divider"></span>
+          <button id="cadEditorAddComponentButton" type="button" title="ทำสำเนา Component ที่เลือก (Ctrl+D)" disabled>⧉ ทำสำเนา</button>
+          <button id="cadEditorRotateLeftButton" type="button" title="หมุนซ้าย 90°" disabled>↶ 90°</button>
+          <button id="cadEditorRotateRightButton" type="button" title="หมุนขวา 90°" disabled>↷ 90°</button>
+          <button id="cadEditorFlipSideButton" type="button" title="ย้าย Top ↔ Bottom" disabled>⇄ เปลี่ยนด้าน</button>
+          <span class="cad-command-divider"></span>
+          <button id="cadEditorAlignLeftButton" type="button" title="จัดชิดซ้าย" disabled>⇤</button>
+          <button id="cadEditorAlignCenterXButton" type="button" title="จัดกึ่งกลางแนวตั้ง" disabled>↔</button>
+          <button id="cadEditorAlignRightButton" type="button" title="จัดชิดขวา" disabled>⇥</button>
+          <button id="cadEditorAlignTopButton" type="button" title="จัดชิดบน" disabled>⇧</button>
+          <button id="cadEditorAlignCenterYButton" type="button" title="จัดกึ่งกลางแนวนอน" disabled>↕</button>
+          <button id="cadEditorAlignBottomButton" type="button" title="จัดชิดล่าง" disabled>⇩</button>
+          <span class="cad-command-divider"></span>
+          <button id="cadEditorRenumberComponentButton" type="button" title="สร้างชื่อ Land A1 ใหม่ใน Component ที่เลือก" disabled>A1 ที่เลือก</button>
+          <button id="cadEditorDeleteComponentButton" class="danger-button" type="button" title="ลบที่เลือก (Delete)" disabled>⌫ ลบ</button>
+        </div>
+        <div class="cad-command-view">
+          <label class="cad-editor-search-field"><span>⌕</span><input id="cadEditorVisualSearch" type="search" placeholder="ค้นหา RefDes / Package / ID" /></label>
+          <select id="cadEditorVisualSideFilter" title="กรองด้านของบอร์ด">
+            <option value="all">Top + Bottom</option>
+            <option value="top">Top</option>
+            <option value="bottom">Bottom</option>
+            <option value="unknown">ไม่ระบุด้าน</option>
+          </select>
+          <button id="cadEditorFitButton" type="button" title="Fit board">Fit</button>
+          <button id="cadEditorZoomOutButton" class="icon-button" type="button" aria-label="ย่อ">−</button>
+          <button id="cadEditorZoomInButton" class="icon-button" type="button" aria-label="ขยาย">＋</button>
+        </div>
+      </div>
+
+      <div class="cad-studio-main">
+        <aside class="cad-studio-toolrail" aria-label="เครื่องมือแก้ไข">
+          <button id="cadEditorSelectTool" class="active" type="button" title="เลือก / ลากกรอบคลุม (V)"><span>↖</span><small>Select</small></button>
+          <button id="cadEditorPanTool" type="button" title="เลื่อนบอร์ด (Space)"><span>✥</span><small>Pan</small></button>
+          <div class="cad-tool-separator"></div>
+          <button id="cadEditorComponentMode" class="active" type="button" title="เลือกและแก้ Component"><span>▣</span><small>Part</small></button>
+          <button id="cadEditorLandMode" type="button" title="เลือกและแก้ Land/Pin"><span>▦</span><small>Land</small></button>
+          <div class="cad-tool-separator"></div>
+          <button id="cadEditorAddLandButton" type="button" title="เพิ่ม Land กลางมุมมอง" disabled><span>＋</span><small>Land</small></button>
+          <button id="cadEditorDuplicateLandButton" type="button" title="ทำสำเนา Land ที่เลือก" disabled><span>⧉</span><small>Clone</small></button>
+          <button id="cadEditorCutLandButton" type="button" title="ตัด Land ที่เลือกครึ่งหนึ่งตามแกนยาว" disabled><span>◫</span><small>Cut ½</small></button>
+          <button id="cadEditorMergeLandButton" type="button" title="รวม Land ที่ติดกันและมีผลลัพธ์เป็น Rectangle" disabled><span>▰</span><small>Merge</small></button>
+          <button id="cadEditorSplitLandButton" type="button" title="ย้าย Land ที่เลือกไปเป็น Component ใหม่" disabled><span>✂</span><small>New Part</small></button>
+          <button id="cadEditorDeleteLandButton" class="danger-tool" type="button" title="ลบ Land ที่เลือก" disabled><span>⌫</span><small>Delete</small></button>
+        </aside>
+
+        <section class="cad-editor-visual-workspace">
+          <div id="cadEditorCanvasWrap" class="cad-editor-canvas-wrap cad-studio-canvas-wrap">
+            <canvas id="cadEditorCanvas" tabindex="0" aria-label="พื้นที่แก้ไข CAD แบบกราฟิก"></canvas>
+            <div class="cad-editor-canvas-topline">
+              <strong id="cadEditorSelectionLabel">ยังไม่ได้เลือก Component</strong>
+              <span id="cadEditorSelectionHint">คลิก Component · ลากพื้นที่ว่างเพื่อเลือกหลายชิ้น · ลากเพื่อย้าย · Space ค้างเพื่อ Pan · Wheel เพื่อ Zoom</span>
+            </div>
+            <div id="cadEditorSelectionBar" class="cad-selection-bar hidden" aria-label="คำสั่งสำหรับสิ่งที่เลือก">
+              <button type="button" data-cad-action="duplicate" title="ทำสำเนา">⧉</button>
+              <button type="button" data-cad-action="rotate-left" title="หมุนซ้าย">↶</button>
+              <button type="button" data-cad-action="rotate-right" title="หมุนขวา">↷</button>
+              <button type="button" data-cad-action="flip-side" title="เปลี่ยน Top/Bottom">⇄</button>
+              <button type="button" data-cad-action="fit-selection" title="Fit ที่เลือก">⌗</button>
+              <button type="button" data-cad-action="split-lands" title="แยก Land เป็น Component ใหม่">✂</button>
+              <button type="button" data-cad-action="delete" class="danger-button" title="ลบ">⌫</button>
+            </div>
+            <div id="cadEditorContextMenu" class="cad-context-menu hidden" role="menu">
+              <button type="button" data-cad-command="undo" data-requires-undo>Undo <kbd>Ctrl+Z</kbd></button>
+              <button type="button" data-cad-command="redo" data-requires-redo>Redo <kbd>Ctrl+Y</kbd></button>
+              <hr />
+              <button type="button" data-cad-action="duplicate">ทำสำเนา <kbd>Ctrl+D</kbd></button>
+              <button type="button" data-cad-action="rotate-right">หมุน 90° <kbd>R</kbd></button>
+              <button type="button" data-cad-action="flip-side">เปลี่ยน Top ↔ Bottom</button>
+              <button type="button" data-cad-action="renumber">เริ่มชื่อ Land ที่ A1</button>
+              <button type="button" data-cad-action="fit-selection">Fit ที่เลือก <kbd>F</kbd></button>
+              <button type="button" data-cad-action="split-lands">แยก Land เป็น Component ใหม่ <kbd>Ctrl+X</kbd></button>
+              <hr />
+              <button type="button" data-cad-action="delete" class="danger-menu">ลบที่เลือก <kbd>Del</kbd></button>
+            </div>
+            <div class="cad-editor-axis-badge">X → &nbsp; Y ↑ &nbsp; mm</div>
+          </div>
+        </section>
+
+        <aside class="cad-studio-dock">
+          <div class="cad-dock-tabs" role="tablist">
+            <button class="active" type="button" data-cad-dock="selection">Selection</button>
+            <button type="button" data-cad-dock="layers">Layers</button>
+            <button type="button" data-cad-dock="navigator">Navigator</button>
+          </div>
+
+          <div class="cad-dock-panel active" data-cad-panel="selection">
+            <header class="cad-editor-properties-header">
+              <div>
+                <span class="eyebrow">SELECTION</span>
+                <h3 id="cadEditorPropertyTitle">ยังไม่ได้เลือก</h3>
+                <p id="cadEditorPropertySubtitle">คลิกบนบอร์ดหรือลากกรอบคลุม</p>
+              </div>
+              <button id="cadEditorClearSelectionButton" class="icon-button" type="button" title="ล้างการเลือก">×</button>
+            </header>
+            <div class="cad-selection-readout">
+              <div><span>ชนิด</span><strong id="cadEditorInfoType">—</strong></div>
+              <div><span>RefDes / Name</span><strong id="cadEditorInfoName">—</strong></div>
+              <div><span>Package</span><strong id="cadEditorInfoPackage">—</strong></div>
+              <div><span>Layer</span><strong id="cadEditorInfoSide">—</strong></div>
+              <div><span>ตำแหน่ง</span><strong id="cadEditorInfoPosition">—</strong></div>
+              <div><span>ขนาด / จำนวน</span><strong id="cadEditorInfoSize">—</strong></div>
+            </div>
+            <div class="cad-dock-actions">
+              <button id="cadEditorSelectAllButton" type="button">เลือกทั้งหมดที่แสดง</button>
+              <button id="cadEditorDockDuplicateButton" type="button" disabled>ทำสำเนา</button>
+              <button id="cadEditorDockRotateButton" type="button" disabled>หมุน 90°</button>
+              <button id="cadEditorDockFlipButton" type="button" disabled>เปลี่ยนด้าน</button>
+            </div>
+            <section class="cad-editor-property-section compact">
+              <div class="cad-editor-section-heading"><span class="eyebrow">LAND NAMING</span><strong id="cadEditorComponentLabel">0 Component ที่เลือก</strong></div>
+              <button id="cadEditorRenumberAllButton" type="button">เริ่ม A1 ใหม่ทุก Component</button>
+              <strong id="cadEditorLandLabel" class="cad-land-selection-label">เลือก Component แล้วเปลี่ยนเป็นโหมด Land</strong>
+            </section>
+          </div>
+
+          <div class="cad-dock-panel" data-cad-panel="layers">
+            <span class="eyebrow">BOARD LAYERS</span>
+            <div class="cad-layer-cards">
+              <button type="button" data-cad-side="all" class="active"><i class="both"></i><span>Top + Bottom</span><strong>ทั้งหมด</strong></button>
+              <button type="button" data-cad-side="top"><i class="top"></i><span>Top</span><strong id="cadLayerTopCount">0</strong></button>
+              <button type="button" data-cad-side="bottom"><i class="bottom"></i><span>Bottom</span><strong id="cadLayerBottomCount">0</strong></button>
+            </div>
+            <span class="eyebrow">DISPLAY</span>
+            <label class="cad-editor-check"><input id="cadEditorLabelToggle" type="checkbox" checked /> แสดง RefDes และชื่อ Land</label>
+            <label class="cad-editor-check"><input id="cadEditorGridToggle" type="checkbox" checked /> แสดง Grid</label>
+            <label class="cad-editor-check"><input id="cadEditorSnapToggle" type="checkbox" checked /> Snap to grid</label>
+            <label class="cad-snap-field">Grid step
+              <select id="cadEditorNudgeStep">
+                <option value="0.01">0.01 mm</option>
+                <option value="0.05">0.05 mm</option>
+                <option value="0.1" selected>0.10 mm</option>
+                <option value="0.25">0.25 mm</option>
+                <option value="0.5">0.50 mm</option>
+                <option value="1">1.00 mm</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="cad-dock-panel" data-cad-panel="navigator">
+            <span class="eyebrow">NAVIGATOR</span>
+            <p>ใช้ช่องค้นหาด้านบนเพื่อเน้น Component จาก RefDes, Package หรือ ID แล้วกด Enter เพื่อ Fit</p>
+            <button id="cadNavigatorFitSearchButton" type="button">Fit ผลการค้นหา</button>
+            <button id="cadNavigatorClearSearchButton" type="button">ล้างคำค้น</button>
+            <div class="cad-navigator-help">
+              <strong>คำสั่งเมาส์</strong>
+              <span>Click — เลือก</span>
+              <span>Shift/Ctrl + Click — เพิ่ม/ลดการเลือก</span>
+              <span>Drag empty space — ลากกรอบคลุม</span>
+              <span>Drag selection — ย้าย</span>
+              <span>Middle / Space + Drag — Pan</span>
+              <span>Wheel — Zoom</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="cad-editor-footer cad-studio-statusbar">
+        <div class="cad-status-left">
+          <span id="cadEditorMessage">พร้อมแก้ไขบนบอร์ด</span>
+          <span>X <b id="cadEditorCursorX">—</b></span>
+          <span>Y <b id="cadEditorCursorY">—</b></span>
+          <span>Zoom <b id="cadEditorZoomStatus">100%</b></span>
+          <span>History <b id="cadEditorHistoryStatus">0 / 0</b></span>
+        </div>
+        <div class="cad-editor-export-controls">
+          <label>Export
+            <select id="cadEditorExportSide">
+              <option value="all">Top + Bottom</option>
+              <option value="top">Top เท่านั้น</option>
+              <option value="bottom">Bottom เท่านั้น</option>
+            </select>
+          </label>
+          <button id="cadEditorApplyButton" type="button">Apply</button>
+          <button id="cadEditorExportXmlButton" class="primary" type="button">Export XML</button>
+          <button id="cadEditorExportTgzButton" type="button" disabled>Export Archive</button>
+        </div>
+      </footer>
+
+      <div id="cadEditorConfirmOverlay" class="cad-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cadEditorConfirmTitle">
+        <div id="cadEditorConfirmDialog" class="cad-confirm-dialog" data-mode="apply">
+          <div id="cadEditorConfirmIcon" class="cad-confirm-icon" aria-hidden="true">✓</div>
+          <span id="cadEditorConfirmEyebrow" class="eyebrow">CONFIRM APPLY</span>
+          <h3 id="cadEditorConfirmTitle">ยืนยันการ Apply CAD ที่แก้ไข?</h3>
+          <p id="cadEditorConfirmMessage">ข้อมูลล่าสุดจะถูกตรวจสอบและซิงก์ไปยัง Viewer กับหน้า Mapping</p>
+          <div id="cadEditorConfirmSummary" class="cad-confirm-summary"></div>
+          <div class="cad-confirm-actions">
+            <button id="cadEditorConfirmNo" type="button">No · ยกเลิก</button>
+            <button id="cadEditorConfirmYes" class="primary" type="button">Yes - ยืนยัน</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cadEditorBusyOverlay" class="cad-editor-busy-overlay hidden" aria-live="polite" aria-busy="true">
+        <div class="cad-editor-busy-card">
+          <span class="cad-editor-spinner" aria-hidden="true"></span>
+          <strong id="cadEditorBusyTitle">กำลังประมวลผล…</strong>
+          <span id="cadEditorBusyDetail">กรุณารอสักครู่</span>
+          <progress id="cadEditorBusyProgress" class="cad-editor-busy-progress" max="100"></progress>
+          <div class="cad-editor-busy-actions">
+            <button id="cadEditorBusyCancelButton" type="button">ยกเลิกงาน</button>
+            <button id="cadEditorBusyCloseButton" type="button">ยกเลิกและปิด Editor</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compatibility controls: retained for XML model and existing automation, but not part of the visual workflow. -->
+      <div class="cad-editor-legacy-controls hidden" aria-hidden="true">
+        <input id="cadEditorComponentSearch" type="search" />
+        <div id="cadEditorComponentList"></div>
+        <select id="cadEditorSideFilter"><option value="all">all</option><option value="top">top</option><option value="bottom">bottom</option><option value="unknown">unknown</option></select>
+        <input id="cadEditorLandSearch" type="search" />
+        <table><tbody id="cadEditorLandTableBody"></tbody></table>
+        <input id="cadEditorComponentId" type="text" />
+        <input id="cadEditorComponentName" type="text" />
+        <input id="cadEditorPackageName" type="text" />
+        <input id="cadEditorRevision" type="text" />
+        <input id="cadEditorCenterX" type="number" step="any" />
+        <input id="cadEditorCenterY" type="number" step="any" />
+        <input id="cadEditorAngle" type="number" step="any" />
+        <button id="cadEditorSaveComponentButton" type="button">save</button>
+        <input id="cadEditorMoveDx" type="number" value="0" />
+        <input id="cadEditorMoveDy" type="number" value="0" />
+        <button id="cadEditorMoveButton" type="button">move</button>
+        <input id="cadEditorLandId" type="number" />
+        <input id="cadEditorLandName" type="text" />
+        <select id="cadEditorLandSide"><option value="Top">Top</option><option value="Bottom">Bottom</option><option value="">Unknown</option></select>
+        <input id="cadEditorLandLeft" type="number" step="any" />
+        <input id="cadEditorLandTop" type="number" step="any" />
+        <input id="cadEditorLandWidth" type="number" step="any" />
+        <input id="cadEditorLandLength" type="number" step="any" />
+        <button id="cadEditorSaveLandButton" type="button">save</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="histogramOverlay" class="modal-overlay histogram-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="histogramDialogTitle">
+    <div class="histogram-dialog panel">
+      <header class="histogram-dialog-header">
+        <div>
+          <span class="eyebrow">MEASUREMENT ANALYSIS</span>
+          <h2 id="histogramDialogTitle">Histogram แบบละเอียด</h2>
+          <p id="detailedHistogramPart">เลือก Part เพื่อแสดงข้อมูล</p>
+        </div>
+        <button id="closeHistogramButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+
+      <div class="histogram-toolbar">
+        <label>Bins
+          <select id="detailedHistogramBins">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50" selected>50</option>
+            <option value="80">80</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="200">200</option>
+          </select>
+        </label>
+        <label>แกน Y
+          <select id="histogramYMode">
+            <option value="count">จำนวน Land</option>
+            <option value="percent">เปอร์เซ็นต์</option>
+          </select>
+        </label>
+        <label>ค่าต่ำสุดของช่วง<input id="histogramRangeMin" type="number" step="any" placeholder="อัตโนมัติ" /></label>
+        <label>ค่าสูงสุดของช่วง<input id="histogramRangeMax" type="number" step="any" placeholder="อัตโนมัติ" /></label>
+        <button id="applyHistogramRangeButton" class="primary" type="button">ใช้ช่วง</button>
+        <button id="resetHistogramRangeButton" type="button">ดูทั้งหมด</button>
+        <button id="zoomHistogramBinButton" type="button" disabled>ขยายแท่งที่เลือก</button>
+        <button id="exportHistogramButton" type="button">Export Histogram CSV</button>
+      </div>
+
+      <div class="histogram-detail-layout">
+        <section class="histogram-canvas-card">
+          <div class="histogram-canvas-wrap">
+            <canvas id="detailedHistogramCanvas" aria-label="Detailed measurement histogram"></canvas>
+            <div id="histogramTooltip" class="histogram-tooltip hidden"></div>
+            <div id="histogramSelectionLabel" class="histogram-selection-label hidden"></div>
+          </div>
+          <div class="histogram-interaction-help">
+            <span>ล้อเมาส์: ซูมช่วงค่า</span>
+            <span>ลากบนกราฟ: เลือกช่วง</span>
+            <span>คลิกแท่ง: ดูรายละเอียด</span>
+          </div>
+        </section>
+
+        <aside class="histogram-detail-sidebar">
+          <div class="histogram-detail-stats">
+            <div><span>ทั้งหมด</span><strong id="detailHistTotal">0</strong></div>
+            <div><span>ในช่วงที่ดู</span><strong id="detailHistInRange">0</strong></div>
+            <div><span>Min</span><strong id="detailHistMin">—</strong></div>
+            <div><span>Q1</span><strong id="detailHistQ1">—</strong></div>
+            <div><span>Average</span><strong id="detailHistAverage">—</strong></div>
+            <div><span>Median</span><strong id="detailHistMedian">—</strong></div>
+            <div><span>Q3</span><strong id="detailHistQ3">—</strong></div>
+            <div><span>Max</span><strong id="detailHistMax">—</strong></div>
+            <div><span>Std. deviation</span><strong id="detailHistStdDev">—</strong></div>
+          </div>
+
+          <section class="selected-bin-card">
+            <span class="eyebrow">SELECTED BIN</span>
+            <strong id="selectedBinRange">ยังไม่ได้เลือกแท่ง</strong>
+            <div class="selected-bin-grid">
+              <div><span>Count</span><strong id="selectedBinCount">—</strong></div>
+              <div><span>Percent</span><strong id="selectedBinPercent">—</strong></div>
+              <div><span>Cumulative</span><strong id="selectedBinCumulative">—</strong></div>
+            </div>
+          </section>
+
+          <label class="toggle-row histogram-filter-toggle">
+            <input id="histogramCadFilter" type="checkbox" />
+            <span>เน้นเฉพาะ Measurement ในช่วงที่กำลังดูบน CAD</span>
+          </label>
+          <p id="detailedHistogramMessage" class="helper-text">Histogram จะแสดงข้อมูลของ Part ที่เลือกจากข้อมูลดิบเท่านั้น</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="storageOverlay" class="modal-overlay storage-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="storageTitle">
+    <div class="storage-dialog panel" role="document">
+      <header class="storage-dialog-header">
+        <div><span class="eyebrow">LOCAL PROJECT STORAGE</span><h2 id="storageTitle">Autosave และ Project Recovery</h2><p class="helper-text">บันทึกเฉพาะ Revision ที่ Commit สมบูรณ์ใน IndexedDB ของ Browser นี้</p></div>
+        <button id="storageCloseButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+      <div class="storage-summary"><strong id="storageUsageText">กำลังตรวจพื้นที่จัดเก็บ…</strong><span id="storageProjectCount">0 Project</span></div>
+      <div id="storageProjectList" class="storage-project-list"></div>
+      <div class="storage-actions">
+        <button id="storageRefreshButton" type="button">รีเฟรชรายการ</button>
+        <button id="storageClearTempButton" type="button">ล้าง Temporary Cache</button>
+        <button id="storageCloseFooterButton" class="primary" type="button">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="appConfirmOverlay" class="modal-overlay app-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="appConfirmTitle">
+    <div class="app-confirm-dialog" role="document">
+      <span class="eyebrow">CONFIRM ACTION</span>
+      <h2 id="appConfirmTitle">ยืนยันการทำรายการ</h2>
+      <p id="appConfirmMessage">—</p>
+      <div id="appConfirmDetail" class="app-confirm-detail hidden"></div>
+      <div class="app-confirm-actions">
+        <button id="appConfirmCancel" type="button">ยกเลิก</button>
+        <button id="appConfirmAccept" class="primary" type="button">Yes - ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="globalErrorOverlay" class="modal-overlay global-error-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="globalErrorTitle">
+    <div class="global-error-dialog" role="document">
+      <span class="eyebrow">OPERATION ERROR</span>
+      <h2 id="globalErrorTitle">ไม่สามารถดำเนินการได้</h2>
+      <div class="global-error-meta"><code id="globalErrorCode">UNEXPECTED_ERROR</code><span id="globalErrorStage">unknown</span><span id="globalErrorFile">—</span></div>
+      <p id="globalErrorMessage">—</p>
+      <p id="globalErrorRemediation" class="helper-text">—</p>
+      <details><summary>รายละเอียดทางเทคนิค</summary><pre id="globalErrorTechnical">—</pre></details>
+      <div class="global-error-actions">
+        <button id="globalErrorCopy" type="button">Copy diagnostic</button>
+        <button id="globalErrorDownload" type="button">Download diagnostic</button>
+        <button id="globalErrorClose" class="primary" type="button">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
