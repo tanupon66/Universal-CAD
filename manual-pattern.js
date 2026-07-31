@@ -1,17 +1,25 @@
 const EDITABLE_FIELDS = [
   'componentId', 'globalId', 'cadName', 'left', 'top', 'centerX', 'centerY',
   'width', 'length', 'mapped', 'manual', 'verified', 'confidence', 'anchorLocked',
-  'mappingMethod', 'duplicateCadNameCount', 'alias',
+  'mappingMethod', 'duplicateCadNameCount', 'alias', 'manualReason', 'mappingHistory',
+  'mappingState', 'matchStatus', 'matchScore', 'userConfirmation', 'revision',
+  'mappingConflict', 'targetRecordId', 'fieldComparison',
 ];
+
+function cloneEditableValue(value) {
+  if (Array.isArray(value)) return value.map((item) => item && typeof item === 'object' ? { ...item } : item);
+  if (value && typeof value === 'object') return { ...value };
+  return value ?? null;
+}
 
 export function snapshotMapping(mapping) {
   const snapshot = {};
-  for (const key of EDITABLE_FIELDS) snapshot[key] = mapping[key] ?? null;
+  for (const key of EDITABLE_FIELDS) snapshot[key] = cloneEditableValue(mapping[key]);
   return snapshot;
 }
 
 export function restoreMapping(mapping, snapshot) {
-  for (const key of EDITABLE_FIELDS) mapping[key] = snapshot[key];
+  for (const key of EDITABLE_FIELDS) mapping[key] = cloneEditableValue(snapshot[key]);
   return mapping;
 }
 

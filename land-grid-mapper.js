@@ -89,32 +89,89 @@ export function defaultGridLabels(grid, options = {}) {
   };
 }
 
+export function orderedGridCells(grid, options = {}) {
+  const order = options.order === 'column-major' ? 'column-major' : 'row-major';
+  const reverseRows = Boolean(options.reverseRows);
+  const reverseColumns = Boolean(options.reverseColumns);
+  const rowIndexes = Array.from({ length: grid.rowCount }, (_, index) => reverseRows ? grid.rowCount - 1 - index : index);
+  const columnIndexes = Array.from({ length: grid.columnCount }, (_, index) => reverseColumns ? grid.columnCount - 1 - index : index);
+  const cells = [];
+  if (order === 'column-major') {
+    for (const column of columnIndexes) for (const row of rowIndexes) {
+      const land = grid.matrix[row][column];
+      if (land) cells.push({ row, column, land });
+    }
+  } else {
+    for (const row of rowIndexes) for (const column of columnIndexes) {
+      const land = grid.matrix[row][column];
+      if (land) cells.push({ row, column, land });
+    }
+  }
+  return cells;
+}
+
+function paddedNumber(value, padding) {
+  const number = String(Math.trunc(Number(value) || 0));
+  const width = Math.max(0, Math.min(12, Number(padding) || 0));
+  return width ? number.padStart(width, '0') : number;
+}
+
 export function buildGridRenamePlan(grid, options = {}) {
-  const rowLabels = options.rowLabels || defaultGridLabels(grid, options).rows;
-  const columnLabels = options.columnLabels || defaultGridLabels(grid, options).columns;
+  const defaults = defaultGridLabels(grid, options);
+  const rowLabels = options.rowLabels || defaults.rows;
+  const columnLabels = options.columnLabels || defaults.columns;
   const reverseRows = Boolean(options.reverseRows);
   const reverseColumns = Boolean(options.reverseColumns);
   const separator = String(options.separator ?? '');
   const prefix = String(options.prefix ?? '');
   const suffix = String(options.suffix ?? '');
+  const namingMode = ['coordinate-compact', 'sequence', 'number'].includes(options.namingMode) ? options.namingMode : 'coordinate-physical';
   const plan = [];
   const names = new Map();
-  for (let physicalRow = 0; physicalRow < grid.rowCount; physicalRow += 1) {
-    for (let physicalColumn = 0; physicalColumn < grid.columnCount; physicalColumn += 1) {
-      const land = grid.matrix[physicalRow][physicalColumn];
-      if (!land) continue;
+
+  if (namingMode === 'sequence' || namingMode === 'number') {
+    const cells = orderedGridCells(grid, { order: options.order, reverseRows, reverseColumns });
+    const start = Number.isFinite(Number(options.start)) ? Number(options.start) : 1;
+    const step = Number.isFinite(Number(options.step)) && Number(options.step) !== 0 ? Number(options.step) : 1;
+    const sequencePrefix = namingMode === 'number' ? '' : String(options.sequencePrefix ?? 'LAND ');
+    cells.forEach((cell, index) => {
+      const nextName = `${sequencePrefix}${paddedNumber(start + index * step, options.padding)}${suffix}`;
+      plan.push({ land: cell.land, physicalRow: cell.row, physicalColumn: cell.column, rowIndex: cell.row, columnIndex: cell.column, rowLabel: '', columnLabel: '', previousName: String(cell.land.cadName || ''), nextName });
+    });
+  } else if (namingMode === 'coordinate-compact') {
+    for (let physicalRow = 0; physicalRow < grid.rowCount; physicalRow += 1) {
       const rowIndex = reverseRows ? grid.rowCount - 1 - physicalRow : physicalRow;
-      const columnIndex = reverseColumns ? grid.columnCount - 1 - physicalColumn : physicalColumn;
-      const rowLabel = String(rowLabels[rowIndex] ?? '');
-      const columnLabel = String(columnLabels[columnIndex] ?? '');
-      const nextName = `${prefix}${rowLabel}${separator}${columnLabel}${suffix}`;
-      plan.push({ land, physicalRow, physicalColumn, rowIndex, columnIndex, rowLabel, columnLabel, previousName: String(land.cadName || ''), nextName });
-      if (!names.has(nextName)) names.set(nextName, []);
-      names.get(nextName).push(land);
+      const physicalColumns = Array.from({ length: grid.columnCount }, (_, index) => reverseColumns ? grid.columnCount - 1 - index : index);
+      const occupied = physicalColumns.filter((physicalColumn) => grid.matrix[physicalRow][physicalColumn]);
+      occupied.forEach((physicalColumn, compactIndex) => {
+        const land = grid.matrix[physicalRow][physicalColumn];
+        const rowLabel = String(rowLabels[rowIndex] ?? '');
+        const columnLabel = String(Number(options.columnStart ?? 1) + compactIndex);
+        const nextName = `${prefix}${rowLabel}${separator}${columnLabel}${suffix}`;
+        plan.push({ land, physicalRow, physicalColumn, rowIndex, columnIndex: compactIndex, rowLabel, columnLabel, previousName: String(land.cadName || ''), nextName });
+      });
+    }
+  } else {
+    for (let physicalRow = 0; physicalRow < grid.rowCount; physicalRow += 1) {
+      for (let physicalColumn = 0; physicalColumn < grid.columnCount; physicalColumn += 1) {
+        const land = grid.matrix[physicalRow][physicalColumn];
+        if (!land) continue;
+        const rowIndex = reverseRows ? grid.rowCount - 1 - physicalRow : physicalRow;
+        const columnIndex = reverseColumns ? grid.columnCount - 1 - physicalColumn : physicalColumn;
+        const rowLabel = String(rowLabels[rowIndex] ?? '');
+        const columnLabel = String(columnLabels[columnIndex] ?? '');
+        const nextName = `${prefix}${rowLabel}${separator}${columnLabel}${suffix}`;
+        plan.push({ land, physicalRow, physicalColumn, rowIndex, columnIndex, rowLabel, columnLabel, previousName: String(land.cadName || ''), nextName });
+      }
     }
   }
+
+  for (const item of plan) {
+    if (!names.has(item.nextName)) names.set(item.nextName, []);
+    names.get(item.nextName).push(item.land);
+  }
   const duplicates = [...names.entries()].filter(([name, lands]) => !name || lands.length > 1).map(([name, lands]) => ({ name, lands }));
-  return { grid, plan, duplicates, changedCount: plan.filter((item) => item.previousName !== item.nextName).length };
+  return { grid, namingMode, plan, duplicates, changedCount: plan.filter((item) => item.previousName !== item.nextName).length };
 }
 
 export function applyGridRenamePlan(plan) {
@@ -124,19 +181,70 @@ export function applyGridRenamePlan(plan) {
   return { changedCount: plan.changedCount, landCount: plan.plan.length };
 }
 
-export function buildSequentialLandLabels(grid, options = {}) {
-  const order = options.order === 'column-major' ? 'column-major' : 'row-major';
-  const reverseRows = Boolean(options.reverseRows);
-  const reverseColumns = Boolean(options.reverseColumns);
-  const descending = options.descending !== false;
-  const cells = [];
-  const rowIndexes = Array.from({ length: grid.rowCount }, (_, index) => reverseRows ? grid.rowCount - 1 - index : index);
-  const columnIndexes = Array.from({ length: grid.columnCount }, (_, index) => reverseColumns ? grid.columnCount - 1 - index : index);
-  if (order === 'column-major') {
-    for (const column of columnIndexes) for (const row of rowIndexes) if (grid.matrix[row][column]) cells.push({ row, column, land: grid.matrix[row][column] });
-  } else {
-    for (const row of rowIndexes) for (const column of columnIndexes) if (grid.matrix[row][column]) cells.push({ row, column, land: grid.matrix[row][column] });
+function sourceSequence(mapping) {
+  const value = Number(mapping?.rawOrder ?? mapping?.sourceRow);
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+function protectedMapping(mapping) {
+  return Boolean(mapping?.anchorLocked || mapping?.userConfirmation || (mapping?.manual && mapping?.verified) || mapping?.mappingState === 'manual-match');
+}
+
+export function buildGridMappingPlan(grid, sourceMappings, options = {}) {
+  const preserveConfirmed = options.preserveConfirmed !== false;
+  const reverseSource = Boolean(options.reverseSource);
+  const orderedSources = [...(sourceMappings || [])]
+    .filter((mapping) => mapping && mapping.sourceRow != null && !mapping.cadOnly)
+    .sort((a, b) => sourceSequence(a) - sourceSequence(b) || Number(a.sourceRow || 0) - Number(b.sourceRow || 0));
+  if (reverseSource) orderedSources.reverse();
+
+  const orderedTargets = orderedGridCells(grid, {
+    order: options.order,
+    reverseRows: options.reverseRows,
+    reverseColumns: options.reverseColumns,
+  });
+  const protectedSources = preserveConfirmed ? orderedSources.filter(protectedMapping) : [];
+  const reservedTargetIds = new Set(protectedSources.filter((mapping) => mapping.mapped && mapping.globalId != null).map((mapping) => `${mapping.componentId}:${mapping.globalId}`));
+  const availableSources = preserveConfirmed ? orderedSources.filter((mapping) => !protectedMapping(mapping)) : orderedSources;
+  const availableTargets = orderedTargets.filter((cell) => !reservedTargetIds.has(`${cell.land.componentId ?? grid.component?.id}:${cell.land.globalId}`));
+  const pairCount = Math.min(availableSources.length, availableTargets.length);
+  const assignments = [];
+  for (let index = 0; index < pairCount; index += 1) {
+    const mapping = availableSources[index];
+    const cell = availableTargets[index];
+    assignments.push({
+      mapping,
+      land: cell.land,
+      row: cell.row,
+      column: cell.column,
+      currentGlobalId: mapping.globalId ?? null,
+      changed: String(mapping.globalId ?? '') !== String(cell.land.globalId ?? '')
+        || String(mapping.componentId ?? '') !== String(cell.land.componentId ?? grid.component?.id ?? ''),
+    });
   }
+  const duplicateTargets = new Map();
+  for (const assignment of assignments) {
+    const key = `${assignment.land.componentId ?? grid.component?.id}:${assignment.land.globalId}`;
+    duplicateTargets.set(key, (duplicateTargets.get(key) || 0) + 1);
+  }
+  const conflicts = [...duplicateTargets.entries()].filter(([, count]) => count > 1).map(([target, count]) => ({ target, count }));
+  return {
+    grid,
+    assignments,
+    conflicts,
+    sourceCount: orderedSources.length,
+    targetCount: orderedTargets.length,
+    changedCount: assignments.filter((item) => item.changed).length,
+    protectedCount: protectedSources.length,
+    unassignedSourceCount: Math.max(0, availableSources.length - pairCount),
+    unusedTargetCount: Math.max(0, availableTargets.length - pairCount),
+    options: { preserveConfirmed, reverseSource, order: options.order === 'column-major' ? 'column-major' : 'row-major', reverseRows: Boolean(options.reverseRows), reverseColumns: Boolean(options.reverseColumns) },
+  };
+}
+
+export function buildSequentialLandLabels(grid, options = {}) {
+  const cells = orderedGridCells(grid, options);
+  const descending = options.descending !== false;
   const start = Number.isFinite(Number(options.start)) ? Number(options.start) : (descending ? cells.length : 1);
   const step = descending ? -1 : 1;
   const labels = new Map();

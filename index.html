@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
-  <title>Universal CAD Studio v0.21.0</title>
+  <title>Universal CAD Studio v0.22.0</title>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="top-actions">
-      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.21.0 · Schema 2</span>
+      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.22.0 · Schema 2</span>
       <span id="projectStatus" class="status-pill muted">ยังไม่ได้เปิดโปรเจกต์</span>
       <button id="appUpdateButton" class="ghost hidden" type="button">มีเวอร์ชันใหม่ · อัปเดต</button>
       <button id="installButton" class="ghost hidden" type="button">ติดตั้งแอป</button>
@@ -561,6 +561,7 @@
       <div class="cad-inspector-actions">
         <button id="cadAutoFixButton" class="primary" type="button">แก้เฉพาะชื่อที่มีปัญหา</button>
         <button id="cadRenameAllButton" type="button">สร้างชื่อใหม่ทั้งขอบเขต</button>
+        <button id="cadGridRenameButton" type="button">เปลี่ยนชื่อแบบ Grid พร้อม Preview…</button>
         <button id="cadResetNamesButton" type="button">คืนชื่อเดิม</button>
         <button id="cadExportReportButton" type="button">Export รายงาน CSV</button>
         <button id="cadApplyNamesButton" type="button">ซิงก์ชื่อกับหน้า Viewer</button>
@@ -585,6 +586,33 @@
       </footer>
     </div>
   </div>
+  <div id="nameGridOverlay" class="modal-overlay cad-submodal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="nameGridTitle">
+    <div class="cad-submodal-dialog land-grid-dialog name-grid-dialog">
+      <header class="cad-submodal-header">
+        <div><span class="eyebrow">CAD NAME GRID PREVIEW</span><h2 id="nameGridTitle">เปลี่ยนชื่อ Land แบบ Grid</h2><p id="nameGridSubtitle">Preview ก่อนเขียนลง Working Model และไม่แตะ Immutable Source</p></div>
+        <button id="nameGridCloseButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
+      </header>
+      <div class="land-grid-controls name-grid-controls">
+        <label>Component<select id="nameGridComponentSelect"></select></label>
+        <label>รูปแบบชื่อ<select id="nameGridMode"><option value="coordinate-compact">A1, A2… แบบต่อเนื่อง ไม่ข้ามช่องว่าง</option><option value="coordinate-physical">A1, A2… ตามตำแหน่ง Grid จริง</option><option value="sequence">LAND 1, LAND 2, LAND 3…</option><option value="number">1, 2, 3…</option></select></label>
+        <label>ลำดับ<select id="nameGridOrder"><option value="row-major">ตามแถว</option><option value="column-major">ตามคอลัมน์</option></select></label>
+        <label>ทิศทางแถว<select id="nameGridRowDirection"><option value="top-bottom">บน → ล่าง</option><option value="bottom-top">ล่าง → บน</option></select></label>
+        <label>ทิศทางคอลัมน์<select id="nameGridColumnDirection"><option value="left-right">ซ้าย → ขวา</option><option value="right-left">ขวา → ซ้าย</option></select></label>
+        <label>Prefix<input id="nameGridPrefix" type="text" maxlength="24" value="LAND " /></label>
+        <label>ตัวคั่น A/เลข<input id="nameGridSeparator" type="text" maxlength="3" value="" placeholder="ไม่มี" /></label>
+        <label>เลขเริ่มต้น<input id="nameGridStart" type="number" step="1" value="1" /></label>
+        <label>เพิ่มครั้งละ<input id="nameGridStep" type="number" step="1" value="1" /></label>
+        <label>จำนวนหลัก<input id="nameGridPadding" type="number" min="0" max="12" step="1" value="0" /></label>
+        <label>ความยาวชื่อสูงสุด<input id="nameGridMaxLength" type="number" min="2" max="64" step="1" value="5" /></label>
+        <button id="nameGridResetButton" type="button">Reset Preview</button>
+      </div>
+      <p class="helper-text">โหมด A1 สามารถแก้หัวแถวหรือหัวคอลัมน์ทั้งชุดได้ ส่วน LAND/ตัวเลขจะไล่เฉพาะ Land ที่มีจริงโดยไม่ข้ามเลขจากช่องว่าง</p>
+      <div class="land-grid-table-wrap"><table class="land-grid-table name-grid-preview-table"><thead id="nameGridTableHead"></thead><tbody id="nameGridTableBody"></tbody></table></div>
+      <div class="land-grid-summary"><span id="nameGridDimensions">—</span><span id="nameGridChanged">—</span><span id="nameGridIssues">—</span></div>
+      <footer class="cad-submodal-actions"><button id="nameGridCancelButton" type="button">ยกเลิก</button><button id="nameGridApplyButton" class="primary" type="button">Yes - Apply ชื่อจาก Preview</button></footer>
+    </div>
+  </div>
+
   <div id="cadEditorOverlay" class="modal-overlay cad-editor-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cadEditorTitle">
     <div class="cad-editor-dialog cad-studio-shell">
       <header class="cad-studio-titlebar">
@@ -663,7 +691,7 @@
               <button type="button" data-cad-command="board-mirror-left-right">Mirror ซ้าย ↔ ขวา</button>
               <button type="button" data-cad-command="board-mirror-top-bottom">Mirror บน ↔ ล่าง</button>
               <hr />
-              <button type="button" data-cad-command="grid-map">Grid Mapping ชื่อ Land…</button>
+              <button type="button" data-cad-command="grid-map">Grid Mapping ข้อมูล…</button>
               <button type="button" data-cad-command="export-land-map">Export Land Map…</button>
             </div>
           </div>
@@ -680,8 +708,7 @@
               <button type="button" data-cad-command="rotate-right">หมุนขวา 90° <kbd>R</kbd></button>
               <button type="button" data-cad-command="flip-side">เปลี่ยน Top ↔ Bottom</button>
               <hr />
-              <button type="button" data-cad-command="renumber-selected">เริ่มชื่อ A1 ที่เลือก</button>
-              <button type="button" data-cad-command="renumber-all">เริ่มชื่อ A1 ทุก Component</button>
+              <button type="button" data-cad-command="open-name-inspector">ตรวจสอบและเปลี่ยนชื่อ Land…</button>
               <button type="button" data-cad-command="validate">ตรวจสอบ CAD</button>
             </div>
           </div>
@@ -712,7 +739,7 @@
           <button id="cadEditorAlignCenterYButton" type="button" title="จัดกึ่งกลางแนวนอน" disabled>↕</button>
           <button id="cadEditorAlignBottomButton" type="button" title="จัดชิดล่าง" disabled>⇩</button>
           <span class="cad-command-divider"></span>
-          <button id="cadEditorRenumberComponentButton" type="button" title="สร้างชื่อ Land A1 ใหม่ใน Component ที่เลือก" disabled>A1 ที่เลือก</button>
+          <button id="cadEditorRenumberComponentButton" type="button" title="เปิดตรวจสอบชื่อสำหรับ Component ที่เลือก" disabled>ตรวจชื่อ…</button>
           <button id="cadEditorDeleteComponentButton" class="danger-button" type="button" title="ลบที่เลือก (Delete)" disabled>⌫ ลบ</button>
         </div>
         <div class="cad-command-view">
@@ -724,7 +751,7 @@
             <option value="unknown">ไม่ระบุด้าน</option>
           </select>
           <button id="cadEditorBoardReverseButton" type="button" title="กลับทิศบอร์ด 180°">↻ Board</button>
-          <button id="cadEditorGridMapButton" type="button" title="แก้ชื่อ Land แบบทั้งแถวและคอลัมน์" disabled>Grid Map</button>
+          <button id="cadEditorGridMapButton" type="button" title="จับคู่ข้อมูลดิบกับ Land ตามตำแหน่ง Grid โดยไม่เปลี่ยนชื่อ CAD" disabled>Grid Map</button>
           <button id="cadEditorLandMapButton" type="button" title="Export Land Map เป็น PowerPoint หรือ SVG" disabled>Land Map</button>
           <button id="cadEditorFitButton" type="button" title="Fit board">Fit</button>
           <button id="cadEditorZoomOutButton" class="icon-button" type="button" aria-label="ย่อ">−</button>
@@ -771,7 +798,7 @@
               <button type="button" data-cad-action="duplicate">ทำสำเนา <kbd>Ctrl+D</kbd></button>
               <button type="button" data-cad-action="rotate-right">หมุน 90° <kbd>R</kbd></button>
               <button type="button" data-cad-action="flip-side">เปลี่ยน Top ↔ Bottom</button>
-              <button type="button" data-cad-action="renumber">เริ่มชื่อ Land ที่ A1</button>
+              <button type="button" data-cad-command="open-name-inspector">ตรวจสอบและเปลี่ยนชื่อ Land…</button>
               <button type="button" data-cad-action="fit-selection">Fit ที่เลือก <kbd>F</kbd></button>
               <button type="button" data-cad-action="split-lands">แยก Land เป็น Component ใหม่ <kbd>Ctrl+X</kbd></button>
               <hr />
@@ -813,7 +840,7 @@
             </div>
             <section class="cad-editor-property-section compact">
               <div class="cad-editor-section-heading"><span class="eyebrow">LAND NAMING</span><strong id="cadEditorComponentLabel">0 Component ที่เลือก</strong></div>
-              <button id="cadEditorRenumberAllButton" type="button">เริ่ม A1 ใหม่ทุก Component</button>
+              <p class="cad-dock-helper">เลือก Component 1 ตัว แล้วใช้ปุ่ม <strong>ตรวจชื่อ…</strong> ด้านบนเพื่อเปิดศูนย์ตรวจสอบชื่อและ Grid Rename พร้อม Preview</p>
               <strong id="cadEditorLandLabel" class="cad-land-selection-label">เลือก Component แล้วเปลี่ยนเป็นโหมด Land</strong>
             </section>
           </div>
@@ -900,19 +927,20 @@
       <div id="landGridOverlay" class="cad-submodal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="landGridTitle">
         <div class="cad-submodal-dialog land-grid-dialog">
           <header class="cad-submodal-header">
-            <div><span class="eyebrow">GRID LAND MAPPING</span><h2 id="landGridTitle">แก้ชื่อ Land แบบแถวและคอลัมน์</h2><p id="landGridSubtitle">เลือก Component ก่อนเปิดเครื่องมือนี้</p></div>
+            <div><span class="eyebrow">GRID MAPPING</span><h2 id="landGridTitle">จับคู่ข้อมูลกับ Land ตามตำแหน่ง Grid</h2><p id="landGridSubtitle">เครื่องมือนี้เปลี่ยน Mapping เท่านั้น และไม่เปลี่ยนชื่อ CAD</p></div>
             <button id="landGridCloseButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
           </header>
-          <div class="land-grid-controls">
-            <label>ทิศทางแถว<select id="landGridRowDirection"><option value="top-bottom">A เริ่มจากแถวบน</option><option value="bottom-top">A เริ่มจากแถวล่าง</option></select></label>
-            <label>ทิศทางคอลัมน์<select id="landGridColumnDirection"><option value="left-right">1 เริ่มจากซ้าย</option><option value="right-left">1 เริ่มจากขวา</option></select></label>
-            <label>ตัวคั่น<input id="landGridSeparator" type="text" maxlength="3" value="" placeholder="ไม่มี" /></label>
-            <button id="landGridResetButton" type="button">Reset A1</button>
+          <div class="land-grid-controls mapping-grid-controls">
+            <label>ลำดับ Grid<select id="landGridOrder"><option value="row-major">ไล่ตามแถว</option><option value="column-major">ไล่ตามคอลัมน์</option></select></label>
+            <label>ทิศทางแถว<select id="landGridRowDirection"><option value="top-bottom">บน → ล่าง</option><option value="bottom-top">ล่าง → บน</option></select></label>
+            <label>ทิศทางคอลัมน์<select id="landGridColumnDirection"><option value="left-right">ซ้าย → ขวา</option><option value="right-left">ขวา → ซ้าย</option></select></label>
+            <label>ลำดับข้อมูลต้นทาง<select id="landGridSourceDirection"><option value="ascending">ลำดับเดิม</option><option value="descending">ย้อนลำดับ</option></select></label>
+            <label class="grid-checkbox"><input id="landGridPreserveConfirmed" type="checkbox" checked /> รักษา Manual/Confirmed Mapping</label>
           </div>
-          <p class="helper-text">แก้ช่องหัวแถวหรือหัวคอลัมน์เพียงช่องเดียว ชื่อ Land ทั้งแถวหรือทั้งคอลัมน์จะเปลี่ยนใน Preview เมื่อกด Enter หรือออกจากช่อง</p>
-          <div id="landGridTableWrap" class="land-grid-table-wrap"><table class="land-grid-table"><thead id="landGridTableHead"></thead><tbody id="landGridTableBody"></tbody></table></div>
+          <p class="helper-text">จับคู่เฉพาะ Land ที่มีจริงแบบต่อเนื่อง จึงไม่ข้ามลำดับเพราะช่องว่างใน Grid ผลลัพธ์เป็น Suggested Mapping และต้องยืนยันรายการสำคัญภายหลัง</p>
+          <div id="landGridTableWrap" class="land-grid-table-wrap"><table class="land-grid-table mapping-preview-table"><thead id="landGridTableHead"></thead><tbody id="landGridTableBody"></tbody></table></div>
           <div class="land-grid-summary"><span id="landGridDimensions">—</span><span id="landGridChanged">—</span><span id="landGridIssues">—</span></div>
-          <footer class="cad-submodal-actions"><button id="landGridCancelButton" type="button">ยกเลิก</button><button id="landGridApplyButton" class="primary" type="button">Yes - Apply ชื่อทั้ง Grid</button></footer>
+          <footer class="cad-submodal-actions"><button id="landGridCancelButton" type="button">ยกเลิก</button><button id="landGridApplyButton" class="primary" type="button">Yes - Apply Grid Mapping</button></footer>
         </div>
       </div>
 

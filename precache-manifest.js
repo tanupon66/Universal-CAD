@@ -28,7 +28,6 @@ self.__PRECACHE_ASSETS = [
   "./odb-parser.js",
   "./parsers.js",
   "./performance-diagnostics.js",
-  "./preview-name-rules.html",
   "./project-session.js",
   "./project-storage.js",
   "./spatial-index.js",
