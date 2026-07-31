@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
-  <title>Universal CAD Studio v0.22.0</title>
+  <title>Universal CAD Studio v0.24.0</title>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="top-actions">
-      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.22.0 · Schema 2</span>
+      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.24.0 · Schema 2</span>
       <span id="projectStatus" class="status-pill muted">ยังไม่ได้เปิดโปรเจกต์</span>
       <button id="appUpdateButton" class="ghost hidden" type="button">มีเวอร์ชันใหม่ · อัปเดต</button>
       <button id="installButton" class="ghost hidden" type="button">ติดตั้งแอป</button>
@@ -692,7 +692,6 @@
               <button type="button" data-cad-command="board-mirror-top-bottom">Mirror บน ↔ ล่าง</button>
               <hr />
               <button type="button" data-cad-command="grid-map">Grid Mapping ข้อมูล…</button>
-              <button type="button" data-cad-command="export-land-map">Export Land Map…</button>
             </div>
           </div>
           <div class="cad-menu-root">
@@ -751,8 +750,7 @@
             <option value="unknown">ไม่ระบุด้าน</option>
           </select>
           <button id="cadEditorBoardReverseButton" type="button" title="กลับทิศบอร์ด 180°">↻ Board</button>
-          <button id="cadEditorGridMapButton" type="button" title="จับคู่ข้อมูลดิบกับ Land ตามตำแหน่ง Grid โดยไม่เปลี่ยนชื่อ CAD" disabled>Grid Map</button>
-          <button id="cadEditorLandMapButton" type="button" title="Export Land Map เป็น PowerPoint หรือ SVG" disabled>Land Map</button>
+          <button id="cadEditorGridMapButton" type="button" title="จับคู่ข้อมูลกับ Land ตามตำแหน่ง Grid และส่งออก Excel จาก Preview เดียวกัน" disabled>Grid / Land Map</button>
           <button id="cadEditorFitButton" type="button" title="Fit board">Fit</button>
           <button id="cadEditorZoomOutButton" class="icon-button" type="button" aria-label="ย่อ">−</button>
           <button id="cadEditorZoomInButton" class="icon-button" type="button" aria-label="ขยาย">＋</button>
@@ -902,8 +900,7 @@
               <option value="bottom">Bottom เท่านั้น</option>
             </select>
           </label>
-          <button id="cadEditorGridMapFooterButton" type="button" disabled>Grid Mapping</button>
-          <button id="cadEditorLandMapFooterButton" type="button" disabled>Export Land Map</button>
+          <button id="cadEditorGridMapFooterButton" type="button" disabled>Grid / Land Map</button>
           <button id="cadEditorApplyButton" type="button">Apply</button>
           <button id="cadEditorExportXmlButton" class="primary" type="button">Export XML</button>
           <button id="cadEditorExportTgzButton" type="button" disabled>Export Archive</button>
@@ -927,44 +924,36 @@
       <div id="landGridOverlay" class="cad-submodal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="landGridTitle">
         <div class="cad-submodal-dialog land-grid-dialog">
           <header class="cad-submodal-header">
-            <div><span class="eyebrow">GRID MAPPING</span><h2 id="landGridTitle">จับคู่ข้อมูลกับ Land ตามตำแหน่ง Grid</h2><p id="landGridSubtitle">เครื่องมือนี้เปลี่ยน Mapping เท่านั้น และไม่เปลี่ยนชื่อ CAD</p></div>
+            <div><span class="eyebrow">GRID &amp; LAND MAP</span><h2 id="landGridTitle">กำหนดชื่อใหม่และ Mapping กับ CAD Land</h2><p id="landGridSubtitle">ชื่อใหม่เป็น Mapping Alias แยกจากชื่อ Land เดิมใน CAD และใช้ชุดเดียวกันในการ Export Excel</p></div>
             <button id="landGridCloseButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
           </header>
           <div class="land-grid-controls mapping-grid-controls">
-            <label>ลำดับ Grid<select id="landGridOrder"><option value="row-major">ไล่ตามแถว</option><option value="column-major">ไล่ตามคอลัมน์</option></select></label>
+            <label>รูปแบบชื่อใหม่<select id="landGridNamingMode"><option value="grid">Grid เช่น A1, A2, B1</option><option value="sequence">LAND 1, LAND 2, LAND 3</option><option value="number">เลขล้วน 1, 2, 3</option></select></label>
+            <label>การนับช่องว่าง<select id="landGridGapMode"><option value="compact">ข้ามช่องว่าง ไม่กินลำดับ</option><option value="physical">รักษาตำแหน่ง Physical Grid</option></select></label>
+            <label>ลำดับการเดิน<select id="landGridOrder"><option value="row-major">ไล่ตามแถวก่อน</option><option value="column-major">ไล่ตามคอลัมน์ก่อน</option></select></label>
             <label>ทิศทางแถว<select id="landGridRowDirection"><option value="top-bottom">บน → ล่าง</option><option value="bottom-top">ล่าง → บน</option></select></label>
             <label>ทิศทางคอลัมน์<select id="landGridColumnDirection"><option value="left-right">ซ้าย → ขวา</option><option value="right-left">ขวา → ซ้าย</option></select></label>
-            <label>ลำดับข้อมูลต้นทาง<select id="landGridSourceDirection"><option value="ascending">ลำดับเดิม</option><option value="descending">ย้อนลำดับ</option></select></label>
-            <label class="grid-checkbox"><input id="landGridPreserveConfirmed" type="checkbox" checked /> รักษา Manual/Confirmed Mapping</label>
+            <label>Prefix<input id="landGridPrefix" type="text" maxlength="32" placeholder="เช่น LAND " /></label>
+            <label>ตัวคั่น<input id="landGridSeparator" type="text" maxlength="8" placeholder="เช่น -" /></label>
+            <label>Suffix<input id="landGridSuffix" type="text" maxlength="32" placeholder="ไม่บังคับ" /></label>
+            <label>แถวเริ่มต้น<input id="landGridRowStart" type="text" maxlength="4" value="A" /></label>
+            <label>คอลัมน์เริ่มต้น<input id="landGridColumnStart" type="number" step="1" value="1" /></label>
+            <label>Step คอลัมน์<input id="landGridColumnStep" type="number" step="1" value="1" /></label>
+            <label>เลขเริ่มต้น<input id="landGridStart" type="number" step="1" value="1" /></label>
+            <label>Step ลำดับ<input id="landGridStep" type="number" step="1" value="1" /></label>
+            <label>เติมศูนย์<input id="landGridPadding" type="number" min="0" max="12" step="1" value="0" /></label>
+            <button id="landGridResetButton" type="button">Reset ค่าเริ่มต้น</button>
           </div>
-          <p class="helper-text">จับคู่เฉพาะ Land ที่มีจริงแบบต่อเนื่อง จึงไม่ข้ามลำดับเพราะช่องว่างใน Grid ผลลัพธ์เป็น Suggested Mapping และต้องยืนยันรายการสำคัญภายหลัง</p>
+          <div class="land-grid-manual-editor">
+            <div><strong id="landGridSelectedInfo">คลิก Land ใน Preview เพื่อแก้ชื่อใหม่เฉพาะจุด</strong><small>การแก้ตรงนี้เปลี่ยนเฉพาะ Mapping Alias ไม่เปลี่ยนชื่อ CAD</small></div>
+            <input id="landGridManualName" type="text" maxlength="64" placeholder="ชื่อใหม่ของ Land ที่เลือก" disabled />
+            <button id="landGridApplyManualButton" type="button" disabled>ใช้ชื่อกำหนดเอง</button>
+            <button id="landGridClearManualButton" type="button" disabled>ล้างชื่อกำหนดเอง</button>
+          </div>
+          <p class="helper-text">แต่ละช่องจะแสดง <strong>ชื่อใหม่</strong> ด้านบน และ <strong>ชื่อ Land เดิมใน CAD</strong> ด้านล่าง คุณกำหนดจุดเริ่ม ทิศทาง ลำดับ Prefix/Suffix Step และการนับช่องว่างได้ทั้งหมด</p>
           <div id="landGridTableWrap" class="land-grid-table-wrap"><table class="land-grid-table mapping-preview-table"><thead id="landGridTableHead"></thead><tbody id="landGridTableBody"></tbody></table></div>
           <div class="land-grid-summary"><span id="landGridDimensions">—</span><span id="landGridChanged">—</span><span id="landGridIssues">—</span></div>
-          <footer class="cad-submodal-actions"><button id="landGridCancelButton" type="button">ยกเลิก</button><button id="landGridApplyButton" class="primary" type="button">Yes - Apply Grid Mapping</button></footer>
-        </div>
-      </div>
-
-      <div id="landMapOverlay" class="cad-submodal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="landMapTitle">
-        <div class="cad-submodal-dialog land-map-dialog">
-          <header class="cad-submodal-header">
-            <div><span class="eyebrow">POWERPOINT LAND MAP</span><h2 id="landMapTitle">Export Land Map</h2><p id="landMapSubtitle">รูปแบบเดียวกับตัวอย่าง พร้อมกล่องข้อความที่แก้ไขต่อใน PowerPoint ได้</p></div>
-            <button id="landMapCloseButton" class="icon-button" type="button" aria-label="ปิด">✕</button>
-          </header>
-          <div class="land-map-content">
-            <div class="land-map-controls">
-              <label>Component<select id="landMapComponentSelect"></select></label>
-              <label>หัวข้อ<input id="landMapTitlePrefix" type="text" value="Sample Location" /></label>
-              <label>หมายเลข LAND<select id="landMapNumberingMode"><option value="mapping">ใช้ Mapping ปัจจุบัน (ไม่มีให้สร้างอัตโนมัติ)</option><option value="sequence-desc">สร้างเลขมาก → น้อย</option><option value="sequence-asc">สร้างเลขน้อย → มาก</option></select></label>
-              <label>ลำดับ<select id="landMapSequenceOrder"><option value="row-major">ตามแถว</option><option value="column-major">ตามคอลัมน์</option></select></label>
-              <label>เริ่มแถว<select id="landMapRowDirection"><option value="top-bottom">บน → ล่าง</option><option value="bottom-top">ล่าง → บน</option></select></label>
-              <label>เริ่มคอลัมน์<select id="landMapColumnDirection"><option value="left-right">ซ้าย → ขวา</option><option value="right-left">ขวา → ซ้าย</option></select></label>
-              <label>เลขเริ่มต้น<input id="landMapSequenceStart" type="number" step="1" placeholder="อัตโนมัติ" /></label>
-              <div class="land-map-export-buttons"><button id="landMapExportSvgButton" type="button">Export SVG</button><button id="landMapExportPptxButton" class="primary" type="button">Export PowerPoint</button></div>
-              <p id="landMapMessage" class="helper-text">—</p>
-            </div>
-            <div class="land-map-preview"><img id="landMapPreviewImage" alt="ตัวอย่าง Land Map" /></div>
-          </div>
-          <footer class="cad-submodal-actions"><button id="landMapCancelButton" type="button">ปิด</button></footer>
+          <footer class="cad-submodal-actions"><button id="landGridCancelButton" type="button">ยกเลิก</button><button id="landGridExportExcelButton" type="button">Export Excel</button><button id="landGridApplyButton" class="primary" type="button">Yes - Apply Mapping</button></footer>
         </div>
       </div>
 
@@ -1145,7 +1134,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="./vendor/pptxgen.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

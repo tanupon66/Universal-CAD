@@ -16,13 +16,13 @@ self.__PRECACHE_ASSETS = [
   "./export-safety.js",
   "./format-detector.js",
   "./geometry.js",
+  "./grid-map-excel.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon.svg",
   "./import-adapters.js",
   "./index.html",
   "./land-grid-mapper.js",
-  "./land-map-export.js",
   "./manifest.webmanifest",
   "./manual-pattern.js",
   "./odb-parser.js",
@@ -37,7 +37,6 @@ self.__PRECACHE_ASSETS = [
   "./universal-cad-model.js",
   "./unix-compress.js",
   "./validation-center.js",
-  "./vendor/pptxgen.min.js",
   "./xlsx-report.js",
   "./zip-reader.js"
 ];

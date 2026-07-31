@@ -423,3 +423,114 @@ export async function buildComponentReportXlsx(report) {
 }
 
 export const __test = { buildZip, xmlEscape, safeSheetName };
+
+function makeGridMapWorkbookSheets(report) {
+  const grid = report.grid;
+  const sheetWidth = Math.max(8, grid.columnCount + 1);
+  const lastColumn = columnName(sheetWidth - 1);
+  const mapRows = [];
+  const merges = [];
+  const settings = report.settings || {};
+  const namingLabel = settings.namingMode === 'sequence' ? 'LAND sequence' : (settings.namingMode === 'number' ? 'Number only' : 'Grid coordinate');
+  const directionLabel = `${settings.order === 'column-major' ? 'Column-major' : 'Row-major'} · ${settings.reverseRows ? 'Bottom→Top' : 'Top→Bottom'} · ${settings.reverseColumns ? 'Right→Left' : 'Left→Right'}`;
+  mapRows.push(row([{ v: report.title || `Grid / Land Map ${report.componentName}`, style: 1 }, ...Array(sheetWidth - 1).fill(null)], 34));
+  merges.push(`A1:${lastColumn}1`);
+  mapRows.push(row([{ v: `${report.componentName} · ${report.packageName || '—'}`, style: 9 }, ...Array(sheetWidth - 1).fill(null)], 26));
+  merges.push(`A2:${lastColumn}2`);
+  mapRows.push(row([
+    { v: 'Board', style: 3 }, { v: report.boardName || '—', style: 4 },
+    { v: 'Project ID', style: 3 }, { v: report.projectMetadata?.projectId || '—', style: 4 },
+    { v: 'Revision', style: 3 }, { v: report.projectMetadata?.revisionNumber ?? 0, style: 6 },
+    { v: 'Validation', style: 3 }, { v: report.projectMetadata?.validationStatus || 'not-run', style: 4 },
+  ]));
+  mapRows.push(row([
+    { v: 'Name format', style: 3 }, { v: namingLabel, style: 4 },
+    { v: 'Direction', style: 3 }, { v: directionLabel, style: 4 },
+    { v: 'Mappings', style: 3 }, { v: report.mappingCount, style: 6 },
+    { v: 'Preview changes', style: 3 }, { v: report.proposedCount, style: 6 },
+  ]));
+  mapRows.push(row([{ v: 'ช่องบนคือชื่อใหม่ที่ผู้ใช้กำหนด ช่องล่างคือชื่อ Land เดิมใน CAD การ Export ไม่เปลี่ยนชื่อ CAD', style: 9 }, ...Array(sheetWidth - 1).fill(null)], 30));
+  merges.push(`A5:${lastColumn}5`);
+  mapRows.push(row([{ v: 'Physical Row \\ Col', style: 2 }, ...Array.from({ length: grid.columnCount }, (_, index) => ({ v: index + 1, style: 2 }))], 24));
+
+  const cellByPosition = new Map(report.cells.map((cell) => [`${cell.row}:${cell.column}`, cell]));
+  for (let gridRow = 0; gridRow < grid.rowCount; gridRow += 1) {
+    const topRowNumber = mapRows.length + 1;
+    const topCells = [{ v: gridRow + 1, style: 2 }];
+    const bottomCells = [null];
+    for (let gridColumn = 0; gridColumn < grid.columnCount; gridColumn += 1) {
+      const cell = cellByPosition.get(`${gridRow}:${gridColumn}`);
+      if (!cell) {
+        topCells.push({ v: '', style: 4 });
+        bottomCells.push({ v: '', style: 4 });
+      } else {
+        topCells.push({ v: cell.newName, style: 10 });
+        bottomCells.push({ v: `CAD: ${cell.cadName}`, style: 11 });
+      }
+    }
+    mapRows.push(row(topCells, 22));
+    mapRows.push(row(bottomCells, 24));
+    merges.push(`A${topRowNumber}:A${topRowNumber + 1}`);
+  }
+
+  const mapSheet = {
+    name: 'Grid Land Map',
+    rows: mapRows,
+    merges,
+    columns: [14, ...Array(grid.columnCount).fill(15)],
+    freeze: { rows: 6, columns: 1 },
+    images: [],
+  };
+
+  const headers = ['Sequence', 'New name', 'CAD Land name', 'XML Land ID', 'Physical row', 'Physical column', 'Logical row', 'Logical column', 'Mapping status', 'Proposed', 'Manual override', 'Previous new name', 'Generated default', 'Center X', 'Center Y', 'Width', 'Length'];
+  const dataRows = [
+    row([{ v: `Grid / Land Mapping Data · ${report.componentName}`, style: 1 }, ...Array(headers.length - 1).fill(null)], 32),
+    row(headers.map((value) => ({ v: value, style: 2 })), 28),
+  ];
+  report.cells.forEach((cell) => dataRows.push(row([
+    { v: cell.sequence, style: 6 }, { v: cell.newName, style: 10 }, { v: cell.cadName, style: 11 }, { v: String(cell.globalId ?? ''), style: 4 },
+    { v: cell.row + 1, style: 6 }, { v: cell.column + 1, style: 6 }, { v: cell.logicalRow + 1, style: 6 }, { v: cell.logicalColumn + 1, style: 6 },
+    { v: cell.mappingStatus, style: 4 }, { v: cell.proposed ? 'Yes' : 'No', style: cell.proposed ? 10 : 11 }, { v: cell.manualOverride ? 'Yes' : 'No', style: cell.manualOverride ? 10 : 11 },
+    { v: String(cell.previousNewName ?? ''), style: 4 }, { v: String(cell.generatedName ?? ''), style: 4 },
+    { v: cell.centerX, style: 5 }, { v: cell.centerY, style: 5 }, { v: cell.width, style: 5 }, { v: cell.length, style: 5 },
+  ])));
+  const dataSheet = {
+    name: 'Mapping Data',
+    rows: dataRows,
+    merges: [`A1:${columnName(headers.length - 1)}1`],
+    columns: [11, 18, 20, 15, 12, 14, 12, 14, 20, 11, 15, 18, 18, 14, 14, 12, 12],
+    freeze: { rows: 2, columns: 3 },
+    autoFilter: `A2:${columnName(headers.length - 1)}${dataRows.length}`,
+    images: [],
+  };
+  return [mapSheet, dataSheet];
+}
+
+function spreadsheetRowLabel(index) {
+  let value = Math.max(0, Number(index) || 0) + 1;
+  let result = '';
+  while (value > 0) {
+    const digit = (value - 1) % 26;
+    result = String.fromCharCode(65 + digit) + result;
+    value = Math.floor((value - 1) / 26);
+  }
+  return result;
+}
+
+async function buildWorkbookBlob(sheets, title, generatedAt) {
+  const files = [];
+  sheets.forEach((sheet, index) => files.push({ name: `xl/worksheets/sheet${index + 1}.xml`, data: sheetXml(sheet) }));
+  files.push({ name: '[Content_Types].xml', data: contentTypesXml(sheets, [], 0) });
+  files.push({ name: '_rels/.rels', data: rootRelsXml() });
+  files.push({ name: 'xl/workbook.xml', data: workbookXml(sheets) });
+  files.push({ name: 'xl/_rels/workbook.xml.rels', data: workbookRelsXml(sheets) });
+  files.push({ name: 'xl/styles.xml', data: stylesXml() });
+  files.push({ name: 'docProps/core.xml', data: coreXml(title || 'Grid Map', generatedAt) });
+  files.push({ name: 'docProps/app.xml', data: appXml(sheets) });
+  return new Blob([await buildZip(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+export async function buildGridMapXlsx(report) {
+  if (!report?.grid || !Array.isArray(report.cells)) throw new TypeError('Grid Map Excel model ไม่สมบูรณ์');
+  return buildWorkbookBlob(makeGridMapWorkbookSheets(report), report.title || 'Grid Map', report.generatedAt);
+}

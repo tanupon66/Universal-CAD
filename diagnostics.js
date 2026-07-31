@@ -29,7 +29,7 @@ export function createDiagnosticReport(error, context = {}) {
   return {
     reportVersion: 1,
     createdAt: new Date().toISOString(),
-    appVersion: context.appVersion || '0.22.0',
+    appVersion: context.appVersion || '0.24.0',
     schemaVersion: context.schemaVersion ?? 2,
     projectId: context.projectId || '',
     revision: Number(context.revision || 0),

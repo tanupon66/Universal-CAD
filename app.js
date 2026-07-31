@@ -26,6 +26,7 @@ import {
 } from './cad-inspector.js';
 import { buildCadComparison, cadComparisonToCsv } from './cad-compare.js';
 import { buildComponentReportXlsx } from './xlsx-report.js';
+import { buildGridMapExcelBlob, createGridMapExcelModel } from './grid-map-excel.js';
 import { buildZones, canvasToPngBytes, histogramModel, renderHistogramImage, renderOverviewImage, renderZoneImage } from './component-report.js';
 import { packageOutputInfo, readCadPackageFile, rebuildCadPackage } from './archive-package.js';
 import {
@@ -71,8 +72,7 @@ import { detectCadFormat } from './format-detector.js';
 import { decodeTextBytes, parseDelimitedText } from './delimited-import.js';
 import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
-import { buildGridMappingPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
-import { buildLandMapSvg, createLandMapModel, createLandMapPptxBlob } from './land-map-export.js';
+import { buildGeneratedLandMapPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -145,10 +145,9 @@ const els = {
   cadEditorComponentId: $('cadEditorComponentId'), cadEditorComponentName: $('cadEditorComponentName'), cadEditorPackageName: $('cadEditorPackageName'), cadEditorRevision: $('cadEditorRevision'), cadEditorCenterX: $('cadEditorCenterX'), cadEditorCenterY: $('cadEditorCenterY'), cadEditorAngle: $('cadEditorAngle'), cadEditorSaveComponentButton: $('cadEditorSaveComponentButton'),
   cadEditorLandLabel: $('cadEditorLandLabel'), cadEditorSideFilter: $('cadEditorSideFilter'), cadEditorLandSearch: $('cadEditorLandSearch'), cadEditorRenumberComponentButton: $('cadEditorRenumberComponentButton'), cadEditorAddLandButton: $('cadEditorAddLandButton'), cadEditorDuplicateLandButton: $('cadEditorDuplicateLandButton'), cadEditorCutLandButton: $('cadEditorCutLandButton'), cadEditorMergeLandButton: $('cadEditorMergeLandButton'), cadEditorSplitLandButton: $('cadEditorSplitLandButton'), cadEditorDeleteLandButton: $('cadEditorDeleteLandButton'), cadEditorLandTableBody: $('cadEditorLandTableBody'),
   cadEditorLandId: $('cadEditorLandId'), cadEditorLandName: $('cadEditorLandName'), cadEditorLandSide: $('cadEditorLandSide'), cadEditorLandLeft: $('cadEditorLandLeft'), cadEditorLandTop: $('cadEditorLandTop'), cadEditorLandWidth: $('cadEditorLandWidth'), cadEditorLandLength: $('cadEditorLandLength'), cadEditorSaveLandButton: $('cadEditorSaveLandButton'),
-  cadEditorMessage: $('cadEditorMessage'), cadEditorExportSide: $('cadEditorExportSide'), cadEditorApplyButton: $('cadEditorApplyButton'), cadEditorExportXmlButton: $('cadEditorExportXmlButton'), cadEditorExportTgzButton: $('cadEditorExportTgzButton'), cadEditorBoardReverseButton: $('cadEditorBoardReverseButton'), cadEditorGridMapButton: $('cadEditorGridMapButton'), cadEditorLandMapButton: $('cadEditorLandMapButton'), cadEditorGridMapFooterButton: $('cadEditorGridMapFooterButton'), cadEditorLandMapFooterButton: $('cadEditorLandMapFooterButton'),
-  landGridOverlay: $('landGridOverlay'), landGridSubtitle: $('landGridSubtitle'), landGridCloseButton: $('landGridCloseButton'), landGridCancelButton: $('landGridCancelButton'), landGridApplyButton: $('landGridApplyButton'), landGridOrder: $('landGridOrder'), landGridRowDirection: $('landGridRowDirection'), landGridColumnDirection: $('landGridColumnDirection'), landGridSourceDirection: $('landGridSourceDirection'), landGridPreserveConfirmed: $('landGridPreserveConfirmed'), landGridTableHead: $('landGridTableHead'), landGridTableBody: $('landGridTableBody'), landGridDimensions: $('landGridDimensions'), landGridChanged: $('landGridChanged'), landGridIssues: $('landGridIssues'),
+  cadEditorMessage: $('cadEditorMessage'), cadEditorExportSide: $('cadEditorExportSide'), cadEditorApplyButton: $('cadEditorApplyButton'), cadEditorExportXmlButton: $('cadEditorExportXmlButton'), cadEditorExportTgzButton: $('cadEditorExportTgzButton'), cadEditorBoardReverseButton: $('cadEditorBoardReverseButton'), cadEditorGridMapButton: $('cadEditorGridMapButton'), cadEditorGridMapFooterButton: $('cadEditorGridMapFooterButton'),
+  landGridOverlay: $('landGridOverlay'), landGridSubtitle: $('landGridSubtitle'), landGridCloseButton: $('landGridCloseButton'), landGridCancelButton: $('landGridCancelButton'), landGridApplyButton: $('landGridApplyButton'), landGridExportExcelButton: $('landGridExportExcelButton'), landGridResetButton: $('landGridResetButton'), landGridNamingMode: $('landGridNamingMode'), landGridGapMode: $('landGridGapMode'), landGridOrder: $('landGridOrder'), landGridRowDirection: $('landGridRowDirection'), landGridColumnDirection: $('landGridColumnDirection'), landGridPrefix: $('landGridPrefix'), landGridSeparator: $('landGridSeparator'), landGridSuffix: $('landGridSuffix'), landGridRowStart: $('landGridRowStart'), landGridColumnStart: $('landGridColumnStart'), landGridColumnStep: $('landGridColumnStep'), landGridStart: $('landGridStart'), landGridStep: $('landGridStep'), landGridPadding: $('landGridPadding'), landGridSelectedInfo: $('landGridSelectedInfo'), landGridManualName: $('landGridManualName'), landGridApplyManualButton: $('landGridApplyManualButton'), landGridClearManualButton: $('landGridClearManualButton'), landGridTableHead: $('landGridTableHead'), landGridTableBody: $('landGridTableBody'), landGridDimensions: $('landGridDimensions'), landGridChanged: $('landGridChanged'), landGridIssues: $('landGridIssues'),
   nameGridOverlay: $('nameGridOverlay'), nameGridSubtitle: $('nameGridSubtitle'), nameGridCloseButton: $('nameGridCloseButton'), nameGridCancelButton: $('nameGridCancelButton'), nameGridApplyButton: $('nameGridApplyButton'), nameGridResetButton: $('nameGridResetButton'), nameGridComponentSelect: $('nameGridComponentSelect'), nameGridMode: $('nameGridMode'), nameGridOrder: $('nameGridOrder'), nameGridRowDirection: $('nameGridRowDirection'), nameGridColumnDirection: $('nameGridColumnDirection'), nameGridPrefix: $('nameGridPrefix'), nameGridSeparator: $('nameGridSeparator'), nameGridStart: $('nameGridStart'), nameGridStep: $('nameGridStep'), nameGridPadding: $('nameGridPadding'), nameGridMaxLength: $('nameGridMaxLength'), nameGridTableHead: $('nameGridTableHead'), nameGridTableBody: $('nameGridTableBody'), nameGridDimensions: $('nameGridDimensions'), nameGridChanged: $('nameGridChanged'), nameGridIssues: $('nameGridIssues'),
-  landMapOverlay: $('landMapOverlay'), landMapCloseButton: $('landMapCloseButton'), landMapCancelButton: $('landMapCancelButton'), landMapComponentSelect: $('landMapComponentSelect'), landMapTitlePrefix: $('landMapTitlePrefix'), landMapNumberingMode: $('landMapNumberingMode'), landMapSequenceOrder: $('landMapSequenceOrder'), landMapRowDirection: $('landMapRowDirection'), landMapColumnDirection: $('landMapColumnDirection'), landMapSequenceStart: $('landMapSequenceStart'), landMapExportSvgButton: $('landMapExportSvgButton'), landMapExportPptxButton: $('landMapExportPptxButton'), landMapPreviewImage: $('landMapPreviewImage'), landMapMessage: $('landMapMessage'),
   cadEditorConfirmOverlay: $('cadEditorConfirmOverlay'), cadEditorConfirmDialog: $('cadEditorConfirmDialog'), cadEditorConfirmIcon: $('cadEditorConfirmIcon'), cadEditorConfirmEyebrow: $('cadEditorConfirmEyebrow'), cadEditorConfirmTitle: $('cadEditorConfirmTitle'), cadEditorConfirmMessage: $('cadEditorConfirmMessage'), cadEditorConfirmSummary: $('cadEditorConfirmSummary'), cadEditorConfirmNo: $('cadEditorConfirmNo'), cadEditorConfirmYes: $('cadEditorConfirmYes'), cadEditorBusyOverlay: $('cadEditorBusyOverlay'), cadEditorBusyTitle: $('cadEditorBusyTitle'), cadEditorBusyDetail: $('cadEditorBusyDetail'), cadEditorBusyProgress: $('cadEditorBusyProgress'), cadEditorBusyCancelButton: $('cadEditorBusyCancelButton'), cadEditorBusyCloseButton: $('cadEditorBusyCloseButton'),
   appConfirmOverlay: $('appConfirmOverlay'), appConfirmTitle: $('appConfirmTitle'), appConfirmMessage: $('appConfirmMessage'), appConfirmDetail: $('appConfirmDetail'), appConfirmCancel: $('appConfirmCancel'), appConfirmAccept: $('appConfirmAccept'),
   globalErrorOverlay: $('globalErrorOverlay'), globalErrorTitle: $('globalErrorTitle'), globalErrorCode: $('globalErrorCode'), globalErrorStage: $('globalErrorStage'), globalErrorFile: $('globalErrorFile'), globalErrorMessage: $('globalErrorMessage'), globalErrorRemediation: $('globalErrorRemediation'), globalErrorTechnical: $('globalErrorTechnical'), globalErrorCopy: $('globalErrorCopy'), globalErrorDownload: $('globalErrorDownload'), globalErrorClose: $('globalErrorClose'),
@@ -180,11 +179,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.22.0'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.24.0'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.22.0 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.24.0 · Development · Schema 2';
   }
 }
 
@@ -201,14 +200,13 @@ function createCadEditorState() {
     componentSearch: '', landSearch: '', sideFilter: 'all', clipboard: [], busy: false, busyToken: 0, busyStartedAt: 0,
     taskCancelRequested: false, pendingCloseAfterTask: false, pendingActionAfterClose: null, busyWatchdog: null, viewerRefreshPending: false,
     confirm: { mode: null, pendingAction: null }, history: { undo: [], redo: [], limit: 40, restoring: false },
-    gridMapper: null, landMap: { previewUrl: null, model: null },
+    gridMapper: null,
     visual: { scale: 1, offsetX: 0, offsetY: 0, tool: 'select', mode: 'component', search: '', side: 'all', labels: true, grid: true, snap: true, interaction: null, spaceDown: false, hoverHandle: null, boundsCache: new Map() },
   };
 }
 
 function ensureCadToolState() {
   if (!state.cadEditor) state.cadEditor = createCadEditorState();
-  state.cadEditor.landMap ||= { previewUrl: null, model: null };
   if (!('gridMapper' in state.cadEditor)) state.cadEditor.gridMapper = null;
   if (!state.cadInspector) state.cadInspector = createCadInspectorState();
   if (!('nameGrid' in state.cadInspector)) state.cadInspector.nameGrid = null;
@@ -626,7 +624,7 @@ function closeGlobalError() {
 function showGlobalError(error, context = {}) {
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.22.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.24.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -693,12 +691,13 @@ function mappingWorkspaceSnapshot() {
 }
 function projectWorkspaceSnapshot() {
   return {
-    workspaceSchemaVersion: 1,
+    workspaceSchemaVersion: 2,
     activeCadRole: state.activeCadRole || 'original',
     fileNames: { ...state.fileNames },
     xlsxData: state.xlsxData || null,
     schema: state.schema ? { componentCol: state.schema.componentCol, packageCol: state.schema.packageCol, landCol: state.schema.landCol, landMode: state.schema.landMode, measurementCol: state.schema.measurementCol } : null,
     mappingOverrides: mappingWorkspaceSnapshot(),
+    gridLandMappings: activeCadFile()?.gridLandMappings || createGridLandMapStore(),
     cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
     savedDiagnostics: state.diagnostics.snapshot(),
   };
@@ -765,6 +764,7 @@ async function restoreStoredProject(recordOrPayload, { announce = true } = {}) {
     role, name: project.name || source?.name || 'Recovered CAD', sourceFormat: source?.format || project.currentModel?.sourceFormat || 'inspection-xml',
     text: source?.text || workingXml, originalSource: source, projectSession: session,
     editedText: workingXml, data: legacy, renames: new Map(), archive: null, editorModel,
+    gridLandMappings: workspace.gridLandMappings || createGridLandMapStore(),
     appliedEditorSnapshot: cloneCadEditorModel(editorModel), mappingDirty: false, viewerDirty: false,
     editRevision: Number(project.appliedRevision || 0), lastValidation: { issues: project.currentModel?.validationIssues || [] },
   };
@@ -782,10 +782,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('ยังไม่มี Project สำหรับ Backup');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.22.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.24.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.22.0.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.24.0.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} สำเร็จ`);
   } catch (error) { showGlobalError(error, { title: 'Export Project Backup ไม่สำเร็จ', operation: 'project-backup-export' }); }
 }
@@ -1621,10 +1621,6 @@ async function processFile(file, cadRole = 'auto') {
 }
 function resetProject() {
   autosaveController.cancel();
-  // Release transient export resources before the editor state is replaced.
-  // This also keeps reset/import safe when a legacy project did not persist
-  // the v0.21 landMap state branch.
-  revokeLandMapPreview();
   Object.assign(state, {
     xmlText: null, xlsxBuffer: null, xmlData: null, xlsxData: null, schema: null, mappingData: null,
     selectedComponentId: null, selected: null, hoveredLand: null, manualMode: false, preview: null,
@@ -1645,7 +1641,7 @@ function resetProject() {
   for (const overlay of [
     els.histogramOverlay, els.cadInspectorOverlay, els.cadCompareOverlay,
     els.componentReportOverlay, els.teachOverlay, els.cadEditorOverlay,
-    els.landGridOverlay, els.landMapOverlay, els.nameGridOverlay,
+    els.landGridOverlay, els.nameGridOverlay,
   ]) overlay?.classList.add('hidden');
   els.duplicateToggle.checked = true; els.duplicateOnlyToggle.checked = false; els.cadCompareOverlayToggle.checked = false;
   syncCadFileLabels(); els.importMessage.textContent = 'ไฟล์จะถูกประมวลผลในเครื่อง ไม่อัปโหลดไปยังเซิร์ฟเวอร์';
@@ -2638,7 +2634,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.22.0.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.24.0.xlsx`));
     els.componentReportMessage.textContent = `สร้าง Excel สำเร็จ · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('สร้าง Component Report Excel สำเร็จ', 4200);
   } catch (error) {
@@ -2698,7 +2694,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.22.0.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.24.0.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
@@ -2724,15 +2720,16 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.22.0', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.24.0', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
+      gridLandMappings: ensureGridLandMapStore(file),
       schema: state.schema ? { componentCol: state.schema.componentCol, packageCol: state.schema.packageCol, landCol: state.schema.landCol, landMode: state.schema.landMode, measurementCol: state.schema.measurementCol } : null,
       componentSummaries: state.mappingData?.componentSummaries, safeMapping: true,
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.22.0.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.24.0.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
   } catch (error) {
@@ -3061,7 +3058,7 @@ function setCadEditorBusy(active, title = 'กำลังประมวลผ�
   if (els.cadEditorApplyButton) els.cadEditorApplyButton.disabled = nextActive || !state.cadEditor.model;
   if (els.cadEditorExportXmlButton) els.cadEditorExportXmlButton.disabled = nextActive || !state.cadEditor.model;
   if (els.cadEditorBoardReverseButton) els.cadEditorBoardReverseButton.disabled = nextActive || !state.cadEditor.model;
-  for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton, els.cadEditorLandMapButton, els.cadEditorLandMapFooterButton]) if (button) button.disabled = nextActive || !state.cadEditor.model;
+  for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton]) if (button) button.disabled = nextActive || !state.cadEditor.model;
   if (els.cadEditorBusyCancelButton) {
     els.cadEditorBusyCancelButton.disabled = !nextActive;
     els.cadEditorBusyCancelButton.textContent = 'ยกเลิกงาน';
@@ -3737,6 +3734,25 @@ function cadEditorSingleComponentForTool() {
   return components.length === 1 ? components[0] : null;
 }
 
+function createGridLandMapStore() {
+  return { version: 1, components: {} };
+}
+
+function ensureGridLandMapStore(file = cadEditorFile() || activeCadFile()) {
+  if (!file) return createGridLandMapStore();
+  if (!file.gridLandMappings || typeof file.gridLandMappings !== 'object') file.gridLandMappings = createGridLandMapStore();
+  if (!file.gridLandMappings.components || typeof file.gridLandMappings.components !== 'object') file.gridLandMappings.components = {};
+  return file.gridLandMappings;
+}
+
+function gridLandMapComponentKey(component) {
+  return String(component?.originalId ?? component?.id ?? component?.uid ?? 'component');
+}
+
+function gridLandMapRecord(file, component) {
+  return ensureGridLandMapStore(file).components[gridLandMapComponentKey(component)] || null;
+}
+
 function closeLandGridMapper() {
   ensureCadToolState();
   els.landGridOverlay?.classList.add('hidden');
@@ -3744,56 +3760,111 @@ function closeLandGridMapper() {
   els.cadEditorGridMapButton?.focus?.();
 }
 
-function normalizedText(value) { return String(value ?? '').trim().toLocaleUpperCase(); }
+function gridMapDefaultSettings() {
+  return {
+    namingMode: 'grid', gapMode: 'compact', order: 'row-major', reverseRows: false, reverseColumns: false,
+    prefix: '', separator: '', suffix: '', rowStart: 'A', columnStart: 1, columnStep: 1,
+    start: 1, step: 1, padding: 0,
+  };
+}
 
-function gridMappingSourcesForComponent(component) {
-  if (!component || !state.mappingData?.mappings) return [];
-  const componentId = String(component.originalId ?? component.id ?? '');
-  const componentName = normalizedText(component.name);
-  const packageName = normalizedText(component.packageName);
-  return state.mappingData.mappings.filter((mapping) => {
-    if (mapping.cadOnly || mapping.sourceRow == null) return false;
-    if (String(mapping.componentId ?? '') === componentId) return true;
-    if (normalizedText(mapping.componentName) !== componentName) return false;
-    return !packageName || !normalizedText(mapping.packageName) || normalizedText(mapping.packageName) === packageName;
-  });
+function gridMapSettingsFromControls() {
+  return {
+    namingMode: els.landGridNamingMode.value,
+    gapMode: els.landGridGapMode.value,
+    order: els.landGridOrder.value,
+    reverseRows: els.landGridRowDirection.value === 'bottom-top',
+    reverseColumns: els.landGridColumnDirection.value === 'right-left',
+    prefix: els.landGridPrefix.value,
+    separator: els.landGridSeparator.value,
+    suffix: els.landGridSuffix.value,
+    rowStart: els.landGridRowStart.value,
+    columnStart: Number(els.landGridColumnStart.value || 1),
+    columnStep: Number(els.landGridColumnStep.value || 1),
+    start: Number(els.landGridStart.value || 1),
+    step: Number(els.landGridStep.value || 1),
+    padding: Number(els.landGridPadding.value || 0),
+  };
+}
+
+function applyGridMapSettingsToControls(settings = {}) {
+  const config = { ...gridMapDefaultSettings(), ...(settings || {}) };
+  els.landGridNamingMode.value = config.namingMode;
+  els.landGridGapMode.value = config.gapMode;
+  els.landGridOrder.value = config.order;
+  els.landGridRowDirection.value = config.reverseRows ? 'bottom-top' : 'top-bottom';
+  els.landGridColumnDirection.value = config.reverseColumns ? 'right-left' : 'left-right';
+  els.landGridPrefix.value = config.prefix;
+  els.landGridSeparator.value = config.separator;
+  els.landGridSuffix.value = config.suffix;
+  els.landGridRowStart.value = config.rowStart;
+  els.landGridColumnStart.value = String(config.columnStart);
+  els.landGridColumnStep.value = String(config.columnStep);
+  els.landGridStart.value = String(config.start);
+  els.landGridStep.value = String(config.step);
+  els.landGridPadding.value = String(config.padding);
+}
+
+function updateGridMapControlState() {
+  const mode = els.landGridNamingMode.value;
+  const gridMode = mode === 'grid';
+  els.landGridGapMode.disabled = !gridMode;
+  els.landGridRowStart.disabled = !gridMode;
+  els.landGridColumnStart.disabled = !gridMode;
+  els.landGridColumnStep.disabled = !gridMode;
+  els.landGridSeparator.disabled = !gridMode;
+  els.landGridStart.disabled = gridMode;
+  els.landGridStep.disabled = gridMode;
+  // Prefix/suffix/padding and traversal remain configurable for every mode.
 }
 
 function currentLandGridPlan() {
   const mapper = ensureCadToolState().gridMapper;
   if (!mapper) return null;
-  return buildGridMappingPlan(mapper.grid, mapper.sources, {
-    order: els.landGridOrder.value,
-    reverseRows: els.landGridRowDirection.value === 'bottom-top',
-    reverseColumns: els.landGridColumnDirection.value === 'right-left',
-    reverseSource: els.landGridSourceDirection.value === 'descending',
-    preserveConfirmed: els.landGridPreserveConfirmed.checked,
+  return buildGeneratedLandMapPlan(mapper.grid, {
+    ...gridMapSettingsFromControls(),
+    manualOverrides: mapper.manualOverrides,
+    existingAssignments: mapper.savedRecord?.assignments || [],
   });
 }
 
-function mappingRawLabel(mapping) {
-  return String(mapping?.rawLandId ?? mapping?.localIndex ?? mapping?.rawOrder ?? mapping?.sourceRow ?? '—');
+function selectedGridMapItem(mapper, plan) {
+  return plan?.byLandKey?.get(mapper?.selectedLandKey || '') || null;
+}
+
+function updateGridMapManualEditor(mapper, plan) {
+  const item = selectedGridMapItem(mapper, plan);
+  const enabled = Boolean(item);
+  els.landGridManualName.disabled = !enabled;
+  els.landGridApplyManualButton.disabled = !enabled;
+  els.landGridClearManualButton.disabled = !enabled || !mapper.manualOverrides.has(item?.landKey);
+  if (!item) {
+    els.landGridSelectedInfo.textContent = 'คลิก Land ใน Preview เพื่อแก้ชื่อใหม่เฉพาะจุด';
+    els.landGridManualName.value = '';
+    return;
+  }
+  els.landGridSelectedInfo.textContent = `CAD ${item.cadName || '—'} · XML ${item.globalId} · ตำแหน่ง R${item.physicalRow + 1} C${item.physicalColumn + 1}`;
+  els.landGridManualName.value = mapper.manualOverrides.get(item.landKey) ?? item.newName;
 }
 
 function renderLandGridMapper() {
   const mapper = ensureCadToolState().gridMapper;
   if (!mapper) return;
+  updateGridMapControlState();
   const plan = currentLandGridPlan();
   mapper.plan = plan;
-  els.landGridSubtitle.textContent = `${mapper.component.name || `ID ${mapper.component.id}`} · ${mapper.component.packageName || 'ไม่มีชื่อ Package'} · Mapping เท่านั้น ไม่เปลี่ยนชื่อ CAD`;
+  els.landGridSubtitle.textContent = `${mapper.component.name || `ID ${mapper.component.id}`} · ${mapper.component.packageName || 'ไม่มีชื่อ Package'} · สร้างชื่อใหม่แล้ว Mapping เข้ากับชื่อ CAD โดยไม่ Rename CAD`;
   els.landGridTableHead.textContent = '';
   els.landGridTableBody.textContent = '';
 
   const headerRow = document.createElement('tr');
-  const corner = document.createElement('th'); corner.className = 'row-header'; corner.textContent = 'Row \\ Col'; headerRow.append(corner);
+  const corner = document.createElement('th'); corner.className = 'row-header'; corner.textContent = 'Physical R \\ C'; headerRow.append(corner);
   for (let columnIndex = 0; columnIndex < mapper.grid.columnCount; columnIndex += 1) {
     const th = document.createElement('th'); th.textContent = String(columnIndex + 1); headerRow.append(th);
   }
   els.landGridTableHead.append(headerRow);
 
-  const assignmentByLand = new Map((plan?.assignments || []).map((item) => [item.land, item]));
-  const existingByTarget = new Map();
-  for (const mapping of mapper.sources) if (mapping.mapped && mapping.globalId != null) existingByTarget.set(String(mapping.globalId), mapping);
+  const itemByLand = new Map(plan.plan.map((item) => [item.land, item]));
   for (let rowIndex = 0; rowIndex < mapper.grid.rowCount; rowIndex += 1) {
     const row = document.createElement('tr');
     const rowHeader = document.createElement('th'); rowHeader.className = 'row-header'; rowHeader.textContent = String(rowIndex + 1); row.append(rowHeader);
@@ -3803,98 +3874,154 @@ function renderLandGridMapper() {
       const content = document.createElement('div'); content.className = land ? 'land-grid-cell' : 'land-grid-cell empty';
       if (!land) content.textContent = '—';
       else {
-        const assignment = assignmentByLand.get(land);
-        const protectedOwner = existingByTarget.get(String(land.globalId));
-        const strong = document.createElement('strong');
-        const small = document.createElement('small');
-        if (assignment) {
-          if (assignment.changed) content.classList.add('changed');
-          strong.textContent = `${mappingRawLabel(assignment.mapping)} → ${land.cadName || `ID ${land.globalId}`}`;
-          small.textContent = assignment.changed
-            ? `เดิม ${assignment.mapping.cadName || 'Unmapped'} · XML ${land.globalId}`
-            : `Mapping เดิมตรงแล้ว · XML ${land.globalId}`;
-        } else if (protectedOwner && els.landGridPreserveConfirmed.checked) {
-          content.classList.add('protected');
-          strong.textContent = `${mappingRawLabel(protectedOwner)} → ${land.cadName || `ID ${land.globalId}`}`;
-          small.textContent = `รักษา Manual/Confirmed · XML ${land.globalId}`;
-        } else {
-          strong.textContent = land.cadName || `ID ${land.globalId}`;
-          small.textContent = `ไม่มี Source จับคู่ · XML ${land.globalId}`;
-        }
+        const item = itemByLand.get(land);
+        if (item.changed) content.classList.add('changed');
+        if (item.manualOverride) content.classList.add('manual');
+        if (mapper.selectedLandKey === item.landKey) content.classList.add('selected');
+        const strong = document.createElement('strong'); strong.textContent = item.newName || 'ชื่อว่าง';
+        const small = document.createElement('small'); small.textContent = `CAD: ${item.cadName || '—'} · XML ${item.globalId}`;
         content.append(strong, small);
+        content.title = `ชื่อใหม่: ${item.newName}\nชื่อ CAD: ${item.cadName}\nคลิกเพื่อแก้ชื่อใหม่เฉพาะจุด`;
+        content.addEventListener('click', () => {
+          mapper.selectedLandKey = item.landKey;
+          renderLandGridMapper();
+          els.landGridManualName.select();
+        });
       }
       cell.append(content); row.append(cell);
     }
     els.landGridTableBody.append(row);
   }
-  els.landGridDimensions.textContent = `${mapper.grid.rowCount} แถว × ${mapper.grid.columnCount} คอลัมน์ · ${mapper.grid.landCount} Lands · Source ${plan.sourceCount}`;
-  els.landGridChanged.textContent = `เสนอเปลี่ยน Mapping ${formatInt.format(plan.changedCount)} จุด · รักษาไว้ ${formatInt.format(plan.protectedCount)} จุด`;
-  const issueText = [];
-  if (plan.unassignedSourceCount) issueText.push(`Source เกิน ${plan.unassignedSourceCount}`);
-  if (plan.unusedTargetCount) issueText.push(`Land เหลือ ${plan.unusedTargetCount}`);
-  if (plan.conflicts.length) issueText.push(`Conflict ${plan.conflicts.length}`);
-  els.landGridIssues.textContent = issueText.length ? issueText.join(' · ') : `พร้อม Apply · ช่องว่าง Grid ${mapper.grid.missingCount} ช่องไม่ทำให้ลำดับข้าม`;
-  els.landGridIssues.classList.toggle('is-error', Boolean(plan.conflicts.length || mapper.grid.collisions.length));
-  els.landGridApplyButton.disabled = Boolean(plan.conflicts.length || mapper.grid.collisions.length || !plan.changedCount);
+  const modeText = plan.namingMode === 'grid' ? `Grid ${plan.gapMode === 'compact' ? 'ข้ามช่องว่าง' : 'รักษาช่องว่าง'}` : (plan.namingMode === 'sequence' ? 'LAND Sequence' : 'Number Only');
+  els.landGridDimensions.textContent = `${mapper.grid.rowCount} แถว × ${mapper.grid.columnCount} คอลัมน์ · ${mapper.grid.landCount} Lands`;
+  els.landGridChanged.textContent = `${modeText} · Mapping ${formatInt.format(plan.plan.length)} จุด · เปลี่ยนจากที่บันทึก ${formatInt.format(plan.changedCount)} จุด`;
+  const issues = [];
+  if (mapper.grid.missingCount) issues.push(`ช่องว่าง ${formatInt.format(mapper.grid.missingCount)}`);
+  if (plan.manualCount) issues.push(`กำหนดเอง ${formatInt.format(plan.manualCount)}`);
+  if (plan.duplicates.length) issues.push(`ชื่อซ้ำ/ว่าง ${formatInt.format(plan.duplicates.length)} กลุ่ม`);
+  els.landGridIssues.textContent = issues.length ? issues.join(' · ') : 'ชื่อใหม่ไม่ซ้ำ และ Mapping ครบทุก CAD Land';
+  els.landGridIssues.classList.toggle('is-error', Boolean(plan.duplicates.length || mapper.grid.collisions.length));
+  els.landGridApplyButton.disabled = Boolean(plan.duplicates.length || mapper.grid.collisions.length || !plan.plan.length || !plan.changedCount);
+  els.landGridExportExcelButton.disabled = Boolean(plan.duplicates.length || mapper.grid.collisions.length || !plan.plan.length);
+  updateGridMapManualEditor(mapper, plan);
 }
 
 function openLandGridMapper() {
   ensureCadToolState();
   const component = cadEditorSingleComponentForTool();
-  if (!component) return toast('กรุณาเลือก Component เพียง 1 ตัวก่อนเปิด Grid Mapping');
-  if (state.cadEditor.model?.changed) return toast('กรุณากด Apply CAD ก่อนทำ Grid Mapping เพื่อให้ Mapping ใช้ Revision เดียวกับ Editor');
+  if (!component) return toast('กรุณาเลือก Component เพียง 1 ตัวก่อนเปิด Grid / Land Map');
+  if (state.cadEditor.model?.changed) return toast('กรุณากด Apply CAD ก่อน เพื่อให้ Grid Mapping อ้างอิง Land ID ของ Revision ล่าสุด');
   try {
     const grid = detectLandGrid(component);
     if (grid.collisions.length) throw new Error(`พบ Land ซ้อน Grid ${grid.collisions.length} ตำแหน่ง`);
-    const sources = gridMappingSourcesForComponent(component);
-    state.cadEditor.gridMapper = { component, grid, sources, plan: null };
-    els.landGridOrder.value = 'row-major';
-    els.landGridRowDirection.value = 'top-bottom';
-    els.landGridColumnDirection.value = 'left-right';
-    els.landGridSourceDirection.value = 'ascending';
-    els.landGridPreserveConfirmed.checked = true;
+    const file = cadEditorFile();
+    const savedRecord = gridLandMapRecord(file, component);
+    const manualOverrides = new Map(Object.entries(savedRecord?.manualOverrides || {}));
+    state.cadEditor.gridMapper = { component, grid, savedRecord, manualOverrides, selectedLandKey: null, plan: null };
+    applyGridMapSettingsToControls(savedRecord?.settings || gridMapDefaultSettings());
     renderLandGridMapper();
     els.landGridOverlay.classList.remove('hidden');
     els.landGridCloseButton.focus();
-    if (!sources.length) toast('Component นี้ไม่มีข้อมูลต้นทางสำหรับ Mapping · นำเข้า XLSX/CSV/TXT ก่อน');
   } catch (error) {
-    showGlobalError(error, { title: 'เปิด Grid Mapping ไม่สำเร็จ', operation: 'grid-mapping', fileName: cadEditorFile()?.name });
+    showGlobalError(error, { title: 'เปิด Grid / Land Map ไม่สำเร็จ', operation: 'grid-land-mapping', fileName: cadEditorFile()?.name });
   }
 }
 
 async function applyLandGridMapper() {
   const mapper = ensureCadToolState().gridMapper;
   const plan = currentLandGridPlan();
-  if (!mapper || !plan || plan.conflicts.length || !plan.changedCount) return false;
+  const file = cadEditorFile();
+  if (!mapper || !plan || !file || plan.duplicates.length || !plan.plan.length || !plan.changedCount) return false;
   const confirmed = await requestAppConfirm({
-    title: 'Apply Grid Mapping?',
-    message: `เปลี่ยน Target Mapping ${formatInt.format(plan.changedCount)} จุดใน ${mapper.component.name || mapper.component.id}`,
-    detail: `Source ${plan.sourceCount} · CAD Lands ${plan.targetCount} · เป็น Suggested Mapping ไม่เปลี่ยนชื่อ Land และ Undo/Redo ได้`,
-    confirmText: 'Yes - Apply Grid Mapping',
+    title: 'Apply Grid / Land Mapping?',
+    message: `บันทึกชื่อใหม่ ${formatInt.format(plan.plan.length)} จุดให้ ${mapper.component.name || mapper.component.id}`,
+    detail: `ชื่อใหม่จะ Mapping กับชื่อ CAD เดิมแบบ 1:1 · ไม่ Rename CAD · เปลี่ยนจาก Mapping ที่บันทึก ${formatInt.format(plan.changedCount)} จุด`,
+    confirmText: 'Yes - Apply Mapping',
   });
   if (!confirmed) return false;
   try {
-    const changes = plan.assignments.filter((item) => item.changed).map((item) => {
-      const before = snapshotMapping(item.mapping);
-      const after = {
-        ...stateForLand(item.mapping, item.land, {
-          manual: true, verified: false, anchorLocked: false, confidence: 90,
-          mappingMethod: 'grid-sequence', duplicateCadNameCount: duplicateCountForLand(item.land),
-        }),
-        manualReason: 'Grid Mapping ตามตำแหน่ง', userConfirmation: false, mappingConflict: false,
-        mappingState: 'suggested-match', matchStatus: 'strong-match', matchScore: 0.9,
-        targetRecordId: `cad-land:${item.land.componentId}:${item.land.globalId}`,
-      };
-      return { mapping: item.mapping, before, after };
-    });
-    if (!applyTransaction(`Grid Mapping ${mapper.component.name || mapper.component.id}`, changes)) return false;
-    normalizeMappings();
-    closeLandGridMapper();
-    toast(`Grid Mapping สำเร็จ · เปลี่ยน Target ${formatInt.format(changes.length)} จุด · ชื่อ CAD ไม่ถูกแก้ไข`, 4800);
+    const store = ensureGridLandMapStore(file);
+    const key = gridLandMapComponentKey(mapper.component);
+    const previous = store.components[key] || null;
+    const now = new Date().toISOString();
+    const assignments = plan.plan.map((item, index) => ({
+      sequence: index + 1,
+      landKey: item.landKey,
+      componentId: item.componentId,
+      globalId: item.globalId,
+      cadName: item.cadName,
+      newName: item.newName,
+      generatedName: item.generatedName,
+      physicalRow: item.physicalRow,
+      physicalColumn: item.physicalColumn,
+      logicalRow: item.logicalRow,
+      logicalColumn: item.logicalColumn,
+      manualOverride: item.manualOverride,
+    }));
+    const audit = [...(previous?.history || []), {
+      timestamp: now,
+      revision: projectRevision(file),
+      changedCount: plan.changedCount,
+      mappingCount: assignments.length,
+      namingMode: plan.namingMode,
+    }].slice(-20);
+    store.components[key] = {
+      version: 1,
+      componentId: String(mapper.component.id ?? ''),
+      componentName: String(mapper.component.name || ''),
+      packageName: String(mapper.component.packageName || ''),
+      revision: projectRevision(file),
+      updatedAt: now,
+      settings: { ...plan.settings },
+      manualOverrides: Object.fromEntries(mapper.manualOverrides),
+      assignments,
+      history: audit,
+    };
+    mapper.savedRecord = store.components[key];
+    scheduleProjectAutosave(file);
+    renderLandGridMapper();
+    toast(`บันทึก Grid / Land Mapping สำเร็จ · ${formatInt.format(assignments.length)} ชื่อใหม่ ↔ CAD Land · ไม่เปลี่ยนชื่อ CAD`, 5200);
     return true;
   } catch (error) {
-    showGlobalError(error, { title: 'Apply Grid Mapping ไม่สำเร็จ', operation: 'grid-mapping-apply', fileName: cadEditorFile()?.name });
+    showGlobalError(error, { title: 'Apply Grid / Land Mapping ไม่สำเร็จ', operation: 'grid-land-mapping-apply', fileName: file?.name });
     return false;
+  }
+}
+
+function gridMapExcelFileStem(mapper) {
+  const board = state.cadEditor.model?.board?.Name || state.cadEditor.model?.board?.name || 'board';
+  const component = mapper?.component?.name || mapper?.component?.id || 'component';
+  return safeDownloadName(`${board}_${component}_grid-land-map`).replace(/\.xlsx$/i, '');
+}
+
+async function exportGridMapExcel() {
+  const mapper = ensureCadToolState().gridMapper;
+  const plan = currentLandGridPlan();
+  const file = cadEditorFile();
+  if (!mapper || !plan || !file || plan.duplicates.length) return false;
+  const oldText = els.landGridExportExcelButton.textContent;
+  try {
+    const preflight = assertAppliedRevisionExportable(file, state.cadEditor.model);
+    els.landGridExportExcelButton.disabled = true;
+    els.landGridExportExcelButton.textContent = 'กำลังสร้าง Excel…';
+    const metadata = projectExportMetadata(file, 'xlsx-grid-land-map', validationStatusFromPreflight(preflight));
+    const model = createGridMapExcelModel(mapper.component, {
+      grid: mapper.grid,
+      plan,
+      existingAssignments: mapper.savedRecord?.assignments || [],
+      boardName: state.cadEditor.model?.board?.Name || state.cadEditor.model?.board?.name || '',
+      metadata,
+    });
+    const blob = await buildGridMapExcelBlob(model);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.24.0.xlsx`);
+    toast(`Export Grid / Land Map Excel สำเร็จ · ${formatInt.format(model.cells.length)} ชื่อใหม่ ↔ CAD Land`, 4800);
+    return true;
+  } catch (error) {
+    showGlobalError(error, { title: 'Export Grid / Land Map Excel ไม่สำเร็จ', operation: 'grid-land-map-xlsx-export', fileName: file?.name });
+    return false;
+  } finally {
+    els.landGridExportExcelButton.textContent = oldText;
+    renderLandGridMapper();
   }
 }
 
@@ -4072,139 +4199,6 @@ async function applyNameGridRenamer() {
     return false;
   }
 }
-
-function revokeLandMapPreview() {
-  const landMap = ensureCadToolState().landMap;
-  if (landMap?.previewUrl) URL.revokeObjectURL(landMap.previewUrl);
-  if (landMap) landMap.previewUrl = null;
-  els.landMapPreviewImage?.removeAttribute?.('src');
-}
-
-function closeLandMapExporter() {
-  const editor = ensureCadToolState();
-  revokeLandMapPreview();
-  els.landMapOverlay?.classList.add('hidden');
-  if (editor.landMap) editor.landMap.model = null;
-  els.cadEditorLandMapButton?.focus?.();
-}
-
-function selectedLandMapComponent() {
-  const id = els.landMapComponentSelect.value;
-  return (state.cadEditor.model?.components || []).find((component) => component.uid === id || String(component.id) === String(id)) || null;
-}
-
-function landMapOptions() {
-  const mode = els.landMapNumberingMode.value;
-  const startText = String(els.landMapSequenceStart.value || '').trim();
-  return {
-    titlePrefix: els.landMapTitlePrefix.value.trim() || 'Sample Location',
-    boardName: state.cadEditor.model?.board?.Name || state.cadEditor.model?.board?.name || '',
-    numberingMode: mode === 'mapping' ? 'mapping' : 'sequence',
-    sequenceDescending: mode !== 'sequence-asc',
-    sequenceOrder: els.landMapSequenceOrder.value,
-    sequenceReverseRows: els.landMapRowDirection.value === 'bottom-top',
-    sequenceReverseColumns: els.landMapColumnDirection.value === 'right-left',
-    sequenceStart: startText === '' ? undefined : Number(startText),
-  };
-}
-
-function refreshLandMapPreview() {
-  const component = selectedLandMapComponent();
-  if (!component) return;
-  const editor = ensureCadToolState();
-  try {
-    const model = createLandMapModel(component, state.mappingData?.mappings || [], landMapOptions());
-    editor.landMap.model = model;
-    const svg = buildLandMapSvg(model);
-    revokeLandMapPreview();
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-    editor.landMap.previewUrl = url;
-    if (els.landMapPreviewImage) els.landMapPreviewImage.src = url;
-    const stale = Boolean(state.cadEditor.model?.changed);
-    els.landMapExportSvgButton.disabled = stale;
-    els.landMapExportPptxButton.disabled = stale;
-    els.landMapMessage.textContent = stale
-      ? `Preview ใช้ Working Model ล่าสุด แต่ต้องกด Apply ก่อน Export เพื่อให้ Revision, Mapping และไฟล์ส่งออกตรงกัน`
-      : `${model.grid.rowCount} × ${model.grid.columnCount} · ${model.cells.length} Lands · ใช้ Mapping ${model.mappingCount} จุด · สร้างเลขสำรอง ${model.generatedCount} จุด`;
-  } catch (error) {
-    revokeLandMapPreview();
-    editor.landMap.model = null;
-    els.landMapMessage.textContent = `สร้าง Preview ไม่สำเร็จ: ${error.message}`;
-    els.landMapExportSvgButton.disabled = true;
-    els.landMapExportPptxButton.disabled = true;
-  }
-}
-
-function openLandMapExporter() {
-  ensureCadToolState();
-  const components = state.cadEditor.model?.components || [];
-  if (!components.length) return toast('ไม่มี Component สำหรับสร้าง Land Map');
-  const preferred = cadEditorSingleComponentForTool() || components[0];
-  els.landMapComponentSelect.textContent = '';
-  for (const component of components) {
-    const option = document.createElement('option'); option.value = component.uid; option.textContent = `${component.name || `ID ${component.id}`} · ${component.packageName || 'No package'} · ${formatInt.format(component.lands?.length || 0)} lands`;
-    els.landMapComponentSelect.append(option);
-  }
-  els.landMapComponentSelect.value = preferred.uid;
-  els.landMapTitlePrefix.value = 'Sample Location';
-  els.landMapNumberingMode.value = 'mapping';
-  els.landMapSequenceOrder.value = 'row-major';
-  els.landMapRowDirection.value = 'top-bottom';
-  els.landMapColumnDirection.value = 'left-right';
-  els.landMapSequenceStart.value = '';
-  els.landMapOverlay.classList.remove('hidden');
-  refreshLandMapPreview();
-  els.landMapCloseButton.focus();
-}
-
-function landMapFileStem(model) {
-  const board = state.cadEditor.model?.board?.Name || state.cadEditor.model?.board?.name || 'board';
-  return safeDownloadName(`${board}_${model.componentName}_land-map`).replace(/\.(?:pptx|svg)$/i, '');
-}
-
-function exportLandMapSvg() {
-  const model = ensureCadToolState().landMap.model;
-  const file = cadEditorFile();
-  if (!model || !file) return false;
-  try {
-    const preflight = assertAppliedRevisionExportable(file, state.cadEditor.model);
-    const metadata = projectExportMetadata(file, 'svg-land-map', validationStatusFromPreflight(preflight));
-    const svg = buildLandMapSvg({ ...model, metadata });
-    downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${landMapFileStem(model)}.svg`);
-    toast('Export Land Map SVG สำเร็จ', 3600);
-    return true;
-  } catch (error) {
-    showGlobalError(error, { title: 'Export Land Map SVG ไม่สำเร็จ', operation: 'land-map-svg-export', fileName: file.name });
-    return false;
-  }
-}
-
-async function exportLandMapPptx() {
-  const model = ensureCadToolState().landMap.model;
-  const file = cadEditorFile();
-  if (!model || !file) return false;
-  const oldText = els.landMapExportPptxButton.textContent;
-  try {
-    const preflight = assertAppliedRevisionExportable(file, state.cadEditor.model);
-    els.landMapExportPptxButton.disabled = true;
-    els.landMapExportPptxButton.textContent = 'กำลังสร้าง PowerPoint…';
-    const metadata = projectExportMetadata(file, 'pptx-land-map', validationStatusFromPreflight(preflight));
-    const outputModel = { ...model, metadata };
-    const blob = await createLandMapPptxBlob(outputModel);
-    downloadBlob(blob, `${landMapFileStem(model)}.pptx`);
-    els.landMapMessage.textContent = `Export PowerPoint สำเร็จ · Revision ${metadata.revisionNumber} · กล่อง LAND และชื่อ CAD แก้ไขต่อได้`;
-    toast('Export Land Map PowerPoint สำเร็จ', 4200);
-    return true;
-  } catch (error) {
-    console.error(error);
-    showGlobalError(error, { title: 'Export Land Map PowerPoint ไม่สำเร็จ', operation: 'land-map-pptx-export', fileName: file.name });
-    return false;
-  } finally {
-    els.landMapExportPptxButton.textContent = oldText;
-    refreshLandMapPreview();
-  }
-}
-
 
 function alignCadEditorSelection(kind) {
   const selected = cadEditorSelectedComponents();
@@ -4640,7 +4634,6 @@ function renderCadEditorSummary() {
   const hasSingleComponent = Boolean(cadEditorSingleComponentForTool());
   if (els.cadEditorBoardReverseButton) els.cadEditorBoardReverseButton.disabled = state.cadEditor.busy || !hasModel;
   for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton]) if (button) button.disabled = state.cadEditor.busy || !hasSingleComponent;
-  for (const button of [els.cadEditorLandMapButton, els.cadEditorLandMapFooterButton]) if (button) button.disabled = state.cadEditor.busy || !hasModel;
 }
 function renderCadEditorComponents() {
   const model = state.cadEditor.model;
@@ -4848,7 +4841,6 @@ async function refreshMainViewAfterCadEditor(file) {
 }
 function finalizeCloseCadEditor() {
   closeLandGridMapper();
-  closeLandMapExporter();
   closeCadEditorConfirm({ animate: false });
   closeCadEditorMenus();
   hideCadEditorContextMenu();
@@ -5798,10 +5790,8 @@ function updateCadEditorMenuState() {
   setCommandDisabled('board-mirror-left-right', !state.cadEditor.model?.components?.length || state.cadEditor.busy);
   setCommandDisabled('board-mirror-top-bottom', !state.cadEditor.model?.components?.length || state.cadEditor.busy);
   setCommandDisabled('grid-map', !cadEditorSingleComponentForTool() || state.cadEditor.busy);
-  setCommandDisabled('export-land-map', !state.cadEditor.model?.components?.length || state.cadEditor.busy);
   if (els.cadEditorBoardReverseButton) els.cadEditorBoardReverseButton.disabled = !state.cadEditor.model?.components?.length || state.cadEditor.busy;
   for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton]) if (button) button.disabled = !cadEditorSingleComponentForTool() || state.cadEditor.busy;
-  for (const button of [els.cadEditorLandMapButton, els.cadEditorLandMapFooterButton]) if (button) button.disabled = !state.cadEditor.model?.components?.length || state.cadEditor.busy;
   updateCadEditorHistoryControls();
 }
 async function toggleCadEditorFullscreen() {
@@ -5861,7 +5851,6 @@ function runCadEditorCommand(command) {
     case 'board-mirror-left-right': requestCadEditorBoardTransform('mirror-left-right'); return true;
     case 'board-mirror-top-bottom': requestCadEditorBoardTransform('mirror-top-bottom'); return true;
     case 'grid-map': openLandGridMapper(); return true;
-    case 'export-land-map': openLandMapExporter(); return true;
     case 'open-name-inspector': return requestCadNameInspectorFromEditor();
     case 'validate': return validateCadEditorFromMenu();
     default: return false;
@@ -5964,9 +5953,7 @@ els.cadEditorRotateRightButton?.addEventListener('click', () => runCadEditorActi
 els.cadEditorFlipSideButton?.addEventListener('click', () => runCadEditorAction('flip-side'));
 els.cadEditorBoardReverseButton?.addEventListener('click', () => requestCadEditorBoardTransform('rotate-180'));
 els.cadEditorGridMapButton?.addEventListener('click', openLandGridMapper);
-els.cadEditorLandMapButton?.addEventListener('click', openLandMapExporter);
 els.cadEditorGridMapFooterButton?.addEventListener('click', openLandGridMapper);
-els.cadEditorLandMapFooterButton?.addEventListener('click', openLandMapExporter);
 els.cadEditorDockDuplicateButton?.addEventListener('click', () => runCadEditorAction('duplicate'));
 els.cadEditorDockRotateButton?.addEventListener('click', () => runCadEditorAction('rotate-right'));
 els.cadEditorDockFlipButton?.addEventListener('click', () => runCadEditorAction('flip-side'));
@@ -6021,11 +6008,51 @@ els.cadEditorExportTgzButton.addEventListener('click', requestCadEditorArchiveEx
 els.landGridCloseButton?.addEventListener('click', closeLandGridMapper);
 els.landGridCancelButton?.addEventListener('click', closeLandGridMapper);
 els.landGridOverlay?.addEventListener('click', (event) => { if (event.target === els.landGridOverlay) closeLandGridMapper(); });
+els.landGridNamingMode?.addEventListener('change', () => {
+  const mode = els.landGridNamingMode.value;
+  if (mode === 'sequence' && !els.landGridPrefix.value.trim()) els.landGridPrefix.value = 'LAND ';
+  else if ((mode === 'grid' || mode === 'number') && els.landGridPrefix.value === 'LAND ') els.landGridPrefix.value = '';
+  renderLandGridMapper();
+});
 for (const control of [
-  els.landGridOrder, els.landGridRowDirection, els.landGridColumnDirection,
-  els.landGridSourceDirection, els.landGridPreserveConfirmed,
+  els.landGridGapMode, els.landGridOrder,
+  els.landGridRowDirection, els.landGridColumnDirection,
 ]) control?.addEventListener('change', renderLandGridMapper);
+for (const control of [
+  els.landGridPrefix, els.landGridSeparator, els.landGridSuffix, els.landGridRowStart,
+  els.landGridColumnStart, els.landGridColumnStep, els.landGridStart, els.landGridStep, els.landGridPadding,
+]) control?.addEventListener('input', renderLandGridMapper);
+els.landGridResetButton?.addEventListener('click', () => {
+  const mapper = ensureCadToolState().gridMapper;
+  if (!mapper) return;
+  mapper.manualOverrides.clear();
+  mapper.selectedLandKey = null;
+  applyGridMapSettingsToControls(gridMapDefaultSettings());
+  renderLandGridMapper();
+});
+els.landGridApplyManualButton?.addEventListener('click', () => {
+  const mapper = ensureCadToolState().gridMapper;
+  const plan = currentLandGridPlan();
+  const item = selectedGridMapItem(mapper, plan);
+  if (!mapper || !item) return;
+  const value = String(els.landGridManualName.value || '').trim();
+  if (!value) return toast('กรุณากรอกชื่อใหม่ หรือกดล้างชื่อกำหนดเอง');
+  mapper.manualOverrides.set(item.landKey, value);
+  renderLandGridMapper();
+});
+els.landGridManualName?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') { event.preventDefault(); els.landGridApplyManualButton.click(); }
+});
+els.landGridClearManualButton?.addEventListener('click', () => {
+  const mapper = ensureCadToolState().gridMapper;
+  const plan = currentLandGridPlan();
+  const item = selectedGridMapItem(mapper, plan);
+  if (!mapper || !item) return;
+  mapper.manualOverrides.delete(item.landKey);
+  renderLandGridMapper();
+});
 els.landGridApplyButton?.addEventListener('click', applyLandGridMapper);
+els.landGridExportExcelButton?.addEventListener('click', exportGridMapExcel);
 els.cadGridRenameButton?.addEventListener('click', () => openNameGridRenamer());
 els.nameGridCloseButton?.addEventListener('click', closeNameGridRenamer);
 els.nameGridCancelButton?.addEventListener('click', closeNameGridRenamer);
@@ -6055,12 +6082,6 @@ els.nameGridResetButton?.addEventListener('click', () => {
   renderNameGridRenamer();
 });
 els.nameGridApplyButton?.addEventListener('click', applyNameGridRenamer);
-els.landMapCloseButton?.addEventListener('click', closeLandMapExporter);
-els.landMapCancelButton?.addEventListener('click', closeLandMapExporter);
-els.landMapOverlay?.addEventListener('click', (event) => { if (event.target === els.landMapOverlay) closeLandMapExporter(); });
-for (const control of [els.landMapComponentSelect, els.landMapTitlePrefix, els.landMapNumberingMode, els.landMapSequenceOrder, els.landMapRowDirection, els.landMapColumnDirection, els.landMapSequenceStart]) control?.addEventListener(control === els.landMapTitlePrefix || control === els.landMapSequenceStart ? 'input' : 'change', refreshLandMapPreview);
-els.landMapExportSvgButton?.addEventListener('click', exportLandMapSvg);
-els.landMapExportPptxButton?.addEventListener('click', exportLandMapPptx);
 els.cadEditorSelectTool.addEventListener('click', () => setCadEditorTool('select'));
 els.cadEditorPanTool.addEventListener('click', () => setCadEditorTool('pan'));
 els.cadEditorComponentMode.addEventListener('click', () => setCadEditorMode('component'));
@@ -6183,7 +6204,6 @@ window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!els.globalErrorOverlay?.classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeGlobalError(); return; }
   if (!els.landGridOverlay?.classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeLandGridMapper(); return; }
-  if (!els.landMapOverlay?.classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeLandMapExporter(); return; }
   if (!els.nameGridOverlay?.classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); closeNameGridRenamer(); }
 }, true);
 window.addEventListener('error', (event) => {
@@ -6260,6 +6280,5 @@ export {
   syncMappingRowsFromActiveCad,
   applyCadNamesToProject,
   syncCadNamesToEditorModel,
-  closeLandMapExporter,
   ensureCadToolState,
 };

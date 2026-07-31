@@ -116,6 +116,192 @@ function paddedNumber(value, padding) {
   return width ? number.padStart(width, '0') : number;
 }
 
+
+function spreadsheetColumnIndex(label) {
+  const text = String(label ?? '').trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(text)) return 0;
+  let value = 0;
+  for (const character of text) value = value * 26 + (character.charCodeAt(0) - 64);
+  return Math.max(0, value - 1);
+}
+
+function landMappingKey(land, component = null) {
+  return `${String(land?.componentId ?? component?.id ?? '')}:${String(land?.globalId ?? land?.uid ?? '')}`;
+}
+
+function normalizeOverrideMap(overrides) {
+  if (overrides instanceof Map) return overrides;
+  if (Array.isArray(overrides)) return new Map(overrides.map((item) => [String(item?.key ?? item?.landKey ?? ''), String(item?.value ?? item?.name ?? '')]));
+  if (overrides && typeof overrides === 'object') return new Map(Object.entries(overrides).map(([key, value]) => [String(key), String(value ?? '')]));
+  return new Map();
+}
+
+function existingGeneratedNameMap(existingAssignments, component = null) {
+  const map = new Map();
+  for (const item of existingAssignments || []) {
+    const key = String(item?.landKey || `${String(item?.componentId ?? component?.id ?? '')}:${String(item?.globalId ?? '')}`);
+    if (key && key !== ':') map.set(key, String(item?.newName ?? item?.generatedName ?? ''));
+  }
+  return map;
+}
+
+function gridRowLabel(startLabel, offset) {
+  return spreadsheetColumnName(spreadsheetColumnIndex(startLabel) + Math.max(0, Number(offset) || 0));
+}
+
+/**
+ * Build a generated Land Map that maps a user-configured new name to the
+ * immutable/current CAD Land name. This does not rename CAD data and does not
+ * require an external XLSX/CSV source.
+ */
+export function buildGeneratedLandMapPlan(grid, options = {}) {
+  if (!grid?.matrix || !grid?.landCount) throw new RangeError('Grid Land Map ไม่มี Land ที่ใช้งานได้');
+  const namingMode = ['grid', 'sequence', 'number'].includes(options.namingMode) ? options.namingMode : 'grid';
+  const gapMode = options.gapMode === 'physical' ? 'physical' : 'compact';
+  const order = options.order === 'column-major' ? 'column-major' : 'row-major';
+  const reverseRows = Boolean(options.reverseRows);
+  const reverseColumns = Boolean(options.reverseColumns);
+  const prefix = String(options.prefix ?? (namingMode === 'sequence' ? 'LAND ' : ''));
+  const suffix = String(options.suffix ?? '');
+  const separator = String(options.separator ?? '');
+  const rowStart = String(options.rowStart ?? 'A').trim().toUpperCase() || 'A';
+  const columnStart = Number.isFinite(Number(options.columnStart)) ? Number(options.columnStart) : 1;
+  const columnStep = Number.isFinite(Number(options.columnStep)) && Number(options.columnStep) !== 0 ? Number(options.columnStep) : 1;
+  const start = Number.isFinite(Number(options.start)) ? Number(options.start) : 1;
+  const step = Number.isFinite(Number(options.step)) && Number(options.step) !== 0 ? Number(options.step) : 1;
+  const padding = Math.max(0, Math.min(12, Number(options.padding) || 0));
+  const overrides = normalizeOverrideMap(options.manualOverrides);
+  const existing = existingGeneratedNameMap(options.existingAssignments, grid.component);
+  const plan = [];
+
+  const pushItem = ({ land, physicalRow, physicalColumn, logicalRow, logicalColumn, generatedName, sequenceIndex }) => {
+    const key = landMappingKey(land, grid.component);
+    const manualName = overrides.has(key) ? String(overrides.get(key) ?? '').trim() : null;
+    const newName = manualName != null && manualName !== '' ? manualName : generatedName;
+    const previousNewName = existing.get(key) || '';
+    plan.push({
+      land,
+      landKey: key,
+      componentId: String(land?.componentId ?? grid.component?.id ?? ''),
+      globalId: land?.globalId ?? null,
+      cadName: String(land?.cadName ?? ''),
+      physicalRow,
+      physicalColumn,
+      logicalRow,
+      logicalColumn,
+      sequenceIndex,
+      generatedName,
+      newName,
+      previousNewName,
+      manualOverride: manualName != null && manualName !== '',
+      changed: previousNewName !== newName,
+    });
+  };
+
+  if (namingMode === 'sequence' || namingMode === 'number') {
+    const cells = orderedGridCells(grid, { order, reverseRows, reverseColumns });
+    cells.forEach((cell, index) => {
+      const value = paddedNumber(start + index * step, padding);
+      const generatedName = `${namingMode === 'number' ? '' : prefix}${value}${suffix}`;
+      pushItem({
+        land: cell.land,
+        physicalRow: cell.row,
+        physicalColumn: cell.column,
+        logicalRow: reverseRows ? grid.rowCount - 1 - cell.row : cell.row,
+        logicalColumn: reverseColumns ? grid.columnCount - 1 - cell.column : cell.column,
+        generatedName,
+        sequenceIndex: index + 1,
+      });
+    });
+  } else if (gapMode === 'compact') {
+    const rowIndexes = Array.from({ length: grid.rowCount }, (_, index) => reverseRows ? grid.rowCount - 1 - index : index);
+    const columnIndexes = Array.from({ length: grid.columnCount }, (_, index) => reverseColumns ? grid.columnCount - 1 - index : index);
+    const rows = rowIndexes.map((physicalRow, logicalRow) => ({
+      physicalRow,
+      logicalRow,
+      items: columnIndexes
+        .filter((physicalColumn) => grid.matrix[physicalRow][physicalColumn])
+        .map((physicalColumn, logicalColumn) => ({ physicalColumn, logicalColumn, land: grid.matrix[physicalRow][physicalColumn] })),
+    }));
+    const emit = (row, cell) => {
+      const rowLabel = gridRowLabel(rowStart, row.logicalRow);
+      const columnLabel = paddedNumber(columnStart + cell.logicalColumn * columnStep, padding);
+      pushItem({
+        land: cell.land,
+        physicalRow: row.physicalRow,
+        physicalColumn: cell.physicalColumn,
+        logicalRow: row.logicalRow,
+        logicalColumn: cell.logicalColumn,
+        generatedName: `${prefix}${rowLabel}${separator}${columnLabel}${suffix}`,
+        sequenceIndex: plan.length + 1,
+      });
+    };
+    if (order === 'column-major') {
+      const maxColumns = Math.max(0, ...rows.map((row) => row.items.length));
+      for (let logicalColumn = 0; logicalColumn < maxColumns; logicalColumn += 1) {
+        for (const row of rows) {
+          const cell = row.items[logicalColumn];
+          if (cell) emit(row, cell);
+        }
+      }
+    } else {
+      for (const row of rows) for (const cell of row.items) emit(row, cell);
+    }
+  } else {
+    const rowIndexes = Array.from({ length: grid.rowCount }, (_, index) => reverseRows ? grid.rowCount - 1 - index : index);
+    const columnIndexes = Array.from({ length: grid.columnCount }, (_, index) => reverseColumns ? grid.columnCount - 1 - index : index);
+    const rowPosition = new Map(rowIndexes.map((physicalRow, logicalRow) => [physicalRow, logicalRow]));
+    const columnPosition = new Map(columnIndexes.map((physicalColumn, logicalColumn) => [physicalColumn, logicalColumn]));
+    const emit = (physicalRow, physicalColumn) => {
+      const land = grid.matrix[physicalRow][physicalColumn];
+      if (!land) return;
+      const logicalRow = rowPosition.get(physicalRow);
+      const logicalColumn = columnPosition.get(physicalColumn);
+      const rowLabel = gridRowLabel(rowStart, logicalRow);
+      const columnLabel = paddedNumber(columnStart + logicalColumn * columnStep, padding);
+      pushItem({
+        land,
+        physicalRow,
+        physicalColumn,
+        logicalRow,
+        logicalColumn,
+        generatedName: `${prefix}${rowLabel}${separator}${columnLabel}${suffix}`,
+        sequenceIndex: plan.length + 1,
+      });
+    };
+    if (order === 'column-major') {
+      for (const physicalColumn of columnIndexes) for (const physicalRow of rowIndexes) emit(physicalRow, physicalColumn);
+    } else {
+      for (const physicalRow of rowIndexes) for (const physicalColumn of columnIndexes) emit(physicalRow, physicalColumn);
+    }
+  }
+
+  const names = new Map();
+  for (const item of plan) {
+    const name = String(item.newName || '').trim();
+    if (!names.has(name)) names.set(name, []);
+    names.get(name).push(item);
+  }
+  const duplicates = [...names.entries()]
+    .filter(([name, items]) => !name || items.length > 1)
+    .map(([name, items]) => ({ name, items, lands: items.map((item) => item.land) }));
+  const byLandKey = new Map(plan.map((item) => [item.landKey, item]));
+  return {
+    grid,
+    namingMode,
+    gapMode,
+    plan,
+    byLandKey,
+    duplicates,
+    changedCount: plan.filter((item) => item.changed).length,
+    manualCount: plan.filter((item) => item.manualOverride).length,
+    settings: {
+      namingMode, gapMode, order, reverseRows, reverseColumns, prefix, suffix, separator,
+      rowStart, columnStart, columnStep, start, step, padding,
+    },
+  };
+}
+
 export function buildGridRenamePlan(grid, options = {}) {
   const defaults = defaultGridLabels(grid, options);
   const rowLabels = options.rowLabels || defaults.rows;

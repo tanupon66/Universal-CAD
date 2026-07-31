@@ -797,7 +797,7 @@ body.cad-editor-open .detail-panel-backdrop { display: none !important; }
 }
 
 /* --------------------------------------------------------------------------
-   Universal CAD Studio v0.22.0 — direct-manipulation CAD/EDA workspace
+   Universal CAD Studio v0.23.0 — direct-manipulation CAD/EDA workspace
    -------------------------------------------------------------------------- */
 body.cad-editor-open { overflow: hidden; }
 body.cad-editor-open .topbar,
@@ -1106,9 +1106,9 @@ body.cad-editor-open #cadEditorOverlay { visibility: visible; }
   .cad-status-left span:not(:first-child) { display: none; }
 }
 
-/* Universal CAD Studio v0.22.0 — CAD-name trimming and collision rules */
+/* Universal CAD Studio v0.23.0 — CAD-name trimming and collision rules */
 
-/* Universal CAD Studio v0.22.0 — functional menus and CAD edit history */
+/* Universal CAD Studio v0.23.0 — functional menus and CAD edit history */
 .cad-menu-root { position: relative; height: 100%; }
 .cad-studio-menu-group > .cad-menu-root > button[aria-expanded="true"] { background: #303944; color: #fff; }
 .cad-menu-dropdown {
@@ -1173,7 +1173,7 @@ body.cad-editor-open #cadEditorOverlay { visibility: visible; }
   .cad-command-primary #cadEditorRedoButton::first-letter { font-size: 14px; }
 }
 
-/* Universal CAD Studio v0.22.0 — keep desktop menus inside the viewport */
+/* Universal CAD Studio v0.23.0 — keep desktop menus inside the viewport */
 .cad-menu-dropdown {
   max-width: calc(100vw - 16px);
   overscroll-behavior: contain;
@@ -1183,7 +1183,7 @@ body.cad-editor-open #cadEditorOverlay { visibility: visible; }
   right: auto;
 }
 
-/* Universal CAD Studio v0.22.0 — fill the whole CAD editing workspace */
+/* Universal CAD Studio v0.23.0 — fill the whole CAD editing workspace */
 .cad-studio-main {
   height: 100%;
   min-height: 0;
@@ -1218,7 +1218,7 @@ body.cad-editor-open #cadEditorOverlay { visibility: visible; }
   min-height: 0;
 }
 
-/* Universal CAD Studio v0.22.0 — single Apply flow, animated confirmation and resilient busy state */
+/* Universal CAD Studio v0.23.0 — single Apply flow, animated confirmation and resilient busy state */
 .cad-confirm-overlay,
 .cad-editor-busy-overlay {
   position: absolute;
@@ -1334,7 +1334,7 @@ body.cad-editor-open #cadEditorOverlay { visibility: visible; }
 }
 .cad-confirm-overlay.is-closing { pointer-events: none; }
 
-/* Universal CAD Studio v0.22.0 — responsive Apply/Export tasks and cancellable busy state */
+/* Universal CAD Studio v0.23.0 — responsive Apply/Export tasks and cancellable busy state */
 .cad-confirm-overlay.is-rejected .cad-confirm-dialog { animation: cadConfirmReject .18s ease both; }
 @keyframes cadConfirmReject {
   0% { transform: translateX(0) scale(1); opacity: 1; }
@@ -1404,7 +1404,7 @@ body.global-error-open { overflow: hidden; }
 /* Stage 7: local project recovery */
 .storage-overlay{z-index:2300}.storage-overlay.hidden{display:none}.storage-dialog{width:min(920px,96vw);max-height:90vh;display:flex;flex-direction:column;gap:14px;overflow:hidden;border-radius:18px;padding:18px}.storage-dialog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.storage-dialog-header h2{margin:4px 0}.storage-summary{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}.storage-project-list{display:grid;gap:9px;min-height:100px;max-height:55vh;overflow:auto;padding-right:4px}.storage-project-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}.storage-project-meta{display:grid;gap:4px;min-width:0}.storage-project-meta strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.storage-project-meta small{color:var(--muted)}.storage-project-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.storage-project-actions button{font-size:11px}.storage-empty{padding:26px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}.storage-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.recovery-ready{box-shadow:0 0 0 1px rgba(83,211,152,.35) inset}@media(max-width:640px){.storage-dialog{width:100vw;max-height:100vh;height:100vh;border-radius:0}.storage-project-row{grid-template-columns:1fr}.storage-project-actions{justify-content:flex-start}.storage-summary{flex-direction:column}}
 
-/* v0.22.0 Board orientation, grid naming and Land Map export */
+/* v0.23.0 Board orientation, unified Grid/Land Map and Excel export */
 .cad-submodal-overlay {
   position: fixed;
   inset: 0;
@@ -1451,12 +1451,9 @@ body.global-error-open { overflow: hidden; }
   gap: 10px;
   padding: 14px 18px 6px;
 }
-.land-grid-controls label,
-.land-map-controls label { display: grid; gap: 5px; color: #b8cedd; font-size: 12px; }
+.land-grid-controls label { display: grid; gap: 5px; color: #b8cedd; font-size: 12px; }
 .land-grid-controls input,
-.land-grid-controls select,
-.land-map-controls input,
-.land-map-controls select { min-height: 38px; }
+.land-grid-controls select { min-height: 38px; }
 .land-grid-dialog > .helper-text { padding: 0 18px 8px; margin: 0; }
 .land-grid-table-wrap {
   min-height: 260px;
@@ -1481,25 +1478,15 @@ body.global-error-open { overflow: hidden; }
 .land-grid-summary { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 18px 14px; color: #a8bfd0; font-size: 12px; }
 .land-grid-summary span { padding: 6px 10px; border-radius: 999px; background: rgba(53, 105, 142, .18); }
 .land-grid-summary .is-error { color: #ffb2ae; background: rgba(177, 53, 53, .18); }
-.land-map-dialog { width: min(1320px, calc(100vw - 28px)); }
-.land-map-content { display: grid; grid-template-columns: 310px minmax(0, 1fr); min-height: 0; overflow: hidden; }
-.land-map-controls { display: grid; align-content: start; gap: 10px; padding: 16px; overflow: auto; border-right: 1px solid rgba(132, 185, 221, .18); }
-.land-map-export-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
-.land-map-preview { min-width: 0; min-height: 430px; display: grid; place-items: center; overflow: auto; padding: 18px; background: #cfd4d9; }
-.land-map-preview img { display: block; width: min(100%, 1000px); height: auto; background: #fff; box-shadow: 0 12px 34px rgba(0,0,0,.28); }
 .cad-command-view #cadEditorBoardReverseButton,
-.cad-command-view #cadEditorGridMapButton,
-.cad-command-view #cadEditorLandMapButton { white-space: nowrap; }
+.cad-command-view #cadEditorGridMapButton { white-space: nowrap; }
 @media (max-width: 900px) {
   .cad-submodal-overlay { padding: 8px; }
   .cad-submodal-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); border-radius: 12px; }
   .land-grid-controls { grid-template-columns: 1fr 1fr; }
-  .land-map-content { grid-template-columns: 1fr; overflow: auto; }
-  .land-map-controls { border-right: 0; border-bottom: 1px solid rgba(132, 185, 221, .18); }
-  .land-map-preview { min-height: 300px; }
 }
 
-/* v0.22.0 Grid Mapping / CAD Name Grid separation */
+/* v0.23.0 Unified Grid/Land Map and CAD Name Grid separation */
 .mapping-grid-controls { grid-template-columns: repeat(4, minmax(150px, 1fr)) minmax(210px, auto); }
 .land-grid-controls .grid-checkbox { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 8px 10px; border: 1px solid rgba(132,185,221,.18); border-radius: 9px; background: rgba(255,255,255,.025); }
 .land-grid-controls .grid-checkbox input { width: 18px; min-height: 18px; margin: 0; }
@@ -1522,7 +1509,7 @@ body.global-error-open { overflow: hidden; }
   .mapping-grid-controls, .name-grid-controls { grid-template-columns: 1fr 1fr; }
 }
 
-/* v0.22.0 — remove duplicate naming actions from the CAD dock */
+/* v0.23.0 — remove duplicate naming/export actions from the CAD dock */
 .cad-dock-helper {
   margin: 0;
   padding: 10px 12px;
@@ -1534,3 +1521,33 @@ body.global-error-open { overflow: hidden; }
   line-height: 1.45;
 }
 .cad-dock-helper strong { color: var(--text, #eaf4ff); }
+
+/* v0.24.0 — configurable generated-name ↔ CAD Land mapping */
+.mapping-grid-controls { grid-template-columns: repeat(5, minmax(135px, 1fr)); }
+.mapping-grid-controls > button { align-self: end; min-height: 38px; }
+.land-grid-manual-editor {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin: 6px 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(132, 185, 221, .18);
+  border-radius: 10px;
+  background: rgba(24, 55, 77, .18);
+}
+.land-grid-manual-editor > div { display: grid; gap: 2px; }
+.land-grid-manual-editor small { color: #7894a8; }
+.land-grid-manual-editor input { min-height: 38px; }
+.mapping-preview-table .land-grid-cell { cursor: pointer; border-radius: 7px; padding: 4px; }
+.mapping-preview-table .land-grid-cell:hover,
+.mapping-preview-table .land-grid-cell.selected { background: rgba(53, 158, 211, .14); outline: 1px solid rgba(80, 191, 236, .36); }
+.mapping-preview-table .land-grid-cell.manual strong { color: #ffd37a; }
+@media (max-width: 1100px) {
+  .mapping-grid-controls { grid-template-columns: repeat(3, minmax(145px, 1fr)); }
+  .land-grid-manual-editor { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .mapping-grid-controls,
+  .land-grid-manual-editor { grid-template-columns: 1fr; }
+}
