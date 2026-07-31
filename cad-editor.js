@@ -566,6 +566,16 @@ function setNumberAttribute(node, name, value) {
   else node.setAttribute(name, String(Number(value)));
 }
 
+function updateBoardNode(node, board = {}) {
+  if (!node) return;
+  if (board.Name != null || board.name != null) node.setAttribute('Name', String(board.Name ?? board.name ?? ''));
+  setNumberAttribute(node, 'Width', board.Width ?? board.width);
+  setNumberAttribute(node, 'Height', board.Height ?? board.height);
+  if (board.Thickness != null || board.thickness != null) setNumberAttribute(node, 'Thickness', board.Thickness ?? board.thickness);
+  if (board.MinX != null || board.minX != null) setNumberAttribute(node, 'MinX', board.MinX ?? board.minX);
+  if (board.MinY != null || board.minY != null) setNumberAttribute(node, 'MinY', board.MinY ?? board.minY);
+}
+
 function updateComponentNode(node, component) {
   node.setAttribute('Id', String(component.id));
   node.setAttribute('Name', String(component.name || ''));
@@ -680,6 +690,8 @@ export function serializeCadEditorModel(xmlText, model, options = {}) {
   const error = parserError(doc);
   if (error) throw new Error(`XML ต้นฉบับไม่สมบูรณ์: ${error.slice(0, 180)}`);
 
+  const boardNode = findByTag(doc, 'BoardInformation')[0] || null;
+  updateBoardNode(boardNode, model.board || {});
   const componentNodes = findByTag(doc, 'ComponentInformation');
   const landNodes = findByTag(doc, 'LandNumber');
   const componentParent = componentNodes[0]?.parentNode || doc.documentElement;
