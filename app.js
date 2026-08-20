@@ -73,6 +73,7 @@ import { decodeTextBytes, parseDelimitedText } from './delimited-import.js';
 import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
 import { buildGeneratedLandMapPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
+import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -145,7 +146,7 @@ const els = {
   cadEditorComponentId: $('cadEditorComponentId'), cadEditorComponentName: $('cadEditorComponentName'), cadEditorPackageName: $('cadEditorPackageName'), cadEditorRevision: $('cadEditorRevision'), cadEditorCenterX: $('cadEditorCenterX'), cadEditorCenterY: $('cadEditorCenterY'), cadEditorAngle: $('cadEditorAngle'), cadEditorSaveComponentButton: $('cadEditorSaveComponentButton'),
   cadEditorLandLabel: $('cadEditorLandLabel'), cadEditorSideFilter: $('cadEditorSideFilter'), cadEditorLandSearch: $('cadEditorLandSearch'), cadEditorRenumberComponentButton: $('cadEditorRenumberComponentButton'), cadEditorAddLandButton: $('cadEditorAddLandButton'), cadEditorDuplicateLandButton: $('cadEditorDuplicateLandButton'), cadEditorCutLandButton: $('cadEditorCutLandButton'), cadEditorMergeLandButton: $('cadEditorMergeLandButton'), cadEditorSplitLandButton: $('cadEditorSplitLandButton'), cadEditorDeleteLandButton: $('cadEditorDeleteLandButton'), cadEditorLandTableBody: $('cadEditorLandTableBody'),
   cadEditorLandId: $('cadEditorLandId'), cadEditorLandName: $('cadEditorLandName'), cadEditorLandSide: $('cadEditorLandSide'), cadEditorLandLeft: $('cadEditorLandLeft'), cadEditorLandTop: $('cadEditorLandTop'), cadEditorLandWidth: $('cadEditorLandWidth'), cadEditorLandLength: $('cadEditorLandLength'), cadEditorSaveLandButton: $('cadEditorSaveLandButton'),
-  cadEditorMessage: $('cadEditorMessage'), cadEditorExportSide: $('cadEditorExportSide'), cadEditorApplyButton: $('cadEditorApplyButton'), cadEditorExportXmlButton: $('cadEditorExportXmlButton'), cadEditorExportTgzButton: $('cadEditorExportTgzButton'), cadEditorBoardReverseButton: $('cadEditorBoardReverseButton'), cadEditorGridMapButton: $('cadEditorGridMapButton'), cadEditorGridMapFooterButton: $('cadEditorGridMapFooterButton'),
+  cadEditorMessage: $('cadEditorMessage'), cadEditorExportFormat: $('cadEditorExportFormat'), cadEditorExportSide: $('cadEditorExportSide'), cadEditorApplyButton: $('cadEditorApplyButton'), cadEditorExportXmlButton: $('cadEditorExportXmlButton'), cadEditorExportTgzButton: $('cadEditorExportTgzButton'), cadEditorBoardReverseButton: $('cadEditorBoardReverseButton'), cadEditorGridMapButton: $('cadEditorGridMapButton'), cadEditorGridMapFooterButton: $('cadEditorGridMapFooterButton'),
   landGridOverlay: $('landGridOverlay'), landGridSubtitle: $('landGridSubtitle'), landGridCloseButton: $('landGridCloseButton'), landGridCancelButton: $('landGridCancelButton'), landGridApplyButton: $('landGridApplyButton'), landGridExportExcelButton: $('landGridExportExcelButton'), landGridResetButton: $('landGridResetButton'), landGridNamingMode: $('landGridNamingMode'), landGridGapMode: $('landGridGapMode'), landGridOrder: $('landGridOrder'), landGridRowDirection: $('landGridRowDirection'), landGridColumnDirection: $('landGridColumnDirection'), landGridPrefix: $('landGridPrefix'), landGridSeparator: $('landGridSeparator'), landGridSuffix: $('landGridSuffix'), landGridRowStart: $('landGridRowStart'), landGridColumnStart: $('landGridColumnStart'), landGridColumnStep: $('landGridColumnStep'), landGridStart: $('landGridStart'), landGridStep: $('landGridStep'), landGridPadding: $('landGridPadding'), landGridSelectedInfo: $('landGridSelectedInfo'), landGridManualName: $('landGridManualName'), landGridApplyManualButton: $('landGridApplyManualButton'), landGridClearManualButton: $('landGridClearManualButton'), landGridTableHead: $('landGridTableHead'), landGridTableBody: $('landGridTableBody'), landGridDimensions: $('landGridDimensions'), landGridChanged: $('landGridChanged'), landGridIssues: $('landGridIssues'),
   nameGridOverlay: $('nameGridOverlay'), nameGridSubtitle: $('nameGridSubtitle'), nameGridCloseButton: $('nameGridCloseButton'), nameGridCancelButton: $('nameGridCancelButton'), nameGridApplyButton: $('nameGridApplyButton'), nameGridResetButton: $('nameGridResetButton'), nameGridComponentSelect: $('nameGridComponentSelect'), nameGridMode: $('nameGridMode'), nameGridOrder: $('nameGridOrder'), nameGridRowDirection: $('nameGridRowDirection'), nameGridColumnDirection: $('nameGridColumnDirection'), nameGridPrefix: $('nameGridPrefix'), nameGridSeparator: $('nameGridSeparator'), nameGridStart: $('nameGridStart'), nameGridStep: $('nameGridStep'), nameGridPadding: $('nameGridPadding'), nameGridMaxLength: $('nameGridMaxLength'), nameGridTableHead: $('nameGridTableHead'), nameGridTableBody: $('nameGridTableBody'), nameGridDimensions: $('nameGridDimensions'), nameGridChanged: $('nameGridChanged'), nameGridIssues: $('nameGridIssues'),
   cadEditorConfirmOverlay: $('cadEditorConfirmOverlay'), cadEditorConfirmDialog: $('cadEditorConfirmDialog'), cadEditorConfirmIcon: $('cadEditorConfirmIcon'), cadEditorConfirmEyebrow: $('cadEditorConfirmEyebrow'), cadEditorConfirmTitle: $('cadEditorConfirmTitle'), cadEditorConfirmMessage: $('cadEditorConfirmMessage'), cadEditorConfirmSummary: $('cadEditorConfirmSummary'), cadEditorConfirmNo: $('cadEditorConfirmNo'), cadEditorConfirmYes: $('cadEditorConfirmYes'), cadEditorBusyOverlay: $('cadEditorBusyOverlay'), cadEditorBusyTitle: $('cadEditorBusyTitle'), cadEditorBusyDetail: $('cadEditorBusyDetail'), cadEditorBusyProgress: $('cadEditorBusyProgress'), cadEditorBusyCancelButton: $('cadEditorBusyCancelButton'), cadEditorBusyCloseButton: $('cadEditorBusyCloseButton'),
@@ -179,11 +180,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.24.0'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.25.0'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.24.0 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.25.0 · Development · Schema 2';
   }
 }
 
@@ -624,7 +625,7 @@ function closeGlobalError() {
 function showGlobalError(error, context = {}) {
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.24.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.25.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -782,10 +783,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('ยังไม่มี Project สำหรับ Backup');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.24.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.25.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.24.0.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.25.0.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} สำเร็จ`);
   } catch (error) { showGlobalError(error, { title: 'Export Project Backup ไม่สำเร็จ', operation: 'project-backup-export' }); }
 }
@@ -1556,7 +1557,7 @@ async function processFile(file, cadRole = 'auto') {
         project.names.xml = selected.format === 'odb++' ? `${file.name.replace(/\.(?:zip|tgz|tar\.gz|tar|gz)$/i, '') || 'odb'}_converted.xml` : (selected.node?.name || selected.displayPath || file.name);
         const rootLabel = packageInfo.root.kind.toUpperCase();
         const nested = packageInfo.candidates.length > 1 ? ` · พบตัวเลือก ${packageInfo.candidates.length} รายการ` : '';
-        const formatLabel = selected.format === 'odb++' ? `ODB++ → XML · ${selected.odbInfo.components} Components / ${selected.odbInfo.lands} Lands` : `CAD XML ${selected.displayPath}`;
+        const formatLabel = selected.format === 'odb++' ? `ODB++ → Working Model · ${selected.odbInfo.components} Components / ${selected.odbInfo.lands} Lands` : `${selected.format || 'CAD'} → Working Model · ${selected.displayPath}`;
         els.importMessage.textContent = `${rootLabel} → ${formatLabel}${nested}`;
       }
       }
@@ -2634,7 +2635,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.24.0.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.25.0.xlsx`));
     els.componentReportMessage.textContent = `สร้าง Excel สำเร็จ · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('สร้าง Component Report Excel สำเร็จ', 4200);
   } catch (error) {
@@ -2694,7 +2695,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.24.0.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.25.0.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
@@ -2720,7 +2721,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.24.0', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.25.0', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2729,7 +2730,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.24.0.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.25.0.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
   } catch (error) {
@@ -4013,7 +4014,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.24.0.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.25.0.xlsx`);
     toast(`Export Grid / Land Map Excel สำเร็จ · ${formatInt.format(model.cells.length)} ชื่อใหม่ ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -4622,13 +4623,16 @@ function renderCadEditorSummary() {
   const file = cadEditorFile();
   const rootKind = file?.archive?.packageInfo?.root?.kind || 'file';
   const packageInfo = file?.archive ? packageOutputInfo(file.archive.packageInfo, els.cadEditorExportSide.value || 'all') : null;
-  const convertedOdb = file?.archive?.candidate?.format === 'odb++';
-  const canExportPackage = Boolean(file?.archive && rootKind !== 'file' && file.archive.candidate?.node && !convertedOdb);
-  const canExplainOdbExport = Boolean(file?.archive && rootKind !== 'file' && file.archive.candidate?.node && convertedOdb);
-  els.cadEditorExportTgzButton.disabled = state.cadEditor.busy || (!canExportPackage && !canExplainOdbExport);
-  els.cadEditorExportTgzButton.textContent = canExportPackage ? `Export ${packageInfo.label}` : (convertedOdb ? 'Export Archive · ODB++ ยังไม่รองรับ' : 'Export Archive');
-  els.cadEditorExportTgzButton.title = convertedOdb ? 'กดเพื่อดูคำอธิบาย: ส่งออก XML ได้ แต่ยังเขียนกลับ components.Z / data.Z เป็น TGZ ไม่ได้' : (canExportPackage ? `ส่งออก ${packageInfo.label} พร้อมเก็บไฟล์ประกอบเดิม` : 'ไฟล์นี้ไม่ได้เปิดจาก Archive');
-  const archiveText = file?.archive ? ` · ${rootKind.toUpperCase()} ${file.archive.name} · ${convertedOdb ? 'ODB++ → XML' : `CAD ${file.archive.candidate?.displayPath || file.name}`}` : '';
+  const archiveFormat = file?.archive?.candidate?.format || '';
+  const writableArchiveFormat = ['inspection-xml', 'gencad-1.4', 'fabmaster-ascii'].includes(archiveFormat);
+  const unsupportedArchiveWriter = Boolean(file?.archive && rootKind !== 'file' && file.archive.candidate?.node && !writableArchiveFormat);
+  const canExportPackage = Boolean(file?.archive && rootKind !== 'file' && file.archive.candidate?.node && writableArchiveFormat);
+  const canExplainArchiveExport = unsupportedArchiveWriter;
+  els.cadEditorExportTgzButton.disabled = state.cadEditor.busy || (!canExportPackage && !canExplainArchiveExport);
+  const unsupportedLabel = archiveFormat === 'odb++' ? 'ODB++' : archiveFormat === 'ipc-2581' ? 'IPC-2581' : (archiveFormat || 'Source');
+  els.cadEditorExportTgzButton.textContent = canExportPackage ? `Export ${packageInfo.label}` : (unsupportedArchiveWriter ? `Export Archive · ${unsupportedLabel} Writer ยังไม่รองรับ` : 'Export Archive');
+  els.cadEditorExportTgzButton.title = unsupportedArchiveWriter ? `กดเพื่อดูคำอธิบาย: ยังไม่มี Writer ที่เขียน ${unsupportedLabel} กลับเข้า Archive โดยไม่เปลี่ยนชนิดข้อมูล` : (canExportPackage ? `ส่งออก ${packageInfo.label} พร้อมเขียนกลับเป็น ${archiveFormat} และเก็บไฟล์ประกอบเดิม` : 'ไฟล์นี้ไม่ได้เปิดจาก Archive');
+  const archiveText = file?.archive ? ` · ${rootKind.toUpperCase()} ${file.archive.name} · ${archiveFormat || 'CAD'} ${file.archive.candidate?.displayPath || file.name}` : '';
   els.cadEditorSource.textContent = file ? `${cadRoleLabel(state.activeCadRole)} · ${file.name}${archiveText}` : 'เปิด XML, ZIP หรือ TGZ เพื่อเริ่มแก้ไข';
   const hasModel = Boolean(state.cadEditor.model?.components?.length);
   const hasSingleComponent = Boolean(cadEditorSingleComponentForTool());
@@ -5348,7 +5352,7 @@ function handleCadEditorKeyboard(event) {
     if (key === 'y') { event.preventDefault(); runCadEditorOperation('Redo', redoCadEditor); return true; }
     if (key === 'o') { event.preventDefault(); closeCadEditorMenus(); closeCadEditor({ pendingAction: () => els.projectFile.click() }); return true; }
     if (key === 's') { event.preventDefault(); applyCadEditorToViewer(); return true; }
-    if (key === 'e') { event.preventDefault(); requestCadEditorXmlExport(); return true; }
+    if (key === 'e') { event.preventDefault(); requestCadEditorSelectedExport(); return true; }
     if (key === 'a') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land' && cadEditorComponent()) setCadEditorLandSelection(filteredCadEditorLands(cadEditorComponent()), { primary: filteredCadEditorLands(cadEditorComponent())[0] || null }); else runCadEditorOperation('เลือกทั้งหมด', () => { selectAllVisibleCadEditorComponents(); return true; }, { alwaysBusy: true }); return true; }
     if (key === 'd') { event.preventDefault(); runCadEditorAction('duplicate'); return true; }
     if (key === 'x') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') runCadEditorOperation('แยก Land เป็น Component ใหม่', splitSelectedCadEditorLands); else runCadEditorOperation('Cut', () => { if (!copyCadEditorSelection()) return false; return removeCadEditorComponent(); }); return true; }
@@ -5623,7 +5627,7 @@ function addXmlExportMetadata(xmlText, metadata) {
 }
 
 function cadExportStem(file, side) {
-  const base = String(file?.name || 'cad.xml').split('/').pop().replace(/\.(?:xml|cpo|cad|dat|txt)$/i, '');
+  const base = String(file?.name || 'cad.xml').split('/').pop().replace(/\.(?:xml|cpo|cad|fab|gcd|dat|txt)$/i, '');
   return `${base}_${side === 'all' ? 'top_bottom' : side}`;
 }
 async function exportCadEditorXml(taskContext = null) {
@@ -5652,11 +5656,57 @@ async function exportCadEditorXml(taskContext = null) {
 function requestCadEditorXmlExport() {
   return runCadEditorTask('กำลัง Export XML…', 'ตรวจสอบข้อมูลก่อนสร้างไฟล์', (taskContext) => exportCadEditorXml(taskContext));
 }
+async function exportCadEditorAsciiFormat(format, taskContext = null) {
+  const file = cadEditorFile(); const model = state.cadEditor.model;
+  if (!file || !model) return false;
+  const side = els.cadEditorExportSide?.value || 'all';
+  const preflight = assertAppliedRevisionExportable(file, model);
+  await assertCadEditorValidAsync(model, taskContext, 0, 30);
+  taskContext?.throwIfCancelled?.();
+  taskContext?.progress?.(40, format === 'gencad-1.4' ? 'กำลังสร้าง GenCAD 1.4' : 'กำลังสร้าง FABmaster ASCII');
+  await taskContext?.yield?.();
+  const validationStatus = preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed');
+  const metadata = projectExportMetadata(file, format, validationStatus);
+  const writerOptions = { side, metadata, fileName: cadExportStem(file, side) };
+  const result = format === 'gencad-1.4' ? exportGenCad14(model, writerOptions) : exportFabmasterAscii(model, writerOptions);
+  taskContext?.throwIfCancelled?.();
+  downloadBlob(new Blob([result.text], { type: result.mime }), `${cadExportStem(file, side)}${result.extension}`);
+  taskContext?.progress?.(100, `Export ${format === 'gencad-1.4' ? 'GenCAD' : 'FABmaster'} สำเร็จ`);
+  const warningText = result.warnings?.length ? ` · Partial writer · คำเตือน ${result.warnings.length} รายการ` : '';
+  els.cadEditorMessage.textContent = `Export ${format === 'gencad-1.4' ? 'GenCAD 1.4 (.cad)' : 'FABmaster ASCII (.fab)'} สำเร็จ${warningText}`;
+  if (result.warnings?.length) toast(`${result.warnings[0]}${result.warnings.length > 1 ? ` · และอีก ${result.warnings.length - 1} รายการ` : ''}`, 9000);
+  return true;
+}
+function requestCadEditorGenCadExport() {
+  return runCadEditorTask('กำลัง Export GenCAD 1.4…', 'ตรวจสอบ Applied Revision และสร้าง .cad', (taskContext) => exportCadEditorAsciiFormat('gencad-1.4', taskContext));
+}
+function requestCadEditorFabmasterExport() {
+  return runCadEditorTask('กำลัง Export FABmaster ASCII…', 'ตรวจสอบ Applied Revision และสร้าง .fab', (taskContext) => exportCadEditorAsciiFormat('fabmaster-ascii', taskContext));
+}
+function selectedCadEditorExportFormat() {
+  return els.cadEditorExportFormat?.value || 'inspection-xml';
+}
+function updateCadEditorExportButtonLabel() {
+  if (!els.cadEditorExportXmlButton) return;
+  const format = selectedCadEditorExportFormat();
+  els.cadEditorExportXmlButton.textContent = format === 'gencad-1.4' ? 'Export .CAD' : format === 'fabmaster-ascii' ? 'Export .FAB' : 'Export XML';
+}
+function requestCadEditorSelectedExport() {
+  const format = selectedCadEditorExportFormat();
+  if (format === 'gencad-1.4') return requestCadEditorGenCadExport();
+  if (format === 'fabmaster-ascii') return requestCadEditorFabmasterExport();
+  return requestCadEditorXmlExport();
+}
 async function exportCadEditorTgz(taskContext = null) {
   const file = cadEditorFile(); const model = state.cadEditor.model;
   const archive = file?.archive;
   if (!archive?.packageInfo || archive.packageInfo.root.kind === 'file' || !model) { toast('ไฟล์นี้ไม่ได้เปิดมาจาก ZIP / TGZ / TAR'); return false; }
-  if (!archive.candidate?.node || archive.candidate?.format === 'odb++') { toast('ODB++ ถูกแปลงเป็น XML แล้ว จึงส่งออกเป็น XML ได้ แต่ยังไม่รองรับการเขียนย้อนกลับเป็น ODB++ TGZ', 7000); return false; }
+  const sourceFormat = archive.candidate?.format || '';
+  if (!archive.candidate?.node || !['inspection-xml', 'gencad-1.4', 'fabmaster-ascii'].includes(sourceFormat)) {
+    const label = sourceFormat === 'odb++' ? 'ODB++' : sourceFormat === 'ipc-2581' ? 'IPC-2581' : (sourceFormat || 'Source format นี้');
+    toast(`${label} ถูก Normalize เข้า Working Model แล้ว แต่ยังไม่มี Writer ที่เขียน format เดิมกลับเข้า Archive อย่างปลอดภัย กรุณา Export เป็น XML/.cad/.fab แยกแทน`, 9000);
+    return false;
+  }
   const side = els.cadEditorExportSide.value;
   const outputInfo = packageOutputInfo(archive.packageInfo, side);
   const originalText = els.cadEditorExportTgzButton.textContent;
@@ -5667,16 +5717,28 @@ async function exportCadEditorTgz(taskContext = null) {
     await assertCadEditorValidAsync(model, taskContext, 0, 25);
     taskContext?.progress?.(35, `กำลังสร้าง ${outputInfo.label}`);
     await taskContext?.yield?.();
-    const rawOutput = serializeCadEditorModel(file.text, model, { side });
-    const metadata = projectExportMetadata(file, `archive-${outputInfo.label.toLowerCase()}`, preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
-    const output = addXmlExportMetadata(rawOutput, metadata);
+    const validationStatus = preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed');
+    const metadata = projectExportMetadata(file, `archive-${sourceFormat}`, validationStatus);
+    let output = '';
+    let writerWarnings = [];
+    if (sourceFormat === 'gencad-1.4') {
+      const result = exportGenCad14(model, { side, metadata, fileName: archive.candidate?.node?.name || file.name });
+      output = result.text; writerWarnings = result.warnings || [];
+    } else if (sourceFormat === 'fabmaster-ascii') {
+      const result = exportFabmasterAscii(model, { side, metadata, fileName: archive.candidate?.node?.name || file.name });
+      output = result.text; writerWarnings = result.warnings || [];
+    } else {
+      const rawOutput = serializeCadEditorModel(file.text, model, { side });
+      output = addXmlExportMetadata(rawOutput, metadata);
+    }
     taskContext?.throwIfCancelled?.();
     taskContext?.progress?.(65, 'กำลังประกอบ Archive กลับ');
     const bytes = await rebuildCadPackage(archive.packageInfo, archive.candidate, output);
     taskContext?.throwIfCancelled?.();
     downloadBlob(new Blob([bytes], { type: outputInfo.mime }), outputInfo.filename);
     taskContext?.progress?.(100, `Export ${outputInfo.label} สำเร็จ`);
-    els.cadEditorMessage.textContent = `Export ${outputInfo.label} สำเร็จ · แทนที่ CAD ที่ ${archive.candidate.displayPath} และเก็บไฟล์ประกอบ/Archive ซ้อนเดิมไว้`;
+    els.cadEditorMessage.textContent = `Export ${outputInfo.label} สำเร็จ · เขียน ${sourceFormat} กลับที่ ${archive.candidate.displayPath} และเก็บไฟล์ประกอบ/Archive ซ้อนเดิมไว้${writerWarnings.length ? ` · Partial writer warnings ${writerWarnings.length}` : ''}`;
+    if (writerWarnings.length) toast(writerWarnings[0], 9000);
     return true;
   } finally {
     els.cadEditorExportTgzButton.textContent = originalText || 'Export Archive';
@@ -5684,9 +5746,7 @@ async function exportCadEditorTgz(taskContext = null) {
   }
 }
 function requestCadEditorArchiveExport() {
-  const file = cadEditorFile();
-  if (file?.archive?.candidate?.format === 'odb++') return exportCadEditorTgz();
-  return runCadEditorTask('กำลัง Export Archive…', 'ตรวจสอบและประกอบไฟล์กลับ', (taskContext) => exportCadEditorTgz(taskContext));
+  return runCadEditorTask('กำลัง Export Archive…', 'ตรวจสอบ Writer ของ Source format และประกอบไฟล์กลับ', (taskContext) => exportCadEditorTgz(taskContext));
 }
 
 function closeCadEditorMenus() {
@@ -5771,7 +5831,10 @@ function updateCadEditorMenuState() {
   };
   document.querySelectorAll('[data-cad-check]').forEach((button) => button.classList.toggle('checked', Boolean(checks[button.dataset.cadCheck])));
   const setCommandDisabled = (command, disabled) => document.querySelectorAll(`[data-cad-command="${command}"]`).forEach((button) => { button.disabled = Boolean(disabled); });
+  setCommandDisabled('export-selected', !state.cadEditor.model);
   setCommandDisabled('export-xml', !state.cadEditor.model);
+  setCommandDisabled('export-gencad', !state.cadEditor.model);
+  setCommandDisabled('export-fabmaster', !state.cadEditor.model);
   setCommandDisabled('export-archive', !state.cadEditor.model || Boolean(els.cadEditorExportTgzButton?.disabled));
   setCommandDisabled('cut', visual.mode === 'land' ? selectedLandCount === 0 || selectedLandCount >= (cadEditorComponent()?.lands?.length || 0) : selectedCount === 0);
   setCommandDisabled('copy', visual.mode === 'land' || selectedCount === 0);
@@ -5813,7 +5876,10 @@ function runCadEditorCommand(command) {
   closeCadEditorMenus();
   switch (command) {
     case 'open': closeCadEditor({ pendingAction: () => els.projectFile.click() }); return true;
+    case 'export-selected': requestCadEditorSelectedExport(); return true;
     case 'export-xml': requestCadEditorXmlExport(); return true;
+    case 'export-gencad': requestCadEditorGenCadExport(); return true;
+    case 'export-fabmaster': requestCadEditorFabmasterExport(); return true;
     case 'export-archive': requestCadEditorArchiveExport(); return true;
     case 'close': closeCadEditor(); return true;
     case 'undo': return runCadEditorOperation('Undo', undoCadEditor);
@@ -5991,6 +6057,7 @@ els.cadNavigatorClearSearchButton?.addEventListener('click', () => { els.cadEdit
 els.cadEditorComponentSearch.addEventListener('input', () => { state.cadEditor.componentSearch = els.cadEditorComponentSearch.value; renderCadEditorComponents(); });
 els.cadEditorLandSearch.addEventListener('input', () => { state.cadEditor.landSearch = els.cadEditorLandSearch.value; renderCadEditorLands(); });
 els.cadEditorSideFilter.addEventListener('change', () => { state.cadEditor.sideFilter = els.cadEditorSideFilter.value; renderCadEditorLands(); });
+els.cadEditorExportFormat?.addEventListener('change', () => { updateCadEditorExportButtonLabel(); renderCadEditorSummary(); });
 els.cadEditorExportSide.addEventListener('change', renderCadEditorSummary);
 els.cadEditorAddComponentButton.addEventListener('click', () => runCadEditorAction('duplicate'));
 els.cadEditorDeleteComponentButton.addEventListener('click', () => runCadEditorAction('delete'));
@@ -6003,8 +6070,9 @@ els.cadEditorSplitLandButton?.addEventListener('click', () => runCadEditorOperat
 els.cadEditorDeleteLandButton.addEventListener('click', removeCadEditorLand);
 els.cadEditorRenumberComponentButton.addEventListener('click', requestCadNameInspectorFromEditor);
 els.cadEditorApplyButton.addEventListener('click', applyCadEditorToViewer);
-els.cadEditorExportXmlButton.addEventListener('click', requestCadEditorXmlExport);
+els.cadEditorExportXmlButton.addEventListener('click', requestCadEditorSelectedExport);
 els.cadEditorExportTgzButton.addEventListener('click', requestCadEditorArchiveExport);
+updateCadEditorExportButtonLabel();
 els.landGridCloseButton?.addEventListener('click', closeLandGridMapper);
 els.landGridCancelButton?.addEventListener('click', closeLandGridMapper);
 els.landGridOverlay?.addEventListener('click', (event) => { if (event.target === els.landGridOverlay) closeLandGridMapper(); });

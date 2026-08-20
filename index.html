@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
-  <title>Universal CAD Studio v0.24.0</title>
+  <title>Universal CAD Studio v0.25.0</title>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="top-actions">
-      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.24.0 · Schema 2</span>
+      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.25.0 · Schema 2</span>
       <span id="projectStatus" class="status-pill muted">ยังไม่ได้เปิดโปรเจกต์</span>
       <button id="appUpdateButton" class="ghost hidden" type="button">มีเวอร์ชันใหม่ · อัปเดต</button>
       <button id="installButton" class="ghost hidden" type="button">ติดตั้งแอป</button>
@@ -38,18 +38,18 @@
           <button id="resetButton" class="icon-button" type="button" title="ล้างโปรเจกต์">↺</button>
         </div>
         <label id="dropZone" class="drop-zone">
-          <input id="projectFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.job,.dat,.txt,.csv,.xlsx" hidden />
+          <input id="projectFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.fab,.gcd,.job,.dat,.txt,.csv,.xlsx" hidden />
           <span class="drop-icon">⌁</span>
           <strong>วาง e-PM / ODB++ TGZ, ZIP, XML หรือ XLSX ที่นี่</strong>
           <small>อ่าน components.Z และ eda/data.Z อัตโนมัติ แปลงเป็น XML แล้วเปิดทั้งบอร์ด</small>
         </label>
         <div class="mini-actions cad-file-actions">
           <button id="originalCadButton" type="button">Original CAD</button>
-          <input id="originalCadFile" type="file" accept=".xml,.cpo,.cad,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
+          <input id="originalCadFile" type="file" accept=".xml,.cpo,.cad,.fab,.gcd,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
           <button id="generatedCadButton" type="button">Generated CAD</button>
-          <input id="generatedCadFile" type="file" accept=".xml,.cpo,.cad,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
+          <input id="generatedCadFile" type="file" accept=".xml,.cpo,.cad,.fab,.gcd,.job,.dat,.txt,.zip,.tgz,.tar.gz,.tar,.gz,.Z,application/xml,text/xml,application/zip,application/gzip,application/x-tar" hidden />
           <button id="archiveCadButton" type="button">เปิด ZIP / TGZ / TAR</button>
-          <input id="archiveCadFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.job,.dat,.txt,application/zip,application/gzip,application/x-tar,application/xml" hidden />
+          <input id="archiveCadFile" type="file" accept=".zip,.tgz,.tar.gz,.tar,.gz,.Z,.xml,.cpo,.cad,.fab,.gcd,.job,.dat,.txt,application/zip,application/gzip,application/x-tar,application/xml" hidden />
           <button id="restoreButton" type="button">นำเข้า Project / Mapping Backup</button>
           <input id="restoreFile" type="file" accept=".json,application/json" hidden />
           <button id="projectBackupButton" type="button" disabled>Export Project Backup</button>
@@ -640,7 +640,10 @@
             <div class="cad-menu-dropdown hidden" data-cad-menu-panel="file" role="menu">
               <button type="button" data-cad-command="open">เปิดไฟล์ CAD… <kbd>Ctrl+O</kbd></button>
               <hr />
-              <button type="button" data-cad-command="export-xml">Export XML… <kbd>Ctrl+E</kbd></button>
+              <button type="button" data-cad-command="export-selected">Export ตาม Format ที่เลือก… <kbd>Ctrl+E</kbd></button>
+              <button type="button" data-cad-command="export-xml">Export Inspection XML…</button>
+              <button type="button" data-cad-command="export-gencad">Export GenCAD 1.4 (.cad)…</button>
+              <button type="button" data-cad-command="export-fabmaster">Export FABmaster ASCII (.fab)…</button>
               <button type="button" data-cad-command="export-archive">Export Archive…</button>
               <hr />
               <button type="button" data-cad-command="close">ปิด CAD Editor <kbd>Esc</kbd></button>
@@ -893,7 +896,14 @@
           <span>History <b id="cadEditorHistoryStatus">0 / 0</b></span>
         </div>
         <div class="cad-editor-export-controls">
-          <label>Export
+          <label>Format
+            <select id="cadEditorExportFormat" aria-label="รูปแบบไฟล์ Export">
+              <option value="inspection-xml">Inspection XML (.xml)</option>
+              <option value="gencad-1.4">GenCAD 1.4 (.cad)</option>
+              <option value="fabmaster-ascii">FABmaster ASCII (.fab)</option>
+            </select>
+          </label>
+          <label>Side
             <select id="cadEditorExportSide">
               <option value="all">Top + Bottom</option>
               <option value="top">Top เท่านั้น</option>

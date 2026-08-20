@@ -1,5 +1,6 @@
 import { ParseError, ValidationError } from './cad-errors.js';
 import { detectCadFormat } from './format-detector.js';
+import { convertGenCadToInspectionXml, convertFabmasterExtractToInspectionXml } from './pcb-ascii-formats.js';
 
 function decodeXml(value = '') { return String(value).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); }
 function attrs(text = '') { const output = {}; const re = /([:\w.-]+)\s*=\s*(["'])([\s\S]*?)\2/g; let m; while ((m = re.exec(text))) output[m[1]] = decodeXml(m[3]); return output; }
@@ -96,9 +97,22 @@ export function convertIpc2581ToInspectionXml(xmlText, options = {}) {
   const inspectionXml = `<?xml version="1.0" encoding="UTF-8"?>\n<Inspection SourceFormat="IPC-2581" Adapter="UniversalCAD">\n<BoardInformation Name="${xmlEscape(boardName)}" Width="${number(pick(boardAttrs, ['width', 'Width'], 0))}" Height="${number(pick(boardAttrs, ['height', 'Height'], 0))}" Thickness="${number(pick(boardAttrs, ['thickness', 'Thickness'], 0))}"/>\n<Components>${componentXml.join('')}</Components>\n<Lands>${landXml.join('')}</Lands>\n</Inspection>`;
   return { xmlText: inspectionXml, warnings, unsupportedRecords, components: components.length, packages: packageMap.size, lands: landId - 1, sourceFormat: 'ipc-2581', partial: warnings.length > 0 || unsupportedRecords.length > 0 };
 }
-export function adaptCadText(xmlText, options = {}) {
-  const source = assertSafeXml(xmlText, options); const detection = options.detection || detectCadFormat({ name: options.fileName, mimeType: options.mimeType, text: source });
-  if (detection.format === 'inspection-xml') return { xmlText: source, warnings: [], unsupportedRecords: [], sourceFormat: 'inspection-xml', partial: false, detection };
-  if (detection.format === 'ipc-2581') return { ...convertIpc2581ToInspectionXml(source, options), detection };
-  throw new ValidationError(`XML root ${detection.rootElement || 'unknown'} ยังไม่มี Import Adapter`, { stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_XML_FORMAT' });
+export function adaptCadText(inputText, options = {}) {
+  const rawSource = String(inputText || '').replace(/^\uFEFF/, '');
+  const detection = options.detection || detectCadFormat({ name: options.fileName, mimeType: options.mimeType, text: rawSource });
+  if (detection.format === 'inspection-xml') {
+    const source = assertSafeXml(rawSource, options);
+    return { xmlText: source, warnings: [], unsupportedRecords: [], sourceFormat: 'inspection-xml', partial: false, detection };
+  }
+  if (detection.format === 'ipc-2581') return { ...convertIpc2581ToInspectionXml(rawSource, options), detection };
+  if (detection.format === 'gencad-1.4') return { ...convertGenCadToInspectionXml(rawSource, options), detection };
+  if (detection.format === 'fabmaster-ascii') return { ...convertFabmasterExtractToInspectionXml(rawSource, options), detection };
+  if (detection.format === 'fabmaster-legacy') {
+    throw new ValidationError('ตรวจพบ FABmaster legacy/FATF แต่ Adapter รุ่นนี้ยังไม่รองรับ variant นี้', {
+      stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_FABMASTER_LEGACY',
+      remediation: 'ใช้ FABmaster ASCII A!/J!/S! หรือ GenCAD 1.4; หากต้องการ variant นี้ให้แนบไฟล์ตัวอย่างที่ไม่มีข้อมูลลับเพื่อเพิ่ม Adapter ให้ตรงรูปแบบ',
+    });
+  }
+  const label = detection.rootElement ? `XML root ${detection.rootElement}` : `รูปแบบ ${detection.format || 'unknown'}`;
+  throw new ValidationError(`${label} ยังไม่มี Import Adapter`, { stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_CAD_FORMAT' });
 }

@@ -1,4 +1,5 @@
 import { textFromBytes } from './archive-reader.js';
+import { looksLikeGenCad, looksLikeFabmasterExtract, looksLikeFabmasterLegacy } from './pcb-ascii-formats.js';
 
 const XML_SAMPLE_LIMIT = 1024 * 1024;
 function asBytes(input) {
@@ -105,7 +106,10 @@ export function detectCadFormat({ name = '', mimeType = '', bytes = null, text =
     if (rootLower === 'ipc-2581' || rootLower === 'ipc2581' || ns.includes('ipc-2581') || ns.includes('ipc2581')) { format = 'ipc-2581'; confidence = 0.99; evidence.push(`xml-root:${root.rootName}`, `namespace:${root.namespace || 'none'}`); }
     else if (/boardinformation|inspection|project/i.test(root.rootName) && /<(?:[\w.-]+:)?(?:BoardInformation|ComponentInformation|LandNumber)\b/i.test(sourceText)) { format = 'inspection-xml'; confidence = 0.98; evidence.push(`xml-root:${root.rootName}`, 'inspection-elements'); }
     else { format = 'xml'; confidence = Math.max(confidence, 0.7); evidence.push(`xml-root:${root.rootName}`); }
-  } else if (looksGerber(sourceText)) { format = 'gerber'; confidence = 0.93; evidence.push('gerber-commands'); }
+  } else if (looksLikeGenCad(sourceText)) { format = 'gencad-1.4'; confidence = 0.99; evidence.push('text-signature:gencad-1.x'); }
+  else if (looksLikeFabmasterExtract(sourceText)) { format = 'fabmaster-ascii'; confidence = 0.98; evidence.push('text-signature:fabmaster-a-j-s'); }
+  else if (looksLikeFabmasterLegacy(sourceText)) { format = 'fabmaster-legacy'; confidence = 0.9; evidence.push('text-signature:fabmaster-legacy'); }
+  else if (looksGerber(sourceText)) { format = 'gerber'; confidence = 0.93; evidence.push('gerber-commands'); }
   else if (looksExcellon(sourceText)) { format = 'excellon'; confidence = 0.93; evidence.push('excellon-commands'); }
   else {
     const delimiter = looksDelimited(sourceText);
@@ -122,6 +126,6 @@ export function detectCadFormat({ name = '', mimeType = '', bytes = null, text =
   return {
     format, confidence, evidence, extension, mimeType: mimeType || '', magic,
     encoding: detectEncoding(data), rootElement: root.rootName, namespace: root.namespace,
-    supported: ['inspection-xml', 'ipc-2581', 'odb++', 'zip', 'tgz', 'tar', 'gzip', 'unix-compress', 'xlsx', 'cad-xy-delimited', 'cad-xy-bom-delimited', 'bom-delimited', 'gerber', 'excellon'].includes(format),
+    supported: ['inspection-xml', 'ipc-2581', 'odb++', 'zip', 'tgz', 'tar', 'gzip', 'unix-compress', 'xlsx', 'cad-xy-delimited', 'cad-xy-bom-delimited', 'bom-delimited', 'gerber', 'excellon', 'gencad-1.4', 'fabmaster-ascii'].includes(format),
   };
 }

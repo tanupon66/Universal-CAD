@@ -24,7 +24,7 @@ function lowerName(name = '') { return String(name).toLowerCase(); }
 function isZipName(name) { return /\.zip$/i.test(name); }
 function isTgzName(name) { return /\.(?:tgz|tar\.gz|gz)$/i.test(name); }
 function isTarName(name) { return /\.tar$/i.test(name); }
-function isXmlName(name) { return /\.(?:xml|cad|cpo|job|dat|txt)$/i.test(name); }
+function isXmlName(name) { return /\.(?:xml|cad|fab|gcd|cpo|job|dat|txt)$/i.test(name); }
 function isArchiveName(name) { return isZipName(name) || isTgzName(name) || isTarName(name); }
 function isOdbRelevantName(name) {
   const value = String(name || '').replace(/\\/g, '/').toLowerCase();
@@ -90,17 +90,21 @@ async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
   try { text = textFromBytes(data); } catch { text = ''; }
   const detection = detectCadFormat({ name, bytes: data, text });
   let score = scoreCadXml(text) + (isXmlName(name) ? 1 : 0);
-  if (detection.format === 'inspection-xml' || detection.format === 'ipc-2581') {
+  if (['inspection-xml', 'ipc-2581', 'gencad-1.4', 'fabmaster-ascii'].includes(detection.format)) {
     try {
       const adapted = adaptCadText(text, { fileName: displayPath, detection });
       diagnostics.push(...(adapted.warnings || []).map((warning) => `${displayPath}: ${warning}`));
       if (adapted.unsupportedRecords?.length) diagnostics.push(`${displayPath}: ไม่ได้นำเข้า ${adapted.unsupportedRecords.length} record (ดู Diagnostic Report)`);
-      score = Math.max(score, detection.format === 'ipc-2581' ? 900 : 100);
+      score = Math.max(score, detection.format === 'ipc-2581' ? 900 : detection.format === 'gencad-1.4' ? 880 : detection.format === 'fabmaster-ascii' ? 860 : 100);
       return { root: fileNode, candidates: [{ node: fileNode, text: adapted.xmlText, originalText: text, score, displayPath, format: adapted.sourceFormat, converted: adapted.sourceFormat !== 'inspection-xml', adapterInfo: adapted, detection }] };
     } catch (error) {
       diagnostics.push(`อ่าน ${displayPath} ไม่สำเร็จ: ${error.message}`);
       return { root: fileNode, candidates: [] };
     }
+  }
+  if (detection.format === 'fabmaster-legacy') {
+    diagnostics.push(`${displayPath}: ตรวจพบ FABmaster legacy/FATF แต่ยังไม่มี Adapter สำหรับ variant นี้`);
+    return { root: fileNode, candidates: [] };
   }
   return { root: fileNode, candidates: score > 1 ? [{ node: fileNode, text, score, displayPath, format: 'inspection-xml', detection }] : [] };
 }

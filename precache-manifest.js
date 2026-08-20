@@ -27,6 +27,7 @@ self.__PRECACHE_ASSETS = [
   "./manual-pattern.js",
   "./odb-parser.js",
   "./parsers.js",
+  "./pcb-ascii-formats.js",
   "./performance-diagnostics.js",
   "./project-session.js",
   "./project-storage.js",
