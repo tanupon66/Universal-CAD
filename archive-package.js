@@ -3,12 +3,13 @@ import { bytesFromText, createTar, gzip, gunzip, parseTar, scoreCadXml, textFrom
 import { convertOdbPackageToInspectionXml } from './odb-parser.js';
 import { isUnixCompress, unlzw } from './unix-compress.js';
 import { detectCadFormat, validateArchivePath } from './format-detector.js';
-import { adaptCadText } from './import-adapters.js';
+import { adaptCadText, adaptCadStream } from './import-adapters.js';
 import { ArchiveError } from './cad-errors.js';
 
 const MAX_DEPTH = 5;
 const MAX_SCAN_BYTES = 120 * 1024 * 1024;
 const MAX_UNKNOWN_SCAN_BYTES = 24 * 1024 * 1024;
+const LARGE_TEXT_PREFIX_BYTES = 320 * 1024;
 const MAX_ARCHIVE_FILES = 20000;
 const MAX_EXPANDED_BYTES = 512 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO = 250;
@@ -133,7 +134,40 @@ async function parseZipNode(name, bytes, displayPath, depth, diagnostics) {
     const likelyText = isXmlName(meta.name);
     const likelyOdb = isOdbRelevantName(meta.name);
     const limit = likelyArchive || likelyText || likelyOdb ? MAX_SCAN_BYTES : MAX_UNKNOWN_SCAN_BYTES;
-    if (Number(meta.uncompressedSize || 0) > limit) continue;
+    if (Number(meta.uncompressedSize || 0) > limit) {
+      // Large FABmaster extracts frequently contain millions of trace/graphic rows.
+      // v0.25 used to silently skip them at MAX_SCAN_BYTES. Sniff only a small
+      // decompressed prefix, then stream the member if its content signature is
+      // a supported A!/J!/S! extract. This keeps memory bounded while preserving
+      // the immutable ZIP bytes for archive export.
+      if (likelyText) {
+        try {
+          const prefixBytes = await archive.readPrefix(meta.name, LARGE_TEXT_PREFIX_BYTES);
+          const prefixText = textFromBytes(prefixBytes);
+          const detection = detectCadFormat({ name: meta.name, bytes: prefixBytes, text: prefixText });
+          if (detection.format === 'fabmaster-ascii') {
+            const fileNode = { kind: 'file', name: meta.name, bytes: null, streamed: true, sourceSize: Number(meta.uncompressedSize || 0) };
+            entry.child = fileNode;
+            diagnostics.push(`พบ FABmaster ขนาดใหญ่ ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes) · ใช้ streaming parser แทนการโหลดทั้งไฟล์`);
+            const adapted = await adaptCadStream(archive.openStream(meta.name), {
+              fileName: joinPath(displayPath, meta.name), detection, totalBytes: Number(meta.uncompressedSize || 0),
+            });
+            diagnostics.push(...(adapted.warnings || []).map((warning) => `${joinPath(displayPath, meta.name)}: ${warning}`));
+            if (adapted.unsupportedRecords?.length) diagnostics.push(`${joinPath(displayPath, meta.name)}: ไม่ได้นำเข้า ${adapted.unsupportedRecords.length} record type (ดู Diagnostic Report)`);
+            diagnostics.push(`${joinPath(displayPath, meta.name)}: streaming scan ${adapted.scannedLines || 0} lines → ${adapted.components || 0} Components / ${adapted.lands || 0} Lands`);
+            candidates.push({
+              node: fileNode, text: adapted.xmlText, score: 860, displayPath: joinPath(displayPath, meta.name), format: adapted.sourceFormat,
+              converted: true, adapterInfo: adapted, detection,
+            });
+          } else {
+            diagnostics.push(`ข้ามไฟล์ขนาดใหญ่ ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes): ตรวจพบ ${detection.format || 'unknown'} และยังไม่มี streaming adapter`);
+          }
+        } catch (error) {
+          diagnostics.push(`อ่านไฟล์ขนาดใหญ่ ${joinPath(displayPath, meta.name)} ไม่สำเร็จ: ${error.message}`);
+        }
+      }
+      continue;
+    }
     let entryBytes;
     try { entryBytes = await archive.read(meta.name, 'uint8array'); }
     catch (error) { diagnostics.push(`อ่าน ${joinPath(displayPath, meta.name)} ไม่สำเร็จ: ${error.message}`); continue; }
@@ -178,8 +212,32 @@ async function parseTarNode(name, tarBytes, displayPath, depth, diagnostics, gzi
 }
 
 export async function readCadPackageFile(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const diagnostics = [];
+  // Standalone very-large FABmaster .cad/.fab: sniff with File.slice(), then
+  // consume File.stream() directly so we never create both a 250+ MiB byte
+  // array and a second full-size JavaScript string at the same time.
+  if (Number(file?.size || 0) > MAX_SCAN_BYTES && isXmlName(file?.name || '') && typeof file?.stream === 'function') {
+    try {
+      const prefixBytes = new Uint8Array(await file.slice(0, LARGE_TEXT_PREFIX_BYTES).arrayBuffer());
+      const prefixText = textFromBytes(prefixBytes);
+      const detection = detectCadFormat({ name: file.name, mimeType: file.type, bytes: prefixBytes, text: prefixText });
+      if (detection.format === 'fabmaster-ascii') {
+        diagnostics.push(`พบ FABmaster ขนาดใหญ่ ${file.name} (${file.size} bytes) · ใช้ streaming parser`);
+        const adapted = await adaptCadStream(file.stream(), { fileName: file.name, detection, totalBytes: file.size });
+        diagnostics.push(...(adapted.warnings || []).map((warning) => `${file.name}: ${warning}`));
+        diagnostics.push(`${file.name}: streaming scan ${adapted.scannedLines || 0} lines → ${adapted.components || 0} Components / ${adapted.lands || 0} Lands`);
+        const root = { kind: 'file', name: file.name, bytes: null, streamed: true, sourceSize: file.size };
+        const candidate = { node: root, text: adapted.xmlText, score: 860, displayPath: file.name, format: adapted.sourceFormat, converted: true, adapterInfo: adapted, detection };
+        return { name: file.name || 'package', root, candidates: [candidate], diagnostics };
+      }
+      diagnostics.push(`ไฟล์ ${file.name} มีขนาด ${file.size} bytes และตรวจพบ ${detection.format || 'unknown'}; streaming adapter รุ่นนี้รองรับ FABmaster A!/J!/S! เท่านั้น`);
+      return { name: file.name || 'package', root: { kind: 'file', name: file.name, bytes: null, streamed: true, sourceSize: file.size }, candidates: [], diagnostics };
+    } catch (error) {
+      diagnostics.push(`Streaming preflight ${file.name} ไม่สำเร็จ: ${error.message}`);
+      return { name: file.name || 'package', root: { kind: 'file', name: file.name, bytes: null, streamed: true, sourceSize: file.size }, candidates: [], diagnostics };
+    }
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
   const parsed = await parseFileNode(file.name || 'package', bytes, file.name || 'package', 0, diagnostics);
   const candidates = [...parsed.candidates];
   try {

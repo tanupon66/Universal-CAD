@@ -225,6 +225,213 @@ function parseFabSections(source) {
   }
   return sections;
 }
+
+function unitFromFabmasterMeta(meta = []) {
+  for (const field of meta) {
+    const value = String(field || '').trim().toUpperCase();
+    if (value === 'MILLIMETERS' || value === 'MILLIMETRES' || value === 'MM') return { name: 'mm', toMm: 1 };
+    if (value === 'MILS' || value === 'MIL') return { name: 'mils', toMm: MM_PER_INCH / 1000 };
+    if (value === 'INCHES' || value === 'INCH') return { name: 'inch', toMm: MM_PER_INCH };
+    if (value === 'MICRONS' || value === 'MICROMETERS') return { name: 'microns', toMm: 0.001 };
+  }
+  return null;
+}
+
+function fabmasterSectionKind(headers = []) {
+  const h0 = headers[0] || '';
+  if (h0 === 'PADNAME') return 'pads';
+  if (h0 === 'REFDES' && (headers.includes('COMPCLASS') || headers.includes('SYMX') || headers.includes('COMPDEVICE') || headers.includes('COMPPACKAGE'))) return 'components';
+  if (h0 === 'SYMNAME' && headers.includes('PINNUMBER') && headers.includes('PINX') && headers.includes('PINY')) return 'pins';
+  if (h0 === 'NETNAME') return 'nets';
+  if (h0 === 'CLASS' && headers.includes('GRAPHICDATANAME')) return 'traces';
+  return 'other';
+}
+
+function finalizeFabmasterStreamingState(state, options = {}) {
+  const { componentMap, pinRows, padSizes } = state;
+  const unit = state.unit || { name: 'mils-default', toMm: MM_PER_INCH / 1000 };
+  const warnings = [...state.warnings];
+  const unsupportedRecords = [...state.unsupportedRecords];
+  if (!state.unit) warnings.push('FABmaster ไม่ระบุ unit ที่รู้จัก; ใช้ MILS เป็น fallback ตามรูปแบบทั่วไป');
+  if (!componentMap.size) throw new ParseError('FABmaster ไม่มี Component placement ที่อ่านได้', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
+
+  const components = []; const componentIdByRef = new Map(); let componentId = 1;
+  for (const component of componentMap.values()) {
+    const id = String(componentId++); componentIdByRef.set(component.ref, id);
+    components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '' });
+  }
+
+  const lands = []; let landId = 1;
+  const missingPadstacks = new Map();
+  let minLandX = Infinity; let maxLandX = -Infinity; let minLandY = Infinity; let maxLandY = -Infinity;
+  for (const row of pinRows) {
+    const ref = String(row.ref || '').trim(); const componentIdValue = componentIdByRef.get(ref); if (!componentIdValue) continue;
+    if (row.x == null || row.y == null) continue;
+    const stack = String(row.stack || '').trim(); const size = padSizes.get(stack) || { width: DEFAULT_LAND_MM, height: DEFAULT_LAND_MM };
+    if (stack && !padSizes.has(stack)) {
+      const current = missingPadstacks.get(stack) || { count: 0, example: `${ref}.${row.pinName || landId}` };
+      current.count += 1; missingPadstacks.set(stack, current);
+    }
+    const centerX = row.x; const centerY = row.y;
+    const comp = componentMap.get(ref); const side = comp?.side || normalizeSide(row.mirror || 'NO');
+    const left = centerX - size.width / 2; const top = centerY + size.height / 2;
+    const land = { id: landId++, componentId: componentIdValue, name: String(row.pinNumber || row.pinName || landId - 1), side, left, top, width: size.width, height: size.height };
+    lands.push(land);
+    minLandX = Math.min(minLandX, left); maxLandX = Math.max(maxLandX, left + size.width);
+    minLandY = Math.min(minLandY, top - size.height); maxLandY = Math.max(maxLandY, top);
+  }
+  if (!lands.length) throw new ParseError('FABmaster ไม่มี Pin/Land placement ที่อ่านได้', { stage: 'fabmaster-pins', fileName: options.fileName, code: 'FABMASTER_LANDS_EMPTY' });
+  if (missingPadstacks.size) {
+    const examples = [...missingPadstacks.entries()].slice(0, 8).map(([name, info]) => `${name} (${info.count} pins; เช่น ${info.example})`).join(', ');
+    const missingPins = [...missingPadstacks.values()].reduce((sum, info) => sum + info.count, 0);
+    warnings.push(`ไม่พบ Padstack ${missingPadstacks.size} ชื่อสำหรับ ${missingPins} pins; ใช้ ${DEFAULT_LAND_MM} mm fallback. ตัวอย่าง: ${examples}`);
+  }
+
+  const bounds = state.outlineBounds || state.bounds;
+  if (state.outlineBounds) warnings.push('ใช้ BOARD GEOMETRY / OUTLINE เป็นขอบเขตบอร์ดแทน J-record extents เพื่อไม่ให้ Drawing/Panel geometry ทำให้ Board View กว้างเกินจริง');
+  const minX = bounds?.minX ?? minLandX; const maxX = bounds?.maxX ?? maxLandX;
+  const minY = bounds?.minY ?? minLandY; const maxY = bounds?.maxY ?? maxLandY;
+  const boardName = options.fileName || 'FABmaster Board';
+  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, components, lands, sourceFormat: 'FABmaster ASCII' });
+  if (state.ignoredRows > 0) warnings.push(`Large-file streaming parser ข้าม ${state.ignoredRows} records ที่ไม่จำเป็นต่อ Component/Land Working Model โดยไม่โหลดเข้าหน่วยความจำ`);
+  return {
+    xmlText,
+    warnings: [...new Set(warnings)],
+    unsupportedRecords,
+    components: components.length,
+    packages: new Set(components.map((c) => c.packageName)).size,
+    lands: lands.length,
+    sourceFormat: 'fabmaster-ascii',
+    partial: warnings.length > 0 || unsupportedRecords.length > 0,
+    unit: unit.name,
+    streaming: true,
+    scannedLines: state.scannedLines,
+  };
+}
+
+/**
+ * Memory-bounded FABmaster/Cadence A!/J!/S! reader for very large .cad/.fab files.
+ * It consumes the decompressed ReadableStream chunk-by-chunk and only retains
+ * Component, Pad and Pin records required by the Universal CAD Working Model.
+ * Multi-million trace/graphic/net rows are counted/flagged but never materialized.
+ */
+export async function convertFabmasterStreamToInspectionXml(readable, options = {}) {
+  if (!readable?.getReader) throw new TypeError('FABmaster streaming import requires a ReadableStream');
+  const state = {
+    componentMap: new Map(), pinRows: [], padSizes: new Map(), bounds: null, outlineBounds: null, unit: null,
+    warnings: [], unsupportedRecords: [], unsupportedKinds: new Set(), ignoredRows: 0, scannedLines: 0,
+  };
+  let headers = []; let sectionKind = 'other'; let sawSignature = false;
+  const decoder = new TextDecoder(options.encoding || 'utf-8');
+  const reader = readable.getReader();
+  let pending = ''; let processedBytes = 0; let lastProgressBytes = 0;
+  const totalBytes = Number(options.totalBytes || 0);
+
+  const processLine = (rawLine) => {
+    const line = String(rawLine || '').replace(/\r$/, '').trim();
+    if (!line || line === '\u001a') return;
+    state.scannedLines += 1;
+    const type = `${line[0] || ''}${line[1] || ''}`.toUpperCase();
+    if (type === 'A!') {
+      const fields = splitBang(line); headers = normalizedHeader(fields.slice(1)); sectionKind = fabmasterSectionKind(headers);
+      if (sectionKind === 'components' || sectionKind === 'pins' || sectionKind === 'pads') sawSignature = true;
+      if (sectionKind === 'nets' && !state.unsupportedKinds.has('NETS')) {
+        state.unsupportedKinds.add('NETS'); state.unsupportedRecords.push({ type: 'NETS', reason: 'Inspection XML compatibility view ยังไม่เก็บ netlist' });
+      }
+      if (sectionKind === 'traces' && !state.unsupportedKinds.has('TRACES')) {
+        state.unsupportedKinds.add('TRACES'); state.unsupportedRecords.push({ type: 'TRACES', reason: 'Inspection XML compatibility view ยังไม่เก็บ traces/zones' });
+      }
+      return;
+    }
+    if (type === 'J!') {
+      const fields = splitBang(line).slice(1);
+      const detectedUnit = unitFromFabmasterMeta(fields); if (detectedUnit) state.unit = detectedUnit;
+      const unit = state.unit || { name: 'mils-default', toMm: MM_PER_INCH / 1000 };
+      if (fields.length >= 6) {
+        const maybe = fields.slice(2, 6).map((value) => finite(value, null));
+        if (maybe.every((value) => value != null)) {
+          const [minX, minY, maxX, maxY] = maybe.map((value) => value * unit.toMm);
+          if (maxX > minX && maxY > minY) state.bounds = { minX, minY, maxX, maxY };
+        }
+      }
+      return;
+    }
+    if (type !== 'S!') return;
+    if (sectionKind === 'traces') {
+      // FABmaster often stores the actual PCB profile in the huge graphic section.
+      // Parse only BOARD GEOMETRY / OUTLINE rows; skip the millions of copper and
+      // drawing rows without tokenizing them.
+      if (/^S!BOARD GEOMETRY!OUTLINE!/i.test(line)) {
+        const fields = splitBang(line); const row = rowObject(headers, fields);
+        const unit = state.unit || { name: 'mils-default', toMm: MM_PER_INCH / 1000 };
+        const graphicType = String(row.GRAPHICDATANAME || '').toUpperCase();
+        const pairCount = graphicType === 'ARC' ? 3 : graphicType === 'LINE' ? 2 : 0;
+        for (let pair = 0; pair < pairCount; pair += 1) {
+          const x = finite(row[`GRAPHICDATA${pair * 2 + 1}`], null); const y = finite(row[`GRAPHICDATA${pair * 2 + 2}`], null);
+          if (x == null || y == null) continue;
+          const px = x * unit.toMm; const py = y * unit.toMm;
+          if (!state.outlineBounds) state.outlineBounds = { minX: px, maxX: px, minY: py, maxY: py };
+          else {
+            state.outlineBounds.minX = Math.min(state.outlineBounds.minX, px); state.outlineBounds.maxX = Math.max(state.outlineBounds.maxX, px);
+            state.outlineBounds.minY = Math.min(state.outlineBounds.minY, py); state.outlineBounds.maxY = Math.max(state.outlineBounds.maxY, py);
+          }
+        }
+      } else state.ignoredRows += 1;
+      return;
+    }
+    if (!['components', 'pads', 'pins'].includes(sectionKind)) { state.ignoredRows += 1; return; }
+    const fields = splitBang(line); const row = rowObject(headers, fields);
+    const unit = state.unit || { name: 'mils-default', toMm: MM_PER_INCH / 1000 };
+    if (sectionKind === 'components') {
+      const ref = String(row.REFDES || '').trim(); if (!ref) return;
+      const x = finite(row.SYMX, null); const y = finite(row.SYMY, null);
+      if ((x != null && y != null) || !state.componentMap.has(ref)) {
+        state.componentMap.set(ref, {
+          ref,
+          packageName: String(row.SYMNAME || row.COMPPACKAGE || row.COMPPARTNUMBER || row.COMPDEVICETYPE || 'UNASSIGNED').trim() || 'UNASSIGNED',
+          x: (x ?? 0) * unit.toMm, y: (y ?? 0) * unit.toMm,
+          rotation: normalizeRotation(row.SYMROTATE || 0), side: normalizeSide(row.SYMMIRROR || row.SIDE || 'NO'),
+        });
+      }
+      if (String(row.PINNUMBER || '').trim() && finite(row.PINX, null) != null && finite(row.PINY, null) != null) {
+        state.pinRows.push({ ref, pinName: row.PINNAME, pinNumber: row.PINNUMBER, x: finite(row.PINX, 0) * unit.toMm, y: finite(row.PINY, 0) * unit.toMm, stack: row.PADSTACKNAME || row.PADNAME, mirror: row.SYMMIRROR });
+      }
+      return;
+    }
+    if (sectionKind === 'pads') {
+      const name = String(row.PADNAME || '').trim(); if (!name || state.padSizes.has(name)) return;
+      const width = Math.abs(finite(row.PADWIDTH, 0) || 0) * unit.toMm; const height = Math.abs(finite(row.PADHGHT, 0) || 0) * unit.toMm;
+      if (width > 0 && height > 0 && String(row.LAYER || '').toUpperCase() !== '~DRILL') state.padSizes.set(name, { width, height });
+      return;
+    }
+    const ref = String(row.REFDES || '').trim(); const x = finite(row.PINX, null); const y = finite(row.PINY, null);
+    if (!ref || x == null || y == null) return;
+    state.pinRows.push({ ref, pinName: row.PINNAME, pinNumber: row.PINNUMBER, x: x * unit.toMm, y: y * unit.toMm, stack: row.PADSTACKNAME || row.PADNAME, mirror: row.SYMMIRROR });
+  };
+
+  try {
+    while (true) {
+      if (options.signal?.aborted) throw new ParseError('ยกเลิกการอ่าน FABmaster แล้ว', { stage: 'fabmaster-stream', fileName: options.fileName, code: 'IMPORT_ABORTED' });
+      const { done, value } = await reader.read(); if (done) break;
+      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+      processedBytes += bytes.byteLength;
+      const text = pending + decoder.decode(bytes, { stream: true });
+      const lines = text.split('\n'); pending = lines.pop() || '';
+      for (const line of lines) processLine(line);
+      if (options.onProgress && (processedBytes - lastProgressBytes >= 4 * 1024 * 1024 || (totalBytes && processedBytes >= totalBytes))) {
+        lastProgressBytes = processedBytes;
+        options.onProgress({ processedBytes, totalBytes, lines: state.scannedLines, components: state.componentMap.size, pins: state.pinRows.length });
+      }
+    }
+    pending += decoder.decode(); if (pending) processLine(pending);
+  } finally {
+    try { if (options.signal?.aborted) await reader.cancel(); } catch { /* abort cleanup is best-effort */ }
+    reader.releaseLock();
+  }
+  if (!sawSignature) throw new ParseError('ไฟล์ไม่ใช่ FABmaster/Cadence A!/J!/S! ที่ตรวจพบได้', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });
+  return finalizeFabmasterStreamingState(state, options);
+}
+
 export function convertFabmasterExtractToInspectionXml(text, options = {}) {
   const source = String(text || '').replace(/^\uFEFF/, '');
   if (!looksLikeFabmasterExtract(source)) throw new ParseError('ไฟล์ไม่ใช่ FABmaster/Cadence A!/J!/S! ที่ตรวจพบได้', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });

@@ -1,6 +1,6 @@
 import { ParseError, ValidationError } from './cad-errors.js';
 import { detectCadFormat } from './format-detector.js';
-import { convertGenCadToInspectionXml, convertFabmasterExtractToInspectionXml } from './pcb-ascii-formats.js';
+import { convertGenCadToInspectionXml, convertFabmasterExtractToInspectionXml, convertFabmasterStreamToInspectionXml } from './pcb-ascii-formats.js';
 
 function decodeXml(value = '') { return String(value).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); }
 function attrs(text = '') { const output = {}; const re = /([:\w.-]+)\s*=\s*(["'])([\s\S]*?)\2/g; let m; while ((m = re.exec(text))) output[m[1]] = decodeXml(m[3]); return output; }
@@ -115,4 +115,17 @@ export function adaptCadText(inputText, options = {}) {
   }
   const label = detection.rootElement ? `XML root ${detection.rootElement}` : `รูปแบบ ${detection.format || 'unknown'}`;
   throw new ValidationError(`${label} ยังไม่มี Import Adapter`, { stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_CAD_FORMAT' });
+}
+
+
+export async function adaptCadStream(readable, options = {}) {
+  const detection = options.detection;
+  if (!detection?.format) throw new ValidationError('Streaming import ต้องมีผล Format Detector ก่อนเริ่มอ่าน', { stage: 'format-adapter', fileName: options.fileName, code: 'STREAM_FORMAT_REQUIRED' });
+  if (detection.format === 'fabmaster-ascii') {
+    return { ...(await convertFabmasterStreamToInspectionXml(readable, options)), detection };
+  }
+  throw new ValidationError(`รูปแบบ ${detection.format} ยังไม่มี Streaming Import Adapter`, {
+    stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_STREAMING_CAD_FORMAT',
+    remediation: 'ไฟล์ขนาดใหญ่รองรับ streaming สำหรับ FABmaster A!/J!/S! ก่อน; ฟอร์แมตอื่นให้ใช้ไฟล์ขนาดเล็กกว่าหรือเพิ่ม Adapter เฉพาะรูปแบบ',
+  });
 }

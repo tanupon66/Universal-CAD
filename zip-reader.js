@@ -93,10 +93,10 @@ export class ZipArchive {
     return this.list().find(predicate) || null;
   }
 
-  async read(name, output = 'uint8array') {
+  #entryCompressedSlice(name) {
     const entry = this.entries.get(name);
     if (!entry) throw new Error(`ไม่พบไฟล์ ${name} ใน ZIP`);
-    if (entry.isDirectory) return new Uint8Array();
+    if (entry.isDirectory) return { entry, compressed: new Uint8Array() };
     if (entry.flags & 0x0001) throw new Error(`ไฟล์ ${name} ถูกเข้ารหัสและยังไม่รองรับ`);
 
     const offset = entry.localOffset;
@@ -104,10 +104,57 @@ export class ZipArchive {
     const nameLength = this.#u16(offset + 26);
     const extraLength = this.#u16(offset + 28);
     const dataOffset = offset + 30 + nameLength + extraLength;
-    const compressed = this.bytes.slice(dataOffset, dataOffset + entry.compressedSize);
+    // subarray keeps a view of the immutable archive bytes instead of copying a
+    // potentially large compressed member before it is streamed/decompressed.
+    const compressed = this.bytes.subarray(dataOffset, dataOffset + entry.compressedSize);
+    return { entry, compressed };
+  }
+
+  openStream(name) {
+    const { entry, compressed } = this.#entryCompressedSlice(name);
+    if (entry.isDirectory) return new Blob([]).stream();
+    let stream = new Blob([compressed]).stream();
+    if (entry.method === 8) {
+      if (typeof DecompressionStream === 'undefined') throw new Error('เบราว์เซอร์นี้ไม่รองรับ DecompressionStream กรุณาใช้ Chrome หรือ Edge รุ่นใหม่');
+      stream = stream.pipeThrough(new DecompressionStream('deflate-raw'));
+    } else if (entry.method !== 0) {
+      throw new Error(`ZIP compression method ${entry.method} ยังไม่รองรับ (${name})`);
+    }
+    return stream;
+  }
+
+  async readPrefix(name, maxBytes = 256 * 1024) {
+    const limit = Math.max(1, Number(maxBytes) || 1);
+    const reader = this.openStream(name).getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (total < limit) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = asUint8Array(value);
+        const remaining = limit - total;
+        const selected = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+        chunks.push(selected);
+        total += selected.length;
+        if (selected.length < chunk.length) break;
+      }
+    } finally {
+      try { await reader.cancel(); } catch { /* cancellation is best-effort after prefix sniffing */ }
+      reader.releaseLock();
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+    return out;
+  }
+
+  async read(name, output = 'uint8array') {
+    const { entry, compressed } = this.#entryCompressedSlice(name);
+    if (entry.isDirectory) return new Uint8Array();
 
     let data;
-    if (entry.method === 0) data = compressed;
+    if (entry.method === 0) data = compressed.slice();
     else if (entry.method === 8) data = await inflateRaw(compressed);
     else throw new Error(`ZIP compression method ${entry.method} ยังไม่รองรับ (${name})`);
 
