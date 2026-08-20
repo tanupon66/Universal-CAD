@@ -1,5 +1,5 @@
 import { parseInspectionXml } from './parsers.js';
-import { formatVtxNumber } from './vtx-inspection-xml.js';
+import { formatInspectionNumber } from './inspection-xml-profile.js';
 import { mergeRectangles, splitRectangle } from './geometry.js';
 
 function cloneLand(land) {
@@ -23,7 +23,7 @@ function cloneLand(land) {
 export function createCadEditorModel(xmlTextOrParsed) {
   const sourceText = typeof xmlTextOrParsed === 'string' ? xmlTextOrParsed : '';
   const parsed = typeof xmlTextOrParsed === 'string' ? parseInspectionXml(xmlTextOrParsed) : xmlTextOrParsed;
-  if (!parsed?.components) throw new TypeError('createCadEditorModel ต้องได้รับ XML text หรือ parsed CAD model');
+  if (!parsed?.components) throw new TypeError('createCadEditorModel requires XML text or a parsed CAD model.');
   const components = parsed.components.map((component) => ({
     uid: `component:${component.id}`,
     originalId: component.inferred ? null : String(component.id),
@@ -61,7 +61,7 @@ export function cloneCadEditorModel(model) {
 }
 
 function cancelledError() {
-  const error = new Error('ยกเลิกการทำงานแล้ว');
+  const error = new Error('The operation was cancelled.');
   error.name = 'AbortError';
   return error;
 }
@@ -344,7 +344,7 @@ export function nextGlobalLandId(model) {
 
 export function addComponent(model, values = {}) {
   const id = String(values.id || nextComponentId(model));
-  if ((model.components || []).some((component) => String(component.id) === id)) throw new Error(`Component ID ${id} มีอยู่แล้ว`);
+  if ((model.components || []).some((component) => String(component.id) === id)) throw new Error(`Component ID ${id} already exists.`);
   const component = {
     uid: `new-component:${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`}`,
     originalId: null,
@@ -364,11 +364,11 @@ export function addComponent(model, values = {}) {
 }
 
 export function addLand(model, component, values = {}) {
-  if (!component) throw new Error('กรุณาเลือก Component');
+  if (!component) throw new Error('Select a component.');
   const globalId = values.globalId == null || values.globalId === '' ? nextGlobalLandId(model) : Number(values.globalId);
-  if (!Number.isFinite(globalId)) throw new Error('XML Land ID ต้องเป็นตัวเลข');
+  if (!Number.isFinite(globalId)) throw new Error('XML Land ID must be numeric.');
   for (const current of model.components || []) {
-    if ((current.lands || []).some((land) => Number(land.globalId) === globalId)) throw new Error(`XML Land ID ${globalId} มีอยู่แล้ว`);
+    if ((current.lands || []).some((land) => Number(land.globalId) === globalId)) throw new Error(`XML Land ID ${globalId} already exists.`);
   }
   const last = component.lands.at(-1);
   const index = component.lands.length;
@@ -393,7 +393,7 @@ export function addLand(model, component, values = {}) {
 }
 
 export function duplicateLand(model, component, land) {
-  if (!land) throw new Error('กรุณาเลือก Land ที่ต้องการทำสำเนา');
+  if (!land) throw new Error('Select a land to duplicate.');
   return addLand(model, component, {
     ...land,
     globalId: nextGlobalLandId(model),
@@ -412,7 +412,7 @@ export function deleteLand(model, component, land) {
 }
 
 export function splitLandRectangle(model, component, land, options = {}) {
-  if (!model || !component || !land) throw new Error('กรุณาเลือก Land ที่ต้องการตัด');
+  if (!model || !component || !land) throw new Error('Select a land to split.');
   const [first, second] = splitRectangle({ left: land.left, top: land.top, width: land.width, height: land.length, rotation: land.rotation || 0 }, options);
   land.left = first.left; land.top = first.top; land.width = first.width; land.length = first.height;
   const created = addLand(model, component, {
@@ -426,9 +426,9 @@ export function splitLandRectangle(model, component, land, options = {}) {
 
 export function mergeLandRectangles(model, component, lands) {
   const selected = [...(lands || [])];
-  if (!model || !component || selected.length < 2) throw new Error('กรุณาเลือก Land อย่างน้อย 2 จุด');
+  if (!model || !component || selected.length < 2) throw new Error('Select at least two lands.');
   const sides = new Set(selected.map((land) => String(land.side || '').toLowerCase()));
-  if (sides.size > 1) throw new Error('Merge Land ต่างด้านไม่ได้');
+  if (sides.size > 1) throw new Error('Lands on different sides cannot be merged.');
   const merged = mergeRectangles(selected.map((land) => ({ left: land.left, top: land.top, width: land.width, height: land.length, rotation: land.rotation || 0 })));
   const primary = selected[0];
   primary.left = merged.left; primary.top = merged.top; primary.width = merged.width; primary.length = merged.height;
@@ -455,12 +455,12 @@ function refreshComponentLandIndexes(component) {
 }
 
 export function splitComponentLands(model, component, landUids, values = {}) {
-  if (!model || !component) throw new Error('กรุณาเลือก Component ที่ต้องการแบ่ง');
+  if (!model || !component) throw new Error('Select a component to split.');
   const selected = landUids instanceof Set ? landUids : new Set(landUids || []);
   const lands = component.lands || [];
   const moved = lands.filter((land) => selected.has(land.uid));
-  if (!moved.length) throw new Error('กรุณาลากคลุมหรือเลือก Land ที่ต้องการแยก');
-  if (moved.length >= lands.length) throw new Error('ต้องเหลือ Land อย่างน้อย 1 จุดใน Component เดิม');
+  if (!moved.length) throw new Error('Marquee-select or select the lands to split.');
+  if (moved.length >= lands.length) throw new Error('At least one land must remain in the original component.');
 
   const bounds = componentBounds({ lands: moved });
   const newComponent = addComponent(model, {
@@ -492,27 +492,27 @@ export function validateCadEditorModel(model) {
   const globalIds = new Set();
   for (const component of model?.components || []) {
     const componentId = String(component.id ?? '').trim();
-    if (!componentId) errors.push('พบ Component ที่ไม่มี ID');
-    else if (componentIds.has(componentId)) errors.push(`Component ID ซ้ำ: ${componentId}`);
+    if (!componentId) errors.push('Found a component without an ID.');
+    else if (componentIds.has(componentId)) errors.push(`Duplicate component ID: ${componentId}.`);
     else componentIds.add(componentId);
     const names = new Map();
     for (const land of component.lands || []) {
       const id = Number(land.globalId);
-      if (!Number.isFinite(id)) errors.push(`${component.name || componentId}: Land มี XML ID ไม่ถูกต้อง`);
-      else if (globalIds.has(id)) errors.push(`XML Land ID ซ้ำ: ${id}`);
+      if (!Number.isFinite(id)) errors.push(`${component.name || componentId}: land has an invalid XML ID.`);
+      else if (globalIds.has(id)) errors.push(`Duplicate XML Land ID: ${id}.`);
       else globalIds.add(id);
       const name = String(land.cadName ?? '').trim();
-      if (!name) errors.push(`${component.name || componentId}: พบ Land ที่ไม่มีชื่อ`);
+      if (!name) errors.push(`${component.name || componentId}: found a land without a name.`);
       else {
         const key = name.toUpperCase();
         names.set(key, (names.get(key) || 0) + 1);
       }
       for (const field of ['left', 'top', 'width', 'length']) {
-        if (land[field] != null && land[field] !== '' && !Number.isFinite(Number(land[field]))) errors.push(`${component.name || componentId}/${name || id}: ${field} ไม่ใช่ตัวเลข`);
+        if (land[field] != null && land[field] !== '' && !Number.isFinite(Number(land[field]))) errors.push(`${component.name || componentId}/${name || id}: ${field} is not numeric.`);
       }
-      if (normalizeSide(land.side) === 'unknown') warnings.push(`${component.name || componentId}/${name || id}: ไม่ระบุ Top/Bottom`);
+      if (normalizeSide(land.side) === 'unknown') warnings.push(`${component.name || componentId}/${name || id}: top/bottom side is not specified.`);
     }
-    for (const [name, count] of names) if (count > 1) errors.push(`${component.name || componentId}: ชื่อ Land ${name} ซ้ำ ${count} จุด`);
+    for (const [name, count] of names) if (count > 1) errors.push(`${component.name || componentId}: land name ${name} is duplicated ${count} time(s).`);
   }
   return { valid: errors.length === 0, errors, warnings };
 }
@@ -527,29 +527,29 @@ export async function validateCadEditorModelAsync(model, options = {}) {
   let processed = 0;
   for (const component of sourceComponents) {
     const componentId = String(component.id ?? '').trim();
-    if (!componentId) errors.push('พบ Component ที่ไม่มี ID');
-    else if (componentIds.has(componentId)) errors.push(`Component ID ซ้ำ: ${componentId}`);
+    if (!componentId) errors.push('Found a component without an ID.');
+    else if (componentIds.has(componentId)) errors.push(`Duplicate component ID: ${componentId}.`);
     else componentIds.add(componentId);
     const names = new Map();
     for (const land of component.lands || []) {
       const id = Number(land.globalId);
-      if (!Number.isFinite(id)) errors.push(`${component.name || componentId}: Land มี XML ID ไม่ถูกต้อง`);
-      else if (globalIds.has(id)) errors.push(`XML Land ID ซ้ำ: ${id}`);
+      if (!Number.isFinite(id)) errors.push(`${component.name || componentId}: land has an invalid XML ID.`);
+      else if (globalIds.has(id)) errors.push(`Duplicate XML Land ID: ${id}.`);
       else globalIds.add(id);
       const name = String(land.cadName ?? '').trim();
-      if (!name) errors.push(`${component.name || componentId}: พบ Land ที่ไม่มีชื่อ`);
+      if (!name) errors.push(`${component.name || componentId}: found a land without a name.`);
       else {
         const key = name.toUpperCase();
         names.set(key, (names.get(key) || 0) + 1);
       }
       for (const field of ['left', 'top', 'width', 'length']) {
-        if (land[field] != null && land[field] !== '' && !Number.isFinite(Number(land[field]))) errors.push(`${component.name || componentId}/${name || id}: ${field} ไม่ใช่ตัวเลข`);
+        if (land[field] != null && land[field] !== '' && !Number.isFinite(Number(land[field]))) errors.push(`${component.name || componentId}/${name || id}: ${field} is not numeric.`);
       }
-      if (normalizeSide(land.side) === 'unknown') warnings.push(`${component.name || componentId}/${name || id}: ไม่ระบุ Top/Bottom`);
+      if (normalizeSide(land.side) === 'unknown') warnings.push(`${component.name || componentId}/${name || id}: top/bottom side is not specified.`);
       processed += 1;
       if (shouldCheckpoint(processed, options)) await asyncCheckpoint(processed, total, 'validate', options);
     }
-    for (const [name, count] of names) if (count > 1) errors.push(`${component.name || componentId}: ชื่อ Land ${name} ซ้ำ ${count} จุด`);
+    for (const [name, count] of names) if (count > 1) errors.push(`${component.name || componentId}: land name ${name} is duplicated ${count} time(s).`);
     processed += 1;
     if (shouldCheckpoint(processed, options)) await asyncCheckpoint(processed, total, 'validate', options);
   }
@@ -565,7 +565,7 @@ function findByTag(parent, tagName) {
 function setNumberAttribute(node, name, value) {
   if (value == null || value === '' || !Number.isFinite(Number(value))) { node.removeAttribute(name); return; }
   const isAngle = String(name).toLowerCase() === 'angle';
-  node.setAttribute(name, formatVtxNumber(value, { precision: isAngle ? 5 : 3, minDecimals: 1 }));
+  node.setAttribute(name, formatInspectionNumber(value, { precision: isAngle ? 5 : 3, minDecimals: 1 }));
 }
 
 function updateBoardNode(node, board = {}) {
@@ -685,12 +685,12 @@ export async function serializeCadEditorModelStandaloneAsync(model, options = {}
 
 
 export function serializeCadEditorModel(xmlText, model, options = {}) {
-  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') throw new Error('เบราว์เซอร์นี้ไม่รองรับ XML Editor');
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') throw new Error('This browser does not support the XML editor.');
   const side = options.side || 'all';
   const parser = new DOMParser();
   const doc = parser.parseFromString(String(xmlText || ''), 'application/xml');
   const error = parserError(doc);
-  if (error) throw new Error(`XML ต้นฉบับไม่สมบูรณ์: ${error.slice(0, 180)}`);
+  if (error) throw new Error(`Source XML is malformed: ${error.slice(0, 180)}`);
 
   const boardNode = findByTag(doc, 'BoardInformation')[0] || null;
   updateBoardNode(boardNode, model.board || {});

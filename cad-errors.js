@@ -1,26 +1,26 @@
 const DEFAULT_REMEDIATION = Object.freeze({
-  IMPORT_ERROR: 'ตรวจสอบชนิดไฟล์และรายละเอียดใน Diagnostic Report',
-  PARSE_ERROR: 'ตรวจสอบโครงสร้างและ Encoding ของไฟล์',
-  ARCHIVE_ERROR: 'ตรวจสอบว่า Archive ไม่เสียหายและมีไฟล์หลักที่รองรับ',
-  VALIDATION_ERROR: 'แก้รายการ Validation ที่ระบุก่อนดำเนินการต่อ',
-  GEOMETRY_ERROR: 'ตรวจสอบขนาด จุด และ Polygon ของ Geometry',
-  TRANSACTION_ERROR: 'ยกเลิกการแก้ไขล่าสุด แล้วตรวจข้อมูลที่เกี่ยวข้อง',
-  MAPPING_ERROR: 'ตรวจ Source/Target และยืนยัน Mapping ที่ขัดแย้ง',
-  EXPORT_ERROR: 'แก้ Blocking Error และลอง Export อีกครั้ง',
-  STORAGE_ERROR: 'ตรวจพื้นที่จัดเก็บ Browser และสิทธิ์ของเว็บไซต์',
-  WORKER_ERROR: 'ลองยกเลิกงานและเริ่มใหม่ด้วยไฟล์ที่เล็กลง',
-  MIGRATION_ERROR: 'เก็บ Backup เดิมไว้และตรวจ Schema Version',
+  IMPORT_ERROR: 'Check the file type and Diagnostic Report details.',
+  PARSE_ERROR: 'Check the file structure and encoding.',
+  ARCHIVE_ERROR: 'Check that the archive is not corrupted and contains a supported primary file.',
+  VALIDATION_ERROR: 'Resolve the reported validation issues before continuing.',
+  GEOMETRY_ERROR: 'Check geometry dimensions, points, and polygons.',
+  TRANSACTION_ERROR: 'Undo the latest edit and inspect the related data.',
+  MAPPING_ERROR: 'Check the source and target records, then resolve conflicting mappings.',
+  EXPORT_ERROR: 'Resolve blocking errors and retry the export.',
+  STORAGE_ERROR: 'Check browser storage availability and site permissions.',
+  WORKER_ERROR: 'Cancel the operation and retry with a smaller file.',
+  MIGRATION_ERROR: 'Keep the existing backup and verify the schema version.',
 });
 
 export class CadAppError extends Error {
   constructor(message, options = {}) {
-    super(String(message || 'เกิดข้อผิดพลาด'));
+    super(String(message || 'An error occurred'));
     this.name = new.target.name;
     this.code = String(options.code || 'CAD_ERROR');
     this.stage = String(options.stage || 'unknown');
     this.fileName = options.fileName ? String(options.fileName) : '';
     this.technicalDetail = options.technicalDetail ? String(options.technicalDetail) : '';
-    this.remediation = String(options.remediation || DEFAULT_REMEDIATION[this.code] || 'ดู Diagnostic Report แล้วลองใหม่');
+    this.remediation = String(options.remediation || DEFAULT_REMEDIATION[this.code] || 'Review the Diagnostic Report and retry.');
     this.context = options.context && typeof options.context === 'object' ? { ...options.context } : {};
     this.cause = options.cause;
   }

@@ -355,12 +355,12 @@ export async function convertOdbPackageToInspectionXml(root) {
       try {
         if (!edaCache.has(edaFile.path)) edaCache.set(edaFile.path, parseEdaData(textFromBytes(edaFile.bytes)));
         packages = edaCache.get(edaFile.path);
-      } catch (error) { warnings.push(`อ่าน EDA package ไม่สำเร็จ: ${error.message}`); }
-    } else warnings.push(`ไม่พบ eda/data สำหรับ ${path}`);
+      } catch (error) { warnings.push(`Unable to read EDA package: ${error.message}`); }
+    } else warnings.push(`eda/data was not found for ${path}`);
 
     try {
       allComponents.push(...parseComponentFile(textFromBytes(file.bytes), side, packages, path, profile.units));
-    } catch (error) { warnings.push(`อ่าน ${path} ไม่สำเร็จ: ${error.message}`); }
+    } catch (error) { warnings.push(`Unable to read ${path}: ${error.message}`); }
   }
 
   if (!allComponents.length) return null;
@@ -437,9 +437,9 @@ export async function convertOdbPackageToInspectionXml(root) {
     '</InspectionData>',
   ].join('\n');
 
-  if (decompressedCount) warnings.unshift(`คลาย Unix .Z สำเร็จ ${decompressedCount} ไฟล์`);
+  if (decompressedCount) warnings.unshift(`Decompressed ${decompressedCount} Unix .Z file(s).`);
   const packageCount = [...edaCache.values()].reduce((sum, packages) => sum + packages.filter(Boolean).length, 0);
-  warnings.push(`อ่าน EDA ${packageCount} packages และแปลงพิกัดเป็นมิลลิเมตร`);
+  warnings.push(`Read ${packageCount} EDA package(s) and converted coordinates to millimeters.`);
 
   return {
     xmlText,

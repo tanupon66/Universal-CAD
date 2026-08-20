@@ -50,10 +50,10 @@ export function parseDelimitedText(text, options = {}) {
     else if (char === '\n') { row.push(cell.replace(/\r$/, '')); rows.push(row); row = []; cell = ''; }
     else cell += char;
   }
-  if (quoted) throw new ParseError('CSV/TXT มี quoted field ที่ปิดไม่สมบูรณ์', { stage: 'delimited-parse', fileName: options.fileName, code: 'DELIMITED_UNCLOSED_QUOTE' });
+  if (quoted) throw new ParseError('CSV/TXT contains an unterminated quoted field.', { stage: 'delimited-parse', fileName: options.fileName, code: 'DELIMITED_UNCLOSED_QUOTE' });
   if (cell.length || row.length) { row.push(cell.replace(/\r$/, '')); rows.push(row); }
   while (rows.length && rows[rows.length - 1].every((value) => !String(value).trim())) rows.pop();
-  if (rows.length < 2) throw new ParseError('CSV/TXT ต้องมี Header และข้อมูลอย่างน้อยหนึ่งแถว', { stage: 'delimited-parse', fileName: options.fileName, code: 'DELIMITED_NO_DATA' });
+  if (rows.length < 2) throw new ParseError('CSV/TXT must contain a header and at least one data row.', { stage: 'delimited-parse', fileName: options.fileName, code: 'DELIMITED_NO_DATA' });
   const width = Math.max(...rows.map((item) => item.length));
   for (const item of rows) while (item.length < width) item.push('');
   const detection = options.detection || detectCadFormat({ name: options.fileName, text: source });
@@ -65,7 +65,7 @@ export function parseDelimitedText(text, options = {}) {
     sheets: [{ name: options.sheetName || 'Imported Data', rows }], activeSheet: { name: options.sheetName || 'Imported Data', rows },
     format: detection.format, detection, delimiter, encoding: options.encoding || 'utf-8', unit,
     rowCount: rows.length - 1, columnCount: width, headers,
-    warnings: detection.format === 'delimited-text' ? ['ไม่สามารถระบุว่าเป็น CAD XY หรือ BOM จาก Header ได้ โปรดเลือกคอลัมน์ Mapping เอง'] : [],
+    warnings: detection.format === 'delimited-text' ? ['The header does not clearly identify CAD XY or BOM data. Select the mapping columns manually.'] : [],
   };
 }
 

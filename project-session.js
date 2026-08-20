@@ -17,7 +17,7 @@ export function createProjectSession({ name, fileName, sourceFormat = 'inspectio
 }
 
 export function prepareProjectRevision(session, { legacyCad, workingXml = '', changes = [], validationStatus = 'passed', validationIssues = [] } = {}) {
-  if (!session?.project) throw new Error('Project session ไม่พร้อม');
+  if (!session?.project) throw new Error('Project session is not available.');
   const project = session.project;
   const revisionNumber = Number(project.appliedRevision || 0) + 1;
   const model = normalizeLegacyCad(legacyCad, {
@@ -61,7 +61,7 @@ export function projectSessionCheckpoint(session) {
 }
 
 export function commitPreparedProjectRevision(session, prepared) {
-  if (!session?.project || !prepared?.revision) throw new Error('Prepared revision ไม่ครบ');
+  if (!session?.project || !prepared?.revision) throw new Error('Prepared revision is incomplete.');
   const project = session.project;
   project.workingModel = cloneCadValue(prepared.model);
   project.currentModel = cloneCadValue(prepared.model);
@@ -91,12 +91,12 @@ export function currentProjectLegacyCad(session) {
 }
 
 export function createProjectExportSnapshot(session, options) {
-  if (!session?.project) throw new Error('Project session ไม่พร้อม');
+  if (!session?.project) throw new Error('Project session is not available.');
   return createExportSnapshot(session.project, options);
 }
 
 export function exportProjectBackup(session) {
-  if (!session?.project) throw new Error('Project session ไม่พร้อม');
+  if (!session?.project) throw new Error('Project session is not available.');
   const serializable = cloneCadValue(session.project);
   for (const source of serializable.sourceFiles || []) {
     if (source.bytes instanceof Uint8Array) source.bytes = Array.from(source.bytes);
@@ -111,4 +111,36 @@ export function importProjectBackup(text) {
     if (Array.isArray(source.bytes)) source.bytes = new Uint8Array(source.bytes);
   }
   return { project, originalSource: project.sourceFiles?.[0] || null };
+}
+
+/**
+ * Commit a fully prepared Universal CAD model as a new immutable project revision.
+ * This is used by NPI operations that work directly on the normalized model.
+ */
+export function commitUniversalModelRevision(session, { model, changes = [], validationStatus = 'passed', validationIssues = [] } = {}) {
+  if (!session?.project) throw new Error('Project session is not available.');
+  if (!model) throw new Error('A Universal CAD model is required.');
+  const project = session.project;
+  const revisionNumber = Number(project.appliedRevision || 0) + 1;
+  const nextModel = cloneCadValue(model);
+  nextModel.projectId = project.projectId;
+  nextModel.revision = revisionNumber;
+  nextModel.validationIssues = cloneCadValue(validationIssues || nextModel.validationIssues || []);
+  const createdAt = new Date().toISOString();
+  const changeSet = {
+    id: `changeset:${project.projectId}:${revisionNumber}`,
+    projectId: project.projectId,
+    revisionNumber,
+    createdAt,
+    changes: cloneCadValue(changes),
+    validationStatus,
+  };
+  const revision = {
+    number: revisionNumber,
+    createdAt,
+    model: cloneCadValue(nextModel),
+    changeSetId: changeSet.id,
+    validationStatus,
+  };
+  return commitPreparedProjectRevision(session, { revisionNumber, model: nextModel, changeSet, revision });
 }

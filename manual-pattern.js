@@ -102,23 +102,23 @@ function directionName(step) { return step > 0 ? 'forward' : 'reverse'; }
  *
  * It never extrapolates before the first anchor or after the last anchor. A segment
  * is valid only when two adjacent anchors prove an exact +1 or -1 CAD sequence:
- * abs(CAD index difference) === X-ray local-index difference.
+ * abs(CAD index difference) === source local-index difference.
  */
 export function createSequencePreview({ mappings, component, direction = 'auto', userShift = 0, startLocal = null, endLocal = null, preserveAnchors = true }) {
-  if (!component || !Array.isArray(component.lands) || !component.lands.length) return { ok: false, error: 'Component นี้ไม่มีข้อมูล Land' };
-  if (Number(userShift || 0) !== 0) return { ok: false, error: 'Safe Pattern ไม่อนุญาต Shift เพราะจะทำให้ Anchor ไม่ตรง กรุณาแก้ด้วย Edit Mode' };
+  if (!component || !Array.isArray(component.lands) || !component.lands.length) return { ok: false, error: 'This component has no land data.' };
+  if (Number(userShift || 0) !== 0) return { ok: false, error: 'Safe Pattern does not allow shifting because it would invalidate anchors. Use Edit Mode instead.' };
 
   const componentMappings = mappings
     .filter((m) => Number.isFinite(sequenceIndex(m)))
     .sort((a, b) => sequenceIndex(a) - sequenceIndex(b));
-  if (!componentMappings.length) return { ok: false, error: 'ไม่พบรายการ X-ray Land ใน Component นี้' };
+  if (!componentMappings.length) return { ok: false, error: 'No source land rows were found for this component.' };
 
   const indexByGlobal = landIndexByGlobalId(component);
   const anchors = componentMappings
     .filter((mapping) => mapping.anchorLocked && mapping.mapped && indexByGlobal.has(Number(mapping.globalId)))
     .map((mapping) => ({ mapping, localIndex: sequenceIndex(mapping), rawLabel: rawLabel(mapping), cadIndex: indexByGlobal.get(Number(mapping.globalId)) }))
     .sort((a, b) => a.localIndex - b.localIndex);
-  if (anchors.length < 2) return { ok: false, error: 'Safe Pattern ต้องใช้ Anchor ที่ยืนยันแล้วอย่างน้อย 2 จุด' };
+  if (anchors.length < 2) return { ok: false, error: 'Safe Pattern requires at least two confirmed anchors.' };
 
   const range = normalizeRange(componentMappings, startLocal, endLocal);
   const segments = [];
@@ -129,18 +129,18 @@ export function createSequencePreview({ mappings, component, direction = 'auto',
     const localDelta = b.localIndex - a.localIndex;
     const cadDelta = b.cadIndex - a.cadIndex;
     if (localDelta <= 0 || Math.abs(cadDelta) !== localDelta) {
-      rejectedSegments.push({ a, b, reason: `ช่วงลำดับ ${a.localIndex}–${b.localIndex} (${a.rawLabel} → ${b.rawLabel}) ไม่ใช่ลำดับ CAD ต่อเนื่อง` });
+      rejectedSegments.push({ a, b, reason: `Sequence ${a.localIndex}–${b.localIndex} (${a.rawLabel} → ${b.rawLabel}) is not continuous in CAD order.` });
       continue;
     }
     const step = Math.sign(cadDelta);
     const segmentDirection = directionName(step);
     if (direction !== 'auto' && direction !== segmentDirection) {
-      rejectedSegments.push({ a, b, reason: `ช่วง ${a.rawLabel} → ${b.rawLabel} เป็น ${segmentDirection} ไม่ตรงกับค่าที่เลือก` });
+      rejectedSegments.push({ a, b, reason: `Range ${a.rawLabel} → ${b.rawLabel} has direction ${segmentDirection}, which does not match the selected direction.` });
       continue;
     }
     segments.push({ a, b, step, direction: segmentDirection });
   }
-  if (!segments.length) return { ok: false, error: 'Anchor ยังไม่พิสูจน์ลำดับต่อเนื่อง ไม่มีช่วงที่ปลอดภัยให้เติมอัตโนมัติ' };
+  if (!segments.length) return { ok: false, error: 'Anchors do not yet prove a continuous sequence, so no safe range can be filled automatically.' };
 
   const mappingByLocal = new Map(componentMappings.map((mapping) => [sequenceIndex(mapping), mapping]));
   const verifiedTargetOwners = new Map();
@@ -162,19 +162,19 @@ export function createSequencePreview({ mappings, component, direction = 'auto',
       const land = component.lands[targetIndex] || null;
       const isAnchor = Boolean(mapping.anchorLocked && mapping.mapped);
       let status = isAnchor ? 'anchor' : 'suggested';
-      let reason = isAnchor ? 'Anchor ที่ผู้ใช้ยืนยัน' : 'อยู่ระหว่าง Anchor สองจุดและลำดับตรงกันแบบพอดี';
+      let reason = isAnchor ? 'User-confirmed anchor' : 'Between two anchors with an exact continuous sequence';
 
       const verifiedOwner = verifiedTargetOwners.get(targetIndex);
       if (verifiedOwner && verifiedOwner !== mapping) {
         status = 'conflict';
-        reason = `ชนกับจุดยืนยัน ${rawLabel(verifiedOwner)}`;
+        reason = `Conflicts with confirmed point ${rawLabel(verifiedOwner)}`;
         conflicts += 1;
       }
 
       const existing = proposalByLocal.get(localIndex);
       if (existing && existing.targetIndex !== targetIndex) {
         existing.status = 'conflict';
-        existing.reason = 'Anchor หลายช่วงเสนอคนละตำแหน่ง';
+        existing.reason = 'Multiple anchor ranges propose different positions.';
         conflicts += 1;
         continue;
       }
@@ -195,7 +195,7 @@ export function createSequencePreview({ mappings, component, direction = 'auto',
   const resolvedDirection = directions.size === 1 ? [...directions][0] : 'mixed';
   const highConfidence = proposals.filter((p) => p.status === 'suggested' && p.confidence >= 95).length;
   const applicable = proposals.filter((p) => p.land && ['suggested', 'anchor'].includes(p.status)).length;
-  const formula = `Safe segment fill: เติมเฉพาะ ${segments.length} ช่วงระหว่าง Anchor ที่ลำดับ CAD ต่อเนื่องตรงกัน 100% และไม่ขยายออกนอก Anchor`;
+  const formula = `Safe segment fill: fill only ${segments.length} range(s) between anchors where CAD order matches continuously and never extend beyond anchors.`;
 
   return {
     ok: true,

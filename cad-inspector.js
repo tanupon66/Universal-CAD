@@ -103,7 +103,7 @@ export function truncateCadName(value, maxLength = 5, overflowMode = 'keep-start
 function generateName(reserved, counterRef, prefix, maxLength) {
   const safePrefix = sanitizePrefix(prefix, maxLength);
   const width = maxLength - safePrefix.length;
-  if (width < 1) throw new Error('Prefix ต้องสั้นกว่าความยาวชื่อสูงสุดอย่างน้อย 1 ตัวอักษร');
+  if (width < 1) throw new Error('Prefix must be at least one character shorter than the maximum name length.');
   const capacity = (36 ** width) - 1;
   while (counterRef.value <= capacity) {
     const suffix = counterRef.value.toString(36).toUpperCase().padStart(width, '0');
@@ -114,7 +114,7 @@ function generateName(reserved, counterRef, prefix, maxLength) {
       return candidate;
     }
   }
-  throw new Error(`สร้างชื่อไม่พอภายใต้ข้อจำกัด ${maxLength} ตัวอักษร กรุณาลด Prefix หรือเพิ่มความยาว`);
+  throw new Error(`Unable to generate enough unique names within the ${maxLength}-character limit. Shorten the prefix or increase the limit.`);
 }
 
 function generateA1Name(reserved, counterRef, maxLength) {
@@ -122,14 +122,14 @@ function generateA1Name(reserved, counterRef, maxLength) {
     const candidate = `A${counterRef.value}`;
     counterRef.value += 1;
     if (nameLength(candidate) > maxLength) {
-      throw new Error(`ชื่อแบบ A1 เกินข้อจำกัด ${maxLength} ตัวอักษร กรุณาเพิ่มความยาวชื่อสูงสุด`);
+      throw new Error(`A1-style names exceed the ${maxLength}-character limit. Increase the maximum name length.`);
     }
     if (!reserved.has(comparisonKey(candidate))) {
       reserved.add(comparisonKey(candidate));
       return candidate;
     }
   }
-  throw new Error('ไม่สามารถสร้างชื่อ Land แบบ A1 ได้');
+  throw new Error('Unable to generate A1-style land names.');
 }
 
 function firstReplacementCharacter(value) {
@@ -195,7 +195,7 @@ function makeUniqueCandidate(baseName, reserved, counters, options, a1Counter) {
       return candidate;
     }
   }
-  throw new Error(`ไม่สามารถแก้ชื่อซ้ำของ ${baseName || '(ว่าง)'} ภายใต้ข้อจำกัด ${options.maxLength} ตัวอักษรได้`);
+  throw new Error(`Unable to resolve duplicate name ${baseName || '(blank)'} within the ${options.maxLength}-character limit.`);
 }
 
 export function generateCadRenames(xmlData, existingRenames = new Map(), options = {}) {

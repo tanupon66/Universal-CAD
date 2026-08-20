@@ -5,17 +5,17 @@ import { mergeRectangles, rectangleDifference, splitRectangle } from './geometry
 function nowIso() { return new Date().toISOString(); }
 function finite(value, label) {
   const number = Number(value);
-  if (!Number.isFinite(number)) throw new ValidationError(`${label} ต้องเป็นตัวเลขที่ถูกต้อง`, { stage: 'validate-transaction', context: { value } });
+  if (!Number.isFinite(number)) throw new ValidationError(`${label} must be a valid number.`, { stage: 'validate-transaction', context: { value } });
   return number;
 }
 function nonEmpty(value, label) {
   const text = String(value ?? '').trim();
-  if (!text) throw new ValidationError(`${label} ห้ามว่าง`, { stage: 'validate-transaction' });
+  if (!text) throw new ValidationError(`${label} cannot be blank.`, { stage: 'validate-transaction' });
   return text;
 }
 function entityIndex(items, id, label) {
   const index = (items || []).findIndex((item) => String(item.id) === String(id));
-  if (index < 0) throw new TransactionError(`ไม่พบ ${label} ${String(id)}`, { stage: 'resolve-entity', context: { id } });
+  if (index < 0) throw new TransactionError(`${label} ${String(id)} was not found.`, { stage: 'resolve-entity', context: { id } });
   return index;
 }
 function replaceAt(items, index, value) {
@@ -35,28 +35,28 @@ function landGeometry(land) {
   const geometry = land?.geometry || {};
   const width = finite(geometry.width, 'Land width');
   const height = finite(geometry.height, 'Land height');
-  if (width <= 0 || height <= 0) throw new GeometryError('Land ต้องมีขนาดมากกว่า 0', { stage: 'validate-geometry', context: { landId: land?.id, width, height } });
+  if (width <= 0 || height <= 0) throw new GeometryError('Land dimensions must be greater than 0.', { stage: 'validate-geometry', context: { landId: land?.id, width, height } });
   return { ...geometry, width, height, rotation: normalizeRotation(geometry.rotation) };
 }
 
 export function validateTransactionModel(model) {
-  if (!model || typeof model !== 'object') throw new ValidationError('Universal CAD Model ไม่พร้อม', { stage: 'validate-model' });
+  if (!model || typeof model !== 'object') throw new ValidationError('The Universal CAD Model is not available.', { stage: 'validate-model' });
   const ids = new Set();
   for (const collection of ['components', 'packages', 'lands', 'panelInstances']) {
     for (const item of model[collection] || []) {
       const id = nonEmpty(item?.id, `${collection}.id`);
-      if (ids.has(id)) throw new ValidationError(`Entity ID ซ้ำ: ${id}`, { stage: 'validate-model', context: { collection, id } });
+      if (ids.has(id)) throw new ValidationError(`Duplicate entity ID: ${id}.`, { stage: 'validate-model', context: { collection, id } });
       ids.add(id);
     }
   }
   const componentIds = new Set((model.components || []).map((item) => String(item.id)));
   const packageIds = new Set((model.packages || []).map((item) => String(item.id)));
   for (const component of model.components || []) {
-    if (component.packageId && !packageIds.has(String(component.packageId))) throw new ValidationError(`Component ${component.reference || component.id} อ้าง Package ที่ไม่มี`, { stage: 'validate-model' });
+    if (component.packageId && !packageIds.has(String(component.packageId))) throw new ValidationError(`Component ${component.reference || component.id} references a missing package.`, { stage: 'validate-model' });
   }
   for (const land of model.lands || []) {
-    if (!componentIds.has(String(land.componentId))) throw new ValidationError(`Land ${land.id} อ้าง Component ที่ไม่มี`, { stage: 'validate-model' });
-    if (!packageIds.has(String(land.packageId))) throw new ValidationError(`Land ${land.id} อ้าง Package ที่ไม่มี`, { stage: 'validate-model' });
+    if (!componentIds.has(String(land.componentId))) throw new ValidationError(`Land ${land.id} references a missing component.`, { stage: 'validate-model' });
+    if (!packageIds.has(String(land.packageId))) throw new ValidationError(`Land ${land.id} references a missing package.`, { stage: 'validate-model' });
     landGeometry(land);
   }
   return true;
@@ -104,7 +104,7 @@ const handlers = {
     const index = entityIndex(model.components, command.componentId, 'Component');
     const before = model.components[index];
     const side = nonEmpty(command.side, 'Side').toLowerCase();
-    if (!['top', 'bottom', 'unknown'].includes(side)) throw new ValidationError(`Side ไม่ถูกต้อง: ${side}`, { stage: 'validate-transaction' });
+    if (!['top', 'bottom', 'unknown'].includes(side)) throw new ValidationError(`Invalid side: ${side}.`, { stage: 'validate-transaction' });
     return result({ ...model, components: replaceAt(model.components, index, { ...before, side }) }, { type: 'change-side', componentId: before.id, side: before.side || 'unknown' }, { type: command.type, entityId: before.id, before: before.side, after: side });
   },
   'change-package'(model, command) {
@@ -169,10 +169,10 @@ const handlers = {
   },
   'merge-lands'(model, command) {
     const ids = [...new Set(command.landIds || [])].map(String);
-    if (ids.length < 2) throw new GeometryError('Merge ต้องเลือกอย่างน้อย 2 Land', { stage: 'merge-lands' });
+    if (ids.length < 2) throw new GeometryError('Merge requires at least two lands.', { stage: 'merge-lands' });
     const selected = ids.map((id) => model.lands[entityIndex(model.lands, id, 'Land')]);
     const componentIds = new Set(selected.map((land) => String(land.componentId))); const packageIds = new Set(selected.map((land) => String(land.packageId))); const sides = new Set(selected.map((land) => String(land.side || '')));
-    if (componentIds.size !== 1 || packageIds.size !== 1 || sides.size !== 1) throw new GeometryError('Merge ต้องเป็น Land ใน Component, Package และ Side เดียวกัน', { stage: 'merge-lands' });
+    if (componentIds.size !== 1 || packageIds.size !== 1 || sides.size !== 1) throw new GeometryError('Lands being merged must belong to the same component, package, and side.', { stage: 'merge-lands' });
     const componentId = selected[0].componentId; const snapshot = landScopeSnapshot(model, componentId); const mergedGeometry = mergeRectangles(selected.map((land) => land.geometry));
     const primary = { ...selected[0], geometry: mergedGeometry, name: String(command.name || selected[0].name || '') };
     const selectedIds = new Set(ids); const lands = model.lands.filter((land) => !selectedIds.has(String(land.id)) || String(land.id) === String(primary.id)).map((land) => String(land.id) === String(primary.id) ? primary : land);
@@ -201,7 +201,7 @@ const handlers = {
   },
   'set-package-pin1'(model, command) {
     const index = entityIndex(model.packages, command.packageId, 'Package'); const before = model.packages[index]; const pin1 = command.landId == null ? null : String(command.landId);
-    if (pin1 != null && !(model.lands || []).some((land) => String(land.id) === pin1 && String(land.packageId) === String(before.id))) throw new ValidationError('Pin 1 ต้องอ้าง Land ใน Package เดียวกัน', { stage: 'set-package-pin1' });
+    if (pin1 != null && !(model.lands || []).some((land) => String(land.id) === pin1 && String(land.packageId) === String(before.id))) throw new ValidationError('Pin 1 must reference a land in the same package.', { stage: 'set-package-pin1' });
     return result({ ...model, packages: replaceAt(model.packages, index, { ...before, pin1 }) }, { type: 'set-package-pin1', packageId: before.id, landId: before.pin1 }, { type: command.type, entityId: before.id, before: before.pin1, after: pin1 });
   },
   'set-package-polarity'(model, command) {
@@ -224,7 +224,7 @@ const handlers = {
   'resize-land'(model, command) {
     const index = entityIndex(model.lands, command.landId, 'Land'); const before = model.lands[index]; const geometry = landGeometry(before);
     const width = finite(command.width, 'Width'); const height = finite(command.height, 'Height');
-    if (width <= 0 || height <= 0) throw new GeometryError('Land width/height ต้องมากกว่า 0', { stage: 'resize-land' });
+    if (width <= 0 || height <= 0) throw new GeometryError('Land width and height must be greater than 0.', { stage: 'resize-land' });
     const next = { ...before, geometry: { ...geometry, width, height } };
     return result({ ...model, lands: replaceAt(model.lands, index, next) }, { type: 'resize-land', landId: before.id, width: geometry.width, height: geometry.height }, { type: command.type, entityId: before.id, before: { width: geometry.width, height: geometry.height }, after: { width, height } });
   },
@@ -241,7 +241,7 @@ const handlers = {
   },
   'delete-package'(model, command) {
     const index = entityIndex(model.packages, command.packageId, 'Package');
-    if ((model.components || []).some((item) => String(item.packageId) === String(command.packageId))) throw new ValidationError('ลบ Package ที่ยังถูกใช้งานไม่ได้', { stage: 'delete-package' });
+    if ((model.components || []).some((item) => String(item.packageId) === String(command.packageId))) throw new ValidationError('A package that is still in use cannot be deleted.', { stage: 'delete-package' });
     const item = model.packages[index]; return result({ ...model, packages: removeAt(model.packages, index) }, { type: 'restore-package', package: cloneCadValue(item), index }, { type: command.type, entityId: item.id });
   },
   'restore-package'(model, command) {
@@ -286,7 +286,7 @@ const handlers = {
 
 export function executeCadCommand(model, command, { validate = true } = {}) {
   const handler = handlers[String(command?.type || '')];
-  if (!handler) throw new TransactionError(`ไม่รองรับ Transaction: ${String(command?.type || '')}`, { stage: 'dispatch-transaction' });
+  if (!handler) throw new TransactionError(`Unsupported transaction: ${String(command?.type || '')}.`, { stage: 'dispatch-transaction' });
   try {
     const outcome = handler(model, command);
     outcome.model = { ...outcome.model, revision: Number(model.revision || 0) };
@@ -294,7 +294,7 @@ export function executeCadCommand(model, command, { validate = true } = {}) {
     return outcome;
   } catch (error) {
     if (error instanceof TransactionError || error instanceof ValidationError || error instanceof GeometryError) throw error;
-    throw new TransactionError(`Transaction ${command.type} ล้มเหลว: ${error?.message || error}`, { stage: command.type, cause: error, technicalDetail: error?.stack || '' });
+    throw new TransactionError(`Transaction ${command.type} failed: ${error?.message || error}`, { stage: command.type, cause: error, technicalDetail: error?.stack || '' });
   }
 }
 

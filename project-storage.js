@@ -9,7 +9,7 @@ const TEMP_STORE = 'temporary';
 function requestPromise(request) { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 function transactionPromise(transaction) { return new Promise((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted')); }); }
 export async function openProjectDatabase() {
-  if (!globalThis.indexedDB) throw new StorageError('Browser นี้ไม่รองรับ IndexedDB', { stage: 'storage-open', code: 'STORAGE_INDEXEDDB_UNAVAILABLE' });
+  if (!globalThis.indexedDB) throw new StorageError('This browser does not support IndexedDB.', { stage: 'storage-open', code: 'STORAGE_INDEXEDDB_UNAVAILABLE' });
   try {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -18,11 +18,11 @@ export async function openProjectDatabase() {
       if (!db.objectStoreNames.contains(TEMP_STORE)) db.createObjectStore(TEMP_STORE, { keyPath: 'id' });
     };
     return await requestPromise(request);
-  } catch (error) { throw new StorageError(`เปิด IndexedDB ไม่สำเร็จ: ${error.message}`, { stage: 'storage-open', code: 'STORAGE_OPEN_FAILED', cause: error }); }
+  } catch (error) { throw new StorageError(`Unable to open IndexedDB: ${error.message}`, { stage: 'storage-open', code: 'STORAGE_OPEN_FAILED', cause: error }); }
 }
 
 export function createProjectStorageRecord(session, workspace = {}) {
-  if (!session?.project) throw new StorageError('Project session ไม่พร้อมสำหรับ Autosave', { stage: 'autosave-prepare', code: 'STORAGE_NO_PROJECT' });
+  if (!session?.project) throw new StorageError('The project session is not available for autosave.', { stage: 'autosave-prepare', code: 'STORAGE_NO_PROJECT' });
   const project = cloneCadValue(session.project);
   const revision = Number(project.appliedRevision || 0);
   return {
@@ -41,16 +41,16 @@ export function validateProjectStorageRecord(record) {
 }
 export async function saveProjectRecord(record) {
   const validity = validateProjectStorageRecord(record);
-  if (!validity.valid) throw new StorageError(`ไม่บันทึก Autosave ที่ไม่สมบูรณ์: ${validity.reason}`, { stage: 'autosave-validate', code: 'STORAGE_INCOMPLETE_REVISION' });
+  if (!validity.valid) throw new StorageError(`Incomplete autosave was rejected: ${validity.reason}`, { stage: 'autosave-validate', code: 'STORAGE_INCOMPLETE_REVISION' });
   const db = await openProjectDatabase();
   try { const transaction = db.transaction(PROJECT_STORE, 'readwrite'); transaction.objectStore(PROJECT_STORE).put(record); await transactionPromise(transaction); return record; }
-  catch (error) { throw new StorageError(`Autosave ไม่สำเร็จ: ${error.message}`, { stage: 'autosave-write', code: 'STORAGE_WRITE_FAILED', cause: error }); }
+  catch (error) { throw new StorageError(`Autosave failed: ${error.message}`, { stage: 'autosave-write', code: 'STORAGE_WRITE_FAILED', cause: error }); }
   finally { db.close(); }
 }
 export async function listProjectRecords() { const db = await openProjectDatabase(); try { const records = await requestPromise(db.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).getAll()); return records.filter((record) => validateProjectStorageRecord(record).valid).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))); } finally { db.close(); } }
-export async function loadProjectRecord(id) { const db = await openProjectDatabase(); try { const record = await requestPromise(db.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).get(String(id))); if (!record) return null; const validity = validateProjectStorageRecord(record); if (!validity.valid) throw new StorageError(`Recovery record ใช้ไม่ได้: ${validity.reason}`, { stage: 'recovery-validate', code: 'STORAGE_INVALID_RECOVERY' }); return record; } finally { db.close(); } }
+export async function loadProjectRecord(id) { const db = await openProjectDatabase(); try { const record = await requestPromise(db.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).get(String(id))); if (!record) return null; const validity = validateProjectStorageRecord(record); if (!validity.valid) throw new StorageError(`Recovery record is invalid: ${validity.reason}`, { stage: 'recovery-validate', code: 'STORAGE_INVALID_RECOVERY' }); return record; } finally { db.close(); } }
 export async function deleteProjectRecord(id) { const db = await openProjectDatabase(); try { const transaction = db.transaction(PROJECT_STORE, 'readwrite'); transaction.objectStore(PROJECT_STORE).delete(String(id)); await transactionPromise(transaction); } finally { db.close(); } }
-export async function duplicateProjectRecord(id) { const source = await loadProjectRecord(id); if (!source) throw new StorageError('ไม่พบ Project ที่ต้องการ Duplicate', { stage: 'project-duplicate', code: 'STORAGE_PROJECT_NOT_FOUND' }); const copy = cloneCadValue(source); const suffix = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; copy.id = `${source.id}:copy:${suffix}`; copy.name = `${source.name} Copy`; copy.project.projectId = copy.id; copy.project.name = copy.name; copy.createdAt = new Date().toISOString(); copy.updatedAt = copy.createdAt; copy.project.createdAt = copy.createdAt; copy.project.updatedAt = copy.createdAt; await saveProjectRecord(copy); return copy; }
+export async function duplicateProjectRecord(id) { const source = await loadProjectRecord(id); if (!source) throw new StorageError('The project to duplicate was not found.', { stage: 'project-duplicate', code: 'STORAGE_PROJECT_NOT_FOUND' }); const copy = cloneCadValue(source); const suffix = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; copy.id = `${source.id}:copy:${suffix}`; copy.name = `${source.name} Copy`; copy.project.projectId = copy.id; copy.project.name = copy.name; copy.createdAt = new Date().toISOString(); copy.updatedAt = copy.createdAt; copy.project.createdAt = copy.createdAt; copy.project.updatedAt = copy.createdAt; await saveProjectRecord(copy); return copy; }
 export async function clearTemporaryCache() { const db = await openProjectDatabase(); try { const transaction = db.transaction(TEMP_STORE, 'readwrite'); transaction.objectStore(TEMP_STORE).clear(); await transactionPromise(transaction); } finally { db.close(); } }
 export async function storageUsage() { if (!navigator.storage?.estimate) return { usage: null, quota: null, percent: null }; const result = await navigator.storage.estimate(); return { usage: Number(result.usage || 0), quota: Number(result.quota || 0), percent: result.quota ? Number(result.usage || 0) / Number(result.quota) * 100 : null }; }
 

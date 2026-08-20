@@ -63,6 +63,7 @@ import {
   currentProjectLegacyCad,
   exportProjectBackup,
   importProjectBackup,
+  commitUniversalModelRevision,
 } from './project-session.js';
 import { exportPreflight, validateUniversalCad } from './validation-center.js';
 import { ExportError, ImportError, TransactionError as CadTransactionError, asCadError } from './cad-errors.js';
@@ -74,8 +75,10 @@ import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
 import { buildGeneratedLandMapPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
 import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
-import { exportVtxInspectionXml, isVtxEpmXml } from './vtx-inspection-xml.js';
+import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
+import { initNpiWorkspace } from './npi-workspace-ui.js';
+import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
   duplicateProjectRecord, clearTemporaryCache, storageUsage, createAutosaveController,
@@ -148,7 +151,7 @@ const els = {
   cadEditorLandLabel: $('cadEditorLandLabel'), cadEditorSideFilter: $('cadEditorSideFilter'), cadEditorLandSearch: $('cadEditorLandSearch'), cadEditorRenumberComponentButton: $('cadEditorRenumberComponentButton'), cadEditorAddLandButton: $('cadEditorAddLandButton'), cadEditorDuplicateLandButton: $('cadEditorDuplicateLandButton'), cadEditorCutLandButton: $('cadEditorCutLandButton'), cadEditorMergeLandButton: $('cadEditorMergeLandButton'), cadEditorSplitLandButton: $('cadEditorSplitLandButton'), cadEditorDeleteLandButton: $('cadEditorDeleteLandButton'), cadEditorLandTableBody: $('cadEditorLandTableBody'),
   cadEditorLandId: $('cadEditorLandId'), cadEditorLandName: $('cadEditorLandName'), cadEditorLandSide: $('cadEditorLandSide'), cadEditorLandLeft: $('cadEditorLandLeft'), cadEditorLandTop: $('cadEditorLandTop'), cadEditorLandWidth: $('cadEditorLandWidth'), cadEditorLandLength: $('cadEditorLandLength'), cadEditorSaveLandButton: $('cadEditorSaveLandButton'),
   cadEditorMessage: $('cadEditorMessage'), cadEditorExportFormat: $('cadEditorExportFormat'), cadEditorExportSide: $('cadEditorExportSide'), cadEditorApplyButton: $('cadEditorApplyButton'), cadEditorExportXmlButton: $('cadEditorExportXmlButton'), cadEditorExportTgzButton: $('cadEditorExportTgzButton'), cadEditorBoardReverseButton: $('cadEditorBoardReverseButton'), cadEditorGridMapButton: $('cadEditorGridMapButton'), cadEditorGridMapFooterButton: $('cadEditorGridMapFooterButton'),
-  landGridOverlay: $('landGridOverlay'), landGridSubtitle: $('landGridSubtitle'), landGridCloseButton: $('landGridCloseButton'), landGridCancelButton: $('landGridCancelButton'), landGridApplyButton: $('landGridApplyButton'), landGridExportExcelButton: $('landGridExportExcelButton'), landGridResetButton: $('landGridResetButton'), landGridNamingMode: $('landGridNamingMode'), landGridGapMode: $('landGridGapMode'), landGridOrder: $('landGridOrder'), landGridRowDirection: $('landGridRowDirection'), landGridColumnDirection: $('landGridColumnDirection'), landGridPrefix: $('landGridPrefix'), landGridSeparator: $('landGridSeparator'), landGridSuffix: $('landGridSuffix'), landGridRowStart: $('landGridRowStart'), landGridColumnStart: $('landGridColumnStart'), landGridColumnStep: $('landGridColumnStep'), landGridStart: $('landGridStart'), landGridStep: $('landGridStep'), landGridPadding: $('landGridPadding'), landGridSelectedInfo: $('landGridSelectedInfo'), landGridManualName: $('landGridManualName'), landGridApplyManualButton: $('landGridApplyManualButton'), landGridClearManualButton: $('landGridClearManualButton'), landGridTableHead: $('landGridTableHead'), landGridTableBody: $('landGridTableBody'), landGridDimensions: $('landGridDimensions'), landGridChanged: $('landGridChanged'), landGridIssues: $('landGridIssues'),
+  landGridOverlay: $('landGridOverlay'), landGridSubtitle: $('landGridSubtitle'), landGridCloseButton: $('landGridCloseButton'), landGridCancelButton: $('landGridCancelButton'), landGridApplyButton: $('landGridApplyButton'), landGridExportExcelButton: $('landGridExportExcelButton'), landGridResetButton: $('landGridResetButton'), landGridNamingMode: $('landGridNamingMode'), landGridGapMode: $('landGridGapMode'), landGridOrder: $('landGridOrder'), landGridRowDirection: $('landGridRowDirection'), landGridColumnDirection: $('landGridColumnDirection'), landGridPrefix: $('landGridPrefix'), landGridSeparator: $('landGridSeparator'), landGridSuffix: $('landGridSuffix'), landGridRowStart: $('landGridRowStart'), landGridAlphabet: $('landGridAlphabet'), landGridSkipLetters: $('landGridSkipLetters'), landGridStartRow: $('landGridStartRow'), landGridStartColumn: $('landGridStartColumn'), landGridColumnStart: $('landGridColumnStart'), landGridColumnStep: $('landGridColumnStep'), landGridStart: $('landGridStart'), landGridStep: $('landGridStep'), landGridPadding: $('landGridPadding'), landGridSelectedInfo: $('landGridSelectedInfo'), landGridManualName: $('landGridManualName'), landGridApplyManualButton: $('landGridApplyManualButton'), landGridClearManualButton: $('landGridClearManualButton'), landGridTableHead: $('landGridTableHead'), landGridTableBody: $('landGridTableBody'), landGridDimensions: $('landGridDimensions'), landGridChanged: $('landGridChanged'), landGridIssues: $('landGridIssues'),
   nameGridOverlay: $('nameGridOverlay'), nameGridSubtitle: $('nameGridSubtitle'), nameGridCloseButton: $('nameGridCloseButton'), nameGridCancelButton: $('nameGridCancelButton'), nameGridApplyButton: $('nameGridApplyButton'), nameGridResetButton: $('nameGridResetButton'), nameGridComponentSelect: $('nameGridComponentSelect'), nameGridMode: $('nameGridMode'), nameGridOrder: $('nameGridOrder'), nameGridRowDirection: $('nameGridRowDirection'), nameGridColumnDirection: $('nameGridColumnDirection'), nameGridPrefix: $('nameGridPrefix'), nameGridSeparator: $('nameGridSeparator'), nameGridStart: $('nameGridStart'), nameGridStep: $('nameGridStep'), nameGridPadding: $('nameGridPadding'), nameGridMaxLength: $('nameGridMaxLength'), nameGridTableHead: $('nameGridTableHead'), nameGridTableBody: $('nameGridTableBody'), nameGridDimensions: $('nameGridDimensions'), nameGridChanged: $('nameGridChanged'), nameGridIssues: $('nameGridIssues'),
   cadEditorConfirmOverlay: $('cadEditorConfirmOverlay'), cadEditorConfirmDialog: $('cadEditorConfirmDialog'), cadEditorConfirmIcon: $('cadEditorConfirmIcon'), cadEditorConfirmEyebrow: $('cadEditorConfirmEyebrow'), cadEditorConfirmTitle: $('cadEditorConfirmTitle'), cadEditorConfirmMessage: $('cadEditorConfirmMessage'), cadEditorConfirmSummary: $('cadEditorConfirmSummary'), cadEditorConfirmNo: $('cadEditorConfirmNo'), cadEditorConfirmYes: $('cadEditorConfirmYes'), cadEditorBusyOverlay: $('cadEditorBusyOverlay'), cadEditorBusyTitle: $('cadEditorBusyTitle'), cadEditorBusyDetail: $('cadEditorBusyDetail'), cadEditorBusyProgress: $('cadEditorBusyProgress'), cadEditorBusyCancelButton: $('cadEditorBusyCancelButton'), cadEditorBusyCloseButton: $('cadEditorBusyCloseButton'),
   appConfirmOverlay: $('appConfirmOverlay'), appConfirmTitle: $('appConfirmTitle'), appConfirmMessage: $('appConfirmMessage'), appConfirmDetail: $('appConfirmDetail'), appConfirmCancel: $('appConfirmCancel'), appConfirmAccept: $('appConfirmAccept'),
@@ -181,11 +184,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.25.2'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.26.0'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.25.2 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.26.0 · Development · Schema 2';
   }
 }
 
@@ -294,7 +297,7 @@ function populateActiveCadSelect() {
     els.activeCadSelect.append(option);
   }
   if (!els.activeCadSelect.options.length) {
-    const option = document.createElement('option'); option.value = ''; option.textContent = '— ยังไม่มี CAD —'; els.activeCadSelect.append(option);
+    const option = document.createElement('option'); option.value = ''; option.textContent = '— No CAD loaded —'; els.activeCadSelect.append(option);
     els.activeCadSelect.disabled = true;
   } else {
     els.activeCadSelect.disabled = false;
@@ -420,12 +423,12 @@ function availablePairLabel() {
   const hasRaw = Boolean(state.xlsxData);
   const hasOriginal = Boolean(state.cadFiles.original?.data);
   const hasGenerated = Boolean(state.cadFiles.generated?.data);
-  if (hasRaw && hasOriginal && hasGenerated) return `Raw Data ↔ ${cadRoleLabel(state.activeCadRole)} พร้อมสะพาน Original ↔ Generated`;
+  if (hasRaw && hasOriginal && hasGenerated) return `Raw Data ↔ ${cadRoleLabel(state.activeCadRole)} with Original ↔ Generated bridge`;
   if (hasRaw && state.xmlData) return `Raw Data ↔ ${cadRoleLabel(state.activeCadRole)}`;
   if (hasOriginal && hasGenerated) return 'Original CAD ↔ Generated CAD';
   if (state.xmlData) return `${cadRoleLabel(state.activeCadRole)} Viewer`;
-  if (hasRaw) return 'Raw Data รอ CAD อีกหนึ่งไฟล์';
-  return 'ยังไม่มีคู่ข้อมูล';
+  if (hasRaw) return 'Raw Data is waiting for another CAD file';
+  return 'No data pair available';
 }
 function rebuildCadComparison({ showToast = false } = {}) {
   if (!canCompareCad()) { state.cadCompare.result = null; updateCadCompareControls(); return null; }
@@ -433,7 +436,7 @@ function rebuildCadComparison({ showToast = false } = {}) {
   state.cadCompare.result = buildCadComparison(state.cadFiles.original.data, state.cadFiles.generated.data, { coordinateTolerance: state.cadCompare.tolerance, moveTolerance: 0.001 });
   state.cadCompare.page = 1; state.cadCompare.selectedRow = null;
   updateCadCompareControls(); renderCadCompare(); draw();
-  if (showToast) toast(`จับคู่ CAD ได้ ${formatInt.format(state.cadCompare.result.summary.matchedLands)} Land · เปลี่ยนชื่อ ${formatInt.format(state.cadCompare.result.summary.renamed + state.cadCompare.result.summary.renamedMoved)} จุด`);
+  if (showToast) toast(`Matched CAD: ${formatInt.format(state.cadCompare.result.summary.matchedLands)} Land · Rename ${formatInt.format(state.cadCompare.result.summary.renamed + state.cadCompare.result.summary.renamedMoved)} points`);
   return state.cadCompare.result;
 }
 function updateCadCompareControls() {
@@ -443,7 +446,7 @@ function updateCadCompareControls() {
   els.cadCompareOverlayToggle.checked = Boolean(state.cadCompare.overlayEnabled && ready && state.cadCompare.result);
 }
 function cadCompareStatusLabel(status) {
-  return ({ unchanged: 'ตรงกัน', renamed: 'เปลี่ยนชื่อ', moved: 'ตำแหน่งเปลี่ยน', 'renamed-moved': 'ชื่อและตำแหน่งเปลี่ยน', 'missing-generated': 'ไม่พบใน CAD ใหม่', 'extra-generated': 'เกินมาใน CAD ใหม่' })[status] || status;
+  return ({ unchanged: 'Unchanged', renamed: 'Rename', moved: 'Moved', 'renamed-moved': 'Renamed and moved', 'missing-generated': 'Missing in new CAD', 'extra-generated': 'Extra in new CAD' })[status] || status;
 }
 function filteredCadCompareRows() {
   const result = state.cadCompare.result; if (!result) return [];
@@ -464,8 +467,8 @@ function renderCadCompare() {
   els.cadCompareTableBody.innerHTML = '';
   if (!result) {
     for (const id of ['cadCompareComponents','cadCompareMatched','cadCompareRenamed','cadCompareMoved','cadCompareMissing','cadCompareExtra']) els[id].textContent = '0';
-    els.cadCompareMessage.textContent = 'อัปโหลด Original CAD และ Generated CAD เพื่อเริ่มเปรียบเทียบ';
-    els.cadCompareTableSummary.textContent = '0 รายการ'; els.cadComparePageLabel.textContent = '1 / 1'; return;
+    els.cadCompareMessage.textContent = 'Upload Original CAD and Generated CAD to start comparison';
+    els.cadCompareTableSummary.textContent = '0 items'; els.cadComparePageLabel.textContent = '1 / 1'; return;
   }
   const summary = result.summary;
   els.cadCompareComponents.textContent = `${formatInt.format(summary.matchedComponents)} / ${formatInt.format(summary.originalComponents)}`;
@@ -474,7 +477,7 @@ function renderCadCompare() {
   els.cadCompareMoved.textContent = formatInt.format(summary.moved + summary.renamedMoved);
   els.cadCompareMissing.textContent = formatInt.format(summary.missingGenerated);
   els.cadCompareExtra.textContent = formatInt.format(summary.extraGenerated);
-  els.cadCompareMessage.textContent = `จับคู่ XML ID ก่อน และใช้พิกัดภายใน ${formatFloat.format(summary.coordinateTolerance)} mm เป็นแผนสำรอง · Original ${state.cadFiles.original.name} ↔ Generated ${state.cadFiles.generated.name}`;
+  els.cadCompareMessage.textContent = `Match by XML ID first, then use coordinates within ${formatFloat.format(summary.coordinateTolerance)} mm as a fallback · Original ${state.cadFiles.original.name} ↔ Generated ${state.cadFiles.generated.name}`;
   const rows = filteredCadCompareRows();
   const pages = Math.max(1, Math.ceil(rows.length / state.cadCompare.pageSize));
   state.cadCompare.page = Math.max(1, Math.min(pages, state.cadCompare.page));
@@ -489,17 +492,17 @@ function renderCadCompare() {
     ];
     for (const value of values) { const td = document.createElement('td'); td.textContent = String(value); tr.append(td); }
     const statusTd = document.createElement('td'); const badge = document.createElement('span'); badge.className = `cad-compare-status ${item.status}`; badge.textContent = cadCompareStatusLabel(item.status); statusTd.append(badge); tr.append(statusTd);
-    const actionTd = document.createElement('td'); const button = document.createElement('button'); button.type = 'button'; button.className = 'compare-locate-button'; button.textContent = 'ดู'; button.disabled = item.originalGlobalId == null && item.generatedGlobalId == null; button.addEventListener('click', () => locateCadCompareRow(item)); actionTd.append(button); tr.append(actionTd);
+    const actionTd = document.createElement('td'); const button = document.createElement('button'); button.type = 'button'; button.className = 'compare-locate-button'; button.textContent = 'Locate'; button.disabled = item.originalGlobalId == null && item.generatedGlobalId == null; button.addEventListener('click', () => locateCadCompareRow(item)); actionTd.append(button); tr.append(actionTd);
     tr.addEventListener('dblclick', () => locateCadCompareRow(item));
     els.cadCompareTableBody.append(tr);
   }
-  if (!shown.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 9; td.className = 'empty-state'; td.textContent = 'ไม่พบรายการตามตัวกรอง'; tr.append(td); els.cadCompareTableBody.append(tr); }
-  els.cadCompareTableSummary.textContent = `${formatInt.format(rows.length)} รายการ · แสดง ${rows.length ? formatInt.format(start + 1) : 0}–${formatInt.format(Math.min(start + shown.length, rows.length))}`;
+  if (!shown.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 9; td.className = 'empty-state'; td.textContent = 'No items match the current filter'; tr.append(td); els.cadCompareTableBody.append(tr); }
+  els.cadCompareTableSummary.textContent = `${formatInt.format(rows.length)} items · Showing ${rows.length ? formatInt.format(start + 1) : 0}–${formatInt.format(Math.min(start + shown.length, rows.length))}`;
   els.cadComparePageLabel.textContent = `${state.cadCompare.page} / ${pages}`;
   els.cadComparePrevPage.disabled = state.cadCompare.page <= 1; els.cadCompareNextPage.disabled = state.cadCompare.page >= pages;
 }
 function openCadCompare() {
-  if (!canCompareCad()) return toast('กรุณาอัปโหลด Original CAD และ Generated CAD ก่อน');
+  if (!canCompareCad()) return toast('Upload Original CAD and Generated CAD first');
   if (!state.cadCompare.result) rebuildCadComparison();
   els.cadCompareTolerance.value = state.cadCompare.tolerance;
   els.cadCompareFilter.value = state.cadCompare.filter; els.cadCompareSearch.value = state.cadCompare.search;
@@ -528,7 +531,7 @@ function locateCadCompareRow(row) {
   fitCadCompareRow(row); renderCadCompare(); closeCadCompare();
 }
 function fitCadCompareRow(row = state.cadCompare.selectedRow) {
-  if (!row) return toast('เลือกรายการที่ต้องการดูก่อน');
+  if (!row) return toast('Select an item to locate first');
   const lands = [];
   if (Number.isFinite(Number(row.originalX)) && Number.isFinite(Number(row.originalY))) lands.push({ centerX: Number(row.originalX), centerY: Number(row.originalY) });
   if (Number.isFinite(Number(row.generatedX)) && Number.isFinite(Number(row.generatedY))) lands.push({ centerX: Number(row.generatedX), centerY: Number(row.generatedY) });
@@ -555,13 +558,13 @@ function updateEditPanel() {
   state.manualMode = enabled;
   els.manualBanner.classList.toggle('hidden', !enabled);
   els.manualButton.classList.toggle('edit-active', enabled);
-  els.manualButton.textContent = enabled ? 'ออกจาก Edit' : 'โหมด Edit';
+  els.manualButton.textContent = enabled ? 'Exit Edit' : 'Edit Mode';
   els.editAutoNext.checked = state.edit.autoNext;
   els.editLockConfirmed.checked = state.edit.lockConfirmed;
   const mapping = state.selected;
   els.editCurrentLabel.textContent = mapping
-    ? `กำลังแก้ X-ray ${mapping.localIndex} · ปัจจุบัน ${mapping.cadName || 'Unmapped'}`
-    : 'เลือก X-ray Land จากตารางหรือค้นหา';
+    ? `Editing source land ${mapping.localIndex} · current ${mapping.cadName || 'Unmapped'}`
+    : 'Select a source land from the table or search';
   els.editPrevButton.disabled = !enabled || !mapping;
   els.editNextButton.disabled = !enabled || !mapping;
   els.canvas.style.cursor = enabled ? 'crosshair' : '';
@@ -591,7 +594,7 @@ function closeAppConfirm(result = false) {
   if (els.appConfirmCancel) els.appConfirmCancel.disabled = false;
   pending?.resolve?.(Boolean(result));
 }
-function requestAppConfirm({ title = 'ยืนยันการทำรายการ', message = '', detail = '', confirmText = 'Yes - ยืนยัน', cancelText = 'ยกเลิก', destructive = false } = {}) {
+function requestAppConfirm({ title = 'Confirm operation', message = '', detail = '', confirmText = 'Yes - Confirm', cancelText = 'Cancel', destructive = false } = {}) {
   if (!els.appConfirmOverlay) return Promise.resolve(false);
   if (appConfirmPending) closeAppConfirm(false);
   els.appConfirmTitle.textContent = title;
@@ -626,18 +629,18 @@ function closeGlobalError() {
 function showGlobalError(error, context = {}) {
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.25.2', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.26.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
   const diagnostic = currentDiagnosticReport.error || {};
-  els.globalErrorTitle.textContent = context.title || 'ไม่สามารถดำเนินการได้';
+  els.globalErrorTitle.textContent = context.title || 'Unable to complete the operation';
   els.globalErrorCode.textContent = diagnostic.code || 'UNEXPECTED_ERROR';
   els.globalErrorStage.textContent = diagnostic.stage || context.operation || 'unknown';
   els.globalErrorFile.textContent = diagnostic.fileName || context.fileName || '—';
   els.globalErrorMessage.textContent = diagnostic.message || String(error);
-  els.globalErrorRemediation.textContent = diagnostic.remediation || 'ตรวจรายละเอียดแล้วลองใหม่';
-  els.globalErrorTechnical.textContent = diagnostic.technicalDetail || 'ไม่มีรายละเอียดเพิ่มเติม';
+  els.globalErrorRemediation.textContent = diagnostic.remediation || 'Review the details and retry.';
+  els.globalErrorTechnical.textContent = diagnostic.technicalDetail || 'No additional details';
   els.globalErrorOverlay?.classList.remove('hidden');
   document.body.classList.add('global-error-open');
   requestAnimationFrame(() => els.globalErrorClose?.focus());
@@ -645,8 +648,8 @@ function showGlobalError(error, context = {}) {
 async function copyCurrentDiagnostic() {
   if (!currentDiagnosticReport) return;
   const text = diagnosticText(currentDiagnosticReport);
-  try { await navigator.clipboard.writeText(text); toast('คัดลอก Diagnostic แล้ว'); }
-  catch { toast('Browser ไม่อนุญาตให้คัดลอก Diagnostic', 4200); }
+  try { await navigator.clipboard.writeText(text); toast('Diagnostic copied'); }
+  catch { toast('The browser did not allow diagnostic copy', 4200); }
 }
 function downloadCurrentDiagnostic() {
   if (!currentDiagnosticReport) return;
@@ -710,7 +713,7 @@ const autosaveController = createAutosaveController(async ({ session, workspace 
   state.recoveryRecord = record;
   await refreshRecoveryNotice();
   return record;
-}, 1400, (error) => showGlobalError(error, { title: 'Autosave ไม่สำเร็จ', operation: 'autosave-background' }));
+}, 1400, (error) => showGlobalError(error, { title: 'Autosave failed', operation: 'autosave-background' }));
 function scheduleProjectAutosave(file = activeCadFile()) {
   const session = ensureProjectSession(file);
   if (!session?.project?.recovery?.complete) return false;
@@ -718,7 +721,7 @@ function scheduleProjectAutosave(file = activeCadFile()) {
   return true;
 }
 function formatBytes(value) {
-  if (value == null || !Number.isFinite(Number(value))) return 'ไม่ทราบ';
+  if (value == null || !Number.isFinite(Number(value))) return 'Unknown';
   const units = ['B', 'KB', 'MB', 'GB']; let amount = Number(value); let index = 0;
   while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; }
   return `${amount.toLocaleString('th-TH', { maximumFractionDigits: index ? 1 : 0 })} ${units[index]}`;
@@ -731,7 +734,7 @@ async function refreshRecoveryNotice() {
     state.recoveryRecord = records.find((record) => record.id !== currentId) || records[0] || null;
     els.recoveryButton.disabled = !state.recoveryRecord;
     els.recoveryButton.classList.toggle('recovery-ready', Boolean(state.recoveryRecord));
-    els.recoveryButton.textContent = state.recoveryRecord ? `กู้คืน Autosave · R${state.recoveryRecord.revision}` : 'กู้คืน Autosave';
+    els.recoveryButton.textContent = state.recoveryRecord ? `Recover Autosave · R${state.recoveryRecord.revision}` : 'Recover Autosave';
     return records;
   } catch (error) {
     console.warn('Recovery list unavailable', error);
@@ -750,7 +753,7 @@ async function restoreStoredProject(recordOrPayload, { announce = true } = {}) {
   const workspace = recordOrPayload?.workspace || recordOrPayload?.projectWorkspace || {};
   const session = importProjectBackup(payload);
   const legacy = currentProjectLegacyCad(session);
-  if (!legacy?.components) throw new Error('Project Backup ไม่มี Applied CAD Revision ที่กู้คืนได้');
+  if (!legacy?.components) throw new Error('The project backup does not contain a recoverable applied CAD revision');
   const workingXml = projectTextFromSession(session, legacy);
   const project = session.project;
   const source = session.originalSource || project.sourceFiles?.[0] || null;
@@ -774,30 +777,30 @@ async function restoreStoredProject(recordOrPayload, { announce = true } = {}) {
   if (role === 'generated') state.fileNames.generatedXml = state.cadFiles[role].name;
   activateCad(role, { rebuild: true, fit: true });
   syncCadFileLabels();
-  els.importMessage.textContent = `กู้คืน Project ${project.name} · Revision ${project.appliedRevision} สำเร็จ`;
+  els.importMessage.textContent = `Restore Project ${project.name} · Revision ${project.appliedRevision} successful`;
   scheduleProjectAutosave(state.cadFiles[role]);
-  if (announce) toast(`กู้คืน Project Revision ${project.appliedRevision} สำเร็จ`, 4800);
+  if (announce) toast(`Restore Project Revision ${project.appliedRevision} successful`, 4800);
   return state.cadFiles[role];
 }
 function exportFullProjectBackup() {
   try {
     const file = activeCadFile(); const session = ensureProjectSession(file);
-    if (!session) throw new Error('ยังไม่มี Project สำหรับ Backup');
+    if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.25.2'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.26.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.25.2.json`));
-    toast(`Export Project Backup Revision ${session.project.appliedRevision} สำเร็จ`);
-  } catch (error) { showGlobalError(error, { title: 'Export Project Backup ไม่สำเร็จ', operation: 'project-backup-export' }); }
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.26.0.json`));
+    toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
+  } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
 function closeStorageManager() { els.storageOverlay.classList.add('hidden'); }
 async function renderStorageManager() {
   const [records, usage] = await Promise.all([listProjectRecords(), storageUsage()]);
-  els.storageUsageText.textContent = usage.usage == null ? 'Browser ไม่รายงาน Storage Quota' : `ใช้ ${formatBytes(usage.usage)} จาก ${formatBytes(usage.quota)}${usage.percent == null ? '' : ` (${usage.percent.toFixed(1)}%)`}`;
+  els.storageUsageText.textContent = usage.usage == null ? 'The browser does not report a storage quota' : `Using ${formatBytes(usage.usage)} of ${formatBytes(usage.quota)}${usage.percent == null ? '' : ` (${usage.percent.toFixed(1)}%)`}`;
   els.storageProjectCount.textContent = `${formatInt.format(records.length)} Project`;
   els.storageProjectList.innerHTML = '';
-  if (!records.length) { const empty = document.createElement('div'); empty.className = 'storage-empty'; empty.textContent = 'ยังไม่มี Autosave ที่สมบูรณ์'; els.storageProjectList.append(empty); return; }
+  if (!records.length) { const empty = document.createElement('div'); empty.className = 'storage-empty'; empty.textContent = 'No complete autosave is available'; els.storageProjectList.append(empty); return; }
   for (const record of records) {
     const row = document.createElement('div'); row.className = 'storage-project-row'; row.dataset.projectId = record.id;
     const meta = document.createElement('div'); meta.className = 'storage-project-meta';
@@ -805,7 +808,7 @@ async function renderStorageManager() {
     const detail = document.createElement('small'); detail.textContent = `Revision ${record.revision} · ${new Date(record.updatedAt).toLocaleString('th-TH')} · Schema ${record.schemaVersion}`;
     meta.append(title, detail);
     const actions = document.createElement('div'); actions.className = 'storage-project-actions';
-    for (const [action, label] of [['restore','กู้คืน'],['duplicate','Duplicate'],['delete','ลบ']]) { const button = document.createElement('button'); button.type = 'button'; button.dataset.storageAction = action; button.textContent = label; if (action === 'restore') button.className = 'primary'; actions.append(button); }
+    for (const [action, label] of [['restore','Restore'],['duplicate','Duplicate'],['delete','Delete']]) { const button = document.createElement('button'); button.type = 'button'; button.dataset.storageAction = action; button.textContent = label; if (action === 'restore') button.className = 'primary'; actions.append(button); }
     row.append(meta, actions); els.storageProjectList.append(row);
   }
 }
@@ -816,12 +819,12 @@ async function handleStorageAction(event) {
   button.disabled = true;
   try {
     if (button.dataset.storageAction === 'restore') { const record = await loadProjectRecord(id); if (record) { await restoreStoredProject(record); closeStorageManager(); } }
-    else if (button.dataset.storageAction === 'duplicate') { await duplicateProjectRecord(id); await renderStorageManager(); await refreshRecoveryNotice(); toast('Duplicate Project สำเร็จ'); }
+    else if (button.dataset.storageAction === 'duplicate') { await duplicateProjectRecord(id); await renderStorageManager(); await refreshRecoveryNotice(); toast('Project duplicated successfully'); }
     else if (button.dataset.storageAction === 'delete') {
-      const accepted = await requestAppConfirm({ title: 'ลบ Project ที่บันทึกไว้?', message: 'การลบนี้ลบเฉพาะ Autosave ใน Browser และไม่ลบไฟล์ต้นฉบับบนอุปกรณ์', confirmText: 'Yes - ลบ Project' });
-      if (accepted) { await deleteProjectRecord(id); await renderStorageManager(); await refreshRecoveryNotice(); toast('ลบ Project ที่บันทึกไว้แล้ว'); }
+      const accepted = await requestAppConfirm({ title: 'Delete the saved project?', message: 'This deletes only the browser autosave and does not delete the original source file on the device', confirmText: 'Yes - Delete Project' });
+      if (accepted) { await deleteProjectRecord(id); await renderStorageManager(); await refreshRecoveryNotice(); toast('Saved project deleted'); }
     }
-  } catch (error) { showGlobalError(error, { title: 'จัดการ Project ไม่สำเร็จ', operation: `storage-${button.dataset.storageAction}` }); }
+  } catch (error) { showGlobalError(error, { title: 'Project operation failed', operation: `storage-${button.dataset.storageAction}` }); }
   finally { button.disabled = false; }
 }
 
@@ -840,7 +843,7 @@ function buildCurrentCadAudit(scope = state.cadInspector.scope) {
   });
 }
 function cadIssueLabel(issue) {
-  return ({ duplicate: 'ชื่อซ้ำ', 'too-long': 'เกินความยาว', blank: 'ชื่อว่าง' })[issue] || issue;
+  return ({ duplicate: 'duplicate names', 'too-long': 'Too long', blank: 'Blank name' })[issue] || issue;
 }
 function cadInspectorFilteredItems(audit) {
   const filter = state.cadInspector.filter;
@@ -875,7 +878,7 @@ function renderCadInspectorTable() {
     componentCell.append(componentName, document.createElement('br'), componentMeta);
     const localCell = document.createElement('td'); localCell.textContent = item.localIndex ?? '—';
     const idCell = document.createElement('td'); idCell.textContent = item.globalId ?? '—';
-    const originalCell = document.createElement('td'); originalCell.className = 'cad-name-original'; originalCell.textContent = item.originalName || '(ว่าง)';
+    const originalCell = document.createElement('td'); originalCell.className = 'cad-name-original'; originalCell.textContent = item.originalName || '(blank)';
     const finalCell = document.createElement('td');
     const input = document.createElement('input'); input.className = `cad-name-input${item.valid ? '' : ' invalid'}`; input.value = item.proposedName; input.dataset.key = item.key; input.autocomplete = 'off'; input.spellcheck = false;
     input.addEventListener('change', () => {
@@ -888,19 +891,19 @@ function renderCadInspectorTable() {
     finalCell.append(input);
     const lengthCell = document.createElement('td'); lengthCell.textContent = `${item.length}/${state.cadInspector.maxLength}`;
     const issueCell = document.createElement('td'); const issueList = document.createElement('div'); issueList.className = 'cad-issue-list';
-    if (item.valid) { const chip = document.createElement('span'); chip.className = 'cad-issue-chip ok'; chip.textContent = item.changed ? 'ผ่าน' : 'ปกติ'; issueList.append(chip); }
+    if (item.valid) { const chip = document.createElement('span'); chip.className = 'cad-issue-chip ok'; chip.textContent = item.changed ? 'Passed' : 'Normal'; issueList.append(chip); }
     for (const issue of item.issues) { const chip = document.createElement('span'); chip.className = `cad-issue-chip ${issue}`; chip.textContent = cadIssueLabel(issue); issueList.append(chip); }
-    if (item.changed) { const chip = document.createElement('span'); chip.className = 'cad-issue-chip changed'; chip.textContent = 'แก้แล้ว'; issueList.append(chip); }
+    if (item.changed) { const chip = document.createElement('span'); chip.className = 'cad-issue-chip changed'; chip.textContent = 'Changed'; issueList.append(chip); }
     issueCell.append(issueList);
-    const actionCell = document.createElement('td'); const locate = document.createElement('button'); locate.type = 'button'; locate.className = 'cad-row-action'; locate.textContent = 'ดูตำแหน่ง'; locate.addEventListener('click', () => locateCadAuditItem(item)); actionCell.append(locate);
+    const actionCell = document.createElement('td'); const locate = document.createElement('button'); locate.type = 'button'; locate.className = 'cad-row-action'; locate.textContent = 'Locate'; locate.addEventListener('click', () => locateCadAuditItem(item)); actionCell.append(locate);
     row.append(componentCell, localCell, idCell, originalCell, finalCell, lengthCell, issueCell, actionCell);
     els.cadInspectorTableBody.append(row);
   }
 
   if (!shown.length) {
-    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state'; cell.textContent = 'ไม่พบรายการตามตัวกรอง'; row.append(cell); els.cadInspectorTableBody.append(row);
+    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state'; cell.textContent = 'No items match the current filter'; row.append(cell); els.cadInspectorTableBody.append(row);
   }
-  els.cadInspectorTableSummary.textContent = `${formatInt.format(items.length)} รายการ · แสดง ${items.length ? formatInt.format(start + 1) : 0}–${formatInt.format(Math.min(start + shown.length, items.length))}`;
+  els.cadInspectorTableSummary.textContent = `${formatInt.format(items.length)} items · Showing ${items.length ? formatInt.format(start + 1) : 0}–${formatInt.format(Math.min(start + shown.length, items.length))}`;
   els.cadInspectorPageLabel.textContent = `${state.cadInspector.page} / ${pages}`;
   els.cadInspectorPrevPage.disabled = state.cadInspector.page <= 1;
   els.cadInspectorNextPage.disabled = state.cadInspector.page >= pages;
@@ -953,17 +956,17 @@ function refreshCadInspector() {
   els.cadAuditChanged.textContent = formatInt.format(summary.changed);
   const fullAudit = buildCurrentCadAudit('all');
   els.cadExportXmlButton.disabled = fullAudit.summary.unresolved > 0;
-  els.cadExportXmlButton.title = fullAudit.summary.unresolved ? `ยังมีชื่อไม่ผ่าน ${fullAudit.summary.unresolved} จุดใน CAD` : 'พร้อมส่งออก XML';
+  els.cadExportXmlButton.title = fullAudit.summary.unresolved ? `Unresolved names: ${fullAudit.summary.unresolved} points in CAD` : 'Ready to export XML';
   els.cadApplyNamesButton.disabled = state.cadInspector.renames.size === 0;
   els.cadResetNamesButton.disabled = state.cadInspector.renames.size === 0;
   els.cadInspectorMessage.textContent = fullAudit.summary.unresolved
-    ? `ขอบเขตนี้ยังมีปัญหา ${formatInt.format(summary.unresolved)} จุด · ทั้ง CAD ยังไม่ผ่าน ${formatInt.format(fullAudit.summary.unresolved)} จุด จึงยัง Export XML ไม่ได้`
-    : `CAD ผ่านการตรวจทั้งหมดแล้ว · ชื่อไม่ซ้ำภายใน Component และยาวไม่เกิน ${state.cadInspector.maxLength} ตัวอักษร`;
+    ? `This scope still has ${formatInt.format(summary.unresolved)} points · the full CAD still has ${formatInt.format(fullAudit.summary.unresolved)} points, so XML export remains blocked`
+    : `CAD validation passed · names are unique within each component and no longer than ${state.cadInspector.maxLength} characters`;
   updateCadRuleControls();
   renderCadInspectorTable();
 }
 function openCadInspector() {
-  if (!state.xmlData) return toast('กรุณานำเข้า CAD XML ก่อน');
+  if (!state.xmlData) return toast('Import CAD XML first');
   els.cadInspectorScope.value = state.cadInspector.scope;
   els.cadMaxLength.value = state.cadInspector.maxLength;
   els.cadOverflowMode.value = state.cadInspector.overflowMode;
@@ -980,7 +983,7 @@ function openCadInspectorForComponent(componentId) {
   if (!state.xmlData) return false;
   const id = String(componentId ?? '');
   const component = state.xmlData.componentById?.get(id) || state.xmlData.components?.find((item) => String(item.id) === id);
-  if (!component) return toast('ไม่พบ Component นี้ใน Applied Revision กรุณา Apply ก่อนตรวจชื่อ');
+  if (!component) return toast('This component was not found in the applied revision. Apply changes before checking names');
   state.selectedComponentId = id;
   state.cadInspector.scope = 'current';
   state.cadInspector.filter = 'all';
@@ -991,7 +994,7 @@ function openCadInspectorForComponent(componentId) {
 }
 function requestCadNameInspectorFromEditor() {
   const component = cadEditorSingleComponentForTool();
-  if (!component) return toast('เลือก Component เพียง 1 ตัวก่อนเปิดตรวจสอบชื่อ');
+  if (!component) return toast('Select exactly one component before opening Name Check');
   const componentId = String(component.originalId ?? component.id ?? '');
   return closeCadEditor({ pendingAction: () => openCadInspectorForComponent(componentId) });
 }
@@ -1001,7 +1004,7 @@ function closeCadInspector() {
 }
 async function generateCadNames(renameAll = false) {
   if (!state.xmlData) return;
-  if (renameAll && !(await requestAppConfirm({ title: 'สร้างชื่อ Land ใหม่ทั้งหมด?', message: 'ชื่อเดิมจะยังอยู่ใน Immutable Source และจะเปลี่ยนเฉพาะ Working Model จนกว่าจะ Apply/Export', detail: `ขอบเขต: ${state.cadInspector.scope}`, confirmText: 'Yes - สร้างชื่อใหม่' }))) return;
+  if (renameAll && !(await requestAppConfirm({ title: 'Generate new names for all lands?', message: 'Original names remain in the immutable source; only the working model changes until Apply/Export', detail: `Scope: ${state.cadInspector.scope}`, confirmText: 'Yes - Generate Names' }))) return;
   try {
     const result = generateCadRenames(state.xmlData, state.cadInspector.renames, {
       maxLength: state.cadInspector.maxLength,
@@ -1016,7 +1019,7 @@ async function generateCadNames(renameAll = false) {
     state.cadInspector.page = 1;
     applyCadNamesToProject({ silent: true });
     refreshCadInspector();
-    toast(`สร้างชื่อที่ไม่ซ้ำและซิงก์กับ Viewer แล้ว ${formatInt.format(result.generated)} จุด`);
+    toast(`Generated unique names and synchronized them with Viewer ${formatInt.format(result.generated)} points`);
   } catch (error) { toast(error.message, 5200); }
 }
 function syncCadNamesToEditorModel(file = activeCadFile()) {
@@ -1084,15 +1087,15 @@ function applyCadNamesToProject({ silent = false } = {}) {
   refreshDuplicateControls(); renderTable(); draw(); updateStats();
   if (state.selected) selectMapping(state.selected, false);
   if (state.cadEditor.model && file?.editorModel === state.cadEditor.model) renderCadEditor();
-  if (!silent) toast(`ซิงก์ชื่อใหม่กับหน้า Viewer แล้ว ${formatInt.format(state.cadInspector.renames.size)} จุด`);
+  if (!silent) toast(`New names synchronized with Viewer ${formatInt.format(state.cadInspector.renames.size)} points`);
   return changedComponents.size;
 }
 async function resetCadNames() {
   if (!state.cadInspector.renames.size) return;
-  if (!(await requestAppConfirm({ title: 'คืนชื่อ CAD จากต้นฉบับ?', message: 'ชื่อที่แก้ใน Working Model จะถูกคืนค่า แต่ไฟล์ต้นฉบับยังไม่ถูกแก้ไข', confirmText: 'Yes - คืนชื่อเดิม', destructive: true }))) return;
+  if (!(await requestAppConfirm({ title: 'Restore CAD names from source?', message: 'Edited names in the working model will be restored; the original source file remains unchanged', confirmText: 'Yes - Restore Names', destructive: true }))) return;
   state.cadInspector.renames.clear();
   applyCadNamesToProject({ silent: true });
-  state.cadInspector.page = 1; refreshCadInspector(); toast('คืนชื่อเดิมแล้ว');
+  state.cadInspector.page = 1; refreshCadInspector(); toast('Original names restored');
 }
 function locateCadAuditItem(item) {
   const component = state.xmlData?.componentById.get(String(item.componentId));
@@ -1101,7 +1104,7 @@ function locateCadAuditItem(item) {
   let option = [...els.componentSelect.options].find((candidate) => candidate.value === String(component.id));
   if (!option) { option = document.createElement('option'); option.value = String(component.id); option.textContent = `${component.name} · CAD Inspector · ${formatInt.format(component.lands.length)} lands`; els.componentSelect.append(option); }
   state.selectedComponentId = String(component.id); els.componentSelect.value = String(component.id); state.duplicateView.selectedName = '';
-  closeCadInspector(); refreshDuplicateControls(); fitView(); selectLand(land); toast(`ตำแหน่ง ${component.name} / XML ID ${item.globalId}`);
+  closeCadInspector(); refreshDuplicateControls(); fitView(); selectLand(land); toast(`positions ${component.name} / XML ID ${item.globalId}`);
 }
 function exportCadAuditReport() {
   const audit = buildCurrentCadAudit();
@@ -1114,13 +1117,13 @@ function exportCorrectedCadXml() {
   if (fullAudit.summary.unresolved) {
     state.cadInspector.scope = 'all'; state.cadInspector.filter = 'issues'; state.cadInspector.page = 1;
     els.cadInspectorScope.value = 'all'; els.cadIssueFilter.value = 'issues'; refreshCadInspector();
-    return toast(`ยัง Export ไม่ได้: CAD มีชื่อไม่ผ่าน ${formatInt.format(fullAudit.summary.unresolved)} จุด`, 5200);
+    return toast(`Export is blocked: CAD has unresolved names: ${formatInt.format(fullAudit.summary.unresolved)} points`, 5200);
   }
   const output = rewriteCadXml(state.xmlText, state.cadInspector.renames);
   const original = state.fileNames.xml || 'cad.xml';
   const stem = original.replace(/\.xml$/i, '');
   downloadBlob(new Blob([output], { type: 'application/xml;charset=utf-8' }), `${stem}_cad_checked.xml`);
-  toast(`Export CAD XML สำเร็จ · แก้ชื่อ ${formatInt.format(state.cadInspector.renames.size)} จุด`);
+  toast(`Export CAD XML successful · renamed ${formatInt.format(state.cadInspector.renames.size)} points`);
 }
 
 function isBoardView() { return state.selectedComponentId === BOARD_VIEW; }
@@ -1231,14 +1234,14 @@ function refreshDuplicateControls() {
   const current = groups.has(state.duplicateView.selectedName) ? state.duplicateView.selectedName : '';
   state.duplicateView.selectedName = current;
   els.duplicateNameSelect.innerHTML = '';
-  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = groups.size ? `— เลือกจาก ${formatInt.format(groups.size)} ชื่อซ้ำ —` : '— ไม่พบชื่อซ้ำ —'; els.duplicateNameSelect.append(placeholder);
-  for (const [name, lands] of groups) { const option = document.createElement('option'); option.value = name; option.textContent = `${name} · ${formatInt.format(lands.length)} ตำแหน่ง`; els.duplicateNameSelect.append(option); }
+  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = groups.size ? `— Select from ${formatInt.format(groups.size)} duplicate names —` : '— No duplicate names —'; els.duplicateNameSelect.append(placeholder);
+  for (const [name, lands] of groups) { const option = document.createElement('option'); option.value = name; option.textContent = `${name} · ${formatInt.format(lands.length)} positions`; els.duplicateNameSelect.append(option); }
   els.duplicateNameSelect.value = current;
   els.duplicateNameSelect.disabled = groups.size === 0;
   els.duplicateToggle.disabled = groups.size === 0;
   els.duplicateOnlyToggle.disabled = groups.size === 0 || !state.duplicateView.enabled;
   const duplicateLandCount = [...groups.values()].reduce((sum, lands) => sum + lands.length, 0);
-  els.duplicateSummaryMini.textContent = groups.size ? `${formatInt.format(groups.size)} ชื่อซ้ำ · รวม ${formatInt.format(duplicateLandCount)} ตำแหน่งใน ${currentComponent()?.name || 'Part'}` : 'ไม่พบชื่อ CAD ซ้ำใน Part นี้';
+  els.duplicateSummaryMini.textContent = groups.size ? `${formatInt.format(groups.size)} duplicate names · total ${formatInt.format(duplicateLandCount)} positionsin ${currentComponent()?.name || 'Part'}` : 'No duplicate CAD names in this part';
   renderDuplicatePanel();
 }
 function renderDuplicatePanel() {
@@ -1250,23 +1253,23 @@ function renderDuplicatePanel() {
   els.fitDuplicateButton.disabled = lands.length === 0;
   els.clearDuplicateButton.disabled = lands.length === 0;
   if (!groups.size) {
-    els.duplicatePanelMessage.textContent = 'ไม่พบชื่อ CAD ซ้ำใน Part ที่เลือก';
-    els.duplicatePositionList.innerHTML = '<p class="empty-state">ไม่มีตำแหน่งซ้ำ</p>';
+    els.duplicatePanelMessage.textContent = 'No duplicate CAD names in the selected part';
+    els.duplicatePositionList.innerHTML = '<p class="empty-state">No duplicate positions</p>';
     return;
   }
   if (!lands.length) {
-    els.duplicatePanelMessage.textContent = `พบ ${formatInt.format(groups.size)} ชื่อซ้ำ เลือก Land หรือชื่อจากเมนูด้านซ้ายเพื่อดูตำแหน่งทั้งหมด`;
-    els.duplicatePositionList.innerHTML = '<p class="empty-state">ยังไม่ได้เลือกกลุ่มชื่อซ้ำ</p>';
+    els.duplicatePanelMessage.textContent = `Found ${formatInt.format(groups.size)} duplicate-name groups. Select a land or a name from the left menu to locate every position`;
+    els.duplicatePositionList.innerHTML = '<p class="empty-state">No duplicate-name group selected</p>';
     return;
   }
-  els.duplicatePanelMessage.textContent = `${name} พบซ้ำ ${formatInt.format(lands.length)} ตำแหน่ง เส้นประบนกราฟิกเชื่อมตำแหน่งในกลุ่มเดียวกัน`;
+  els.duplicatePanelMessage.textContent = `${name} duplicated at ${formatInt.format(lands.length)} positions Dashed lines connect positions in the same duplicate group`;
   const byGlobal = mappingByGlobalId();
   lands.forEach((land, index) => {
     const mapping = byGlobal.get(Number(land.globalId));
     const button = document.createElement('button'); button.type = 'button'; button.className = 'duplicate-position-item';
     if (state.selected && Number(state.selected.globalId) === Number(land.globalId)) button.classList.add('active');
     const text = document.createElement('div'); const title = document.createElement('strong'); title.textContent = `${name} · XML ${land.globalId}`;
-    const meta = document.createElement('span'); meta.textContent = `X ${formatFloat.format(land.centerX)} · Y ${formatFloat.format(land.centerY)}${mapping ? ` · X-ray ${mapping.localIndex}` : ' · ไม่มีข้อมูลดิบ'}`;
+    const meta = document.createElement('span'); meta.textContent = `X ${formatFloat.format(land.centerX)} · Y ${formatFloat.format(land.centerY)}${mapping ? ` · Source ${mapping.localIndex}` : ' · no source table data'}`;
     text.append(title, meta); const badge = document.createElement('i'); badge.className = 'duplicate-position-index'; badge.textContent = String(index + 1); button.append(text, badge);
     button.addEventListener('click', () => { selectLand(land); centerOn(land.centerX, land.centerY); });
     els.duplicatePositionList.append(button);
@@ -1376,13 +1379,13 @@ function refreshAfterEdit() {
 }
 
 function columnOptionLabel(descriptor) {
-  const header = descriptor.header ? String(descriptor.header) : 'ไม่มีหัวคอลัมน์';
-  const sample = descriptor.sample !== '' ? `ตัวอย่าง ${String(descriptor.sample).slice(0, 28)}` : 'ไม่มีข้อมูล';
+  const header = descriptor.header ? String(descriptor.header) : 'No column header';
+  const sample = descriptor.sample !== '' ? `Sample ${String(descriptor.sample).slice(0, 28)}` : 'No data';
   return `${columnName(descriptor.col)} · ${header} · ${sample}`;
 }
 function fillColumnSelect(select, descriptors, selected, optional = false) {
   select.innerHTML = '';
-  if (optional) { const none = document.createElement('option'); none.value = ''; none.textContent = '— ไม่ใช้คอลัมน์นี้ —'; select.append(none); }
+  if (optional) { const none = document.createElement('option'); none.value = ''; none.textContent = '— Do not use this column —'; select.append(none); }
   for (const descriptor of descriptors) {
     const option = document.createElement('option'); option.value = String(descriptor.col); option.textContent = columnOptionLabel(descriptor); option.selected = descriptor.col === selected; select.append(option);
   }
@@ -1428,19 +1431,19 @@ function populateComponents(preferredId = null) {
 
   const boardOption = document.createElement('option');
   boardOption.value = BOARD_VIEW;
-  boardOption.textContent = `ทั้งบอร์ด · ${formatInt.format(components.length)} Components · ${formatInt.format(state.xmlData.totalLands || 0)} lands`;
+  boardOption.textContent = `Full board · ${formatInt.format(components.length)} Components · ${formatInt.format(state.xmlData.totalLands || 0)} lands`;
   els.componentSelect.append(boardOption);
 
   for (const component of components) {
     const summary = summaryById.get(String(component.id));
     const option = document.createElement('option'); option.value = String(component.id);
     const sourceLabel = summary ? `Raw ${formatInt.format(summary.xrayCount)} · CAD ${formatInt.format(component.lands.length)}` : `CAD only · ${formatInt.format(component.lands.length)} lands`;
-    option.textContent = `${component.name || `ID ${component.id}`} · ${component.packageName || 'ไม่ทราบ package'} · ${sourceLabel}`;
+    option.textContent = `${component.name || `ID ${component.id}`} · ${component.packageName || 'Unknown package'} · ${sourceLabel}`;
     els.componentSelect.append(option);
   }
   for (const summary of summaries.filter((item) => item.componentId == null)) {
     const option = document.createElement('option'); option.disabled = true;
-    option.textContent = `${summary.componentName || 'ไม่ทราบชื่อ'} · ไม่พบ Component นี้ใน CAD · Raw ${formatInt.format(summary.xrayCount)} rows`;
+    option.textContent = `${summary.componentName || 'Unknown name'} · This component was not found in CAD · Raw ${formatInt.format(summary.xrayCount)} rows`;
     els.componentSelect.append(option);
   }
   const allowed = new Set([BOARD_VIEW, ...components.map((component) => String(component.id))]);
@@ -1464,22 +1467,22 @@ function updateStats() {
   const anchors = currentMappings().filter((mapping) => mapping.anchorLocked).length;
   if (summary && stats) {
     const methods = [];
-    if (stats.exactCadName) methods.push(`ชื่อ CAD ตรง ${formatInt.format(stats.exactCadName)}`);
-    if (stats.exactOtherCadName) methods.push(`ผ่าน CAD อีกฝั่ง ${formatInt.format(stats.exactOtherCadName)}`);
+    if (stats.exactCadName) methods.push(`Exact CAD name ${formatInt.format(stats.exactCadName)}`);
+    if (stats.exactOtherCadName) methods.push(`Matched through the other CAD ${formatInt.format(stats.exactOtherCadName)}`);
     if (stats.xmlGlobalId) methods.push(`XML ID ${formatInt.format(stats.xmlGlobalId)}`);
-    if (stats.localOrderGuess) methods.push(`เดาลำดับ ${formatInt.format(stats.localOrderGuess)}`);
-    if (stats.ambiguous) methods.push(`ชื่อกำกวม ${formatInt.format(stats.ambiguous)}`);
-    els.mappingFormula.innerHTML = `Component ${escapeHtml(summary.componentName)}: คอลัมน์ ${escapeHtml(columnName(state.schema?.landCol ?? 0))} · โหมด ${escapeHtml(state.schema?.landMode || 'auto')} · รองรับตัวเลขและข้อความ<br>${escapeHtml(methods.join(' · ') || 'ยังไม่พบคู่')} · Confirmed ${formatInt.format(stats.verified || 0)} · Anchor ${formatInt.format(anchors)}`;
-  } else if (state.mappingData && currentComponent()) els.mappingFormula.textContent = `${currentComponent().name}: CAD only · ไม่มีข้อมูลดิบของ Component นี้ แต่ยังดู แก้ชื่อ และ Export CAD ได้`;
-  else if (canCompareCad() && state.cadCompare.result) els.mappingFormula.textContent = `Original CAD ↔ Generated CAD จับคู่โดย XML ID และพิกัดได้ ${formatInt.format(state.cadCompare.result.summary.matchedLands)} Land โดยไม่ต้องใช้ข้อมูลดิบ`;
-  else if (state.xmlData) els.mappingFormula.textContent = `${cadRoleLabel(state.activeCadRole)} เปิดแบบ CAD Viewer · อัปโหลด XLSX หรือ CAD อีกฝั่งเพื่อ Mapping`;
-  else els.mappingFormula.textContent = 'ยังไม่มีสูตร Mapping';
+    if (stats.localOrderGuess) methods.push(`Order guess ${formatInt.format(stats.localOrderGuess)}`);
+    if (stats.ambiguous) methods.push(`Ambiguous names ${formatInt.format(stats.ambiguous)}`);
+    els.mappingFormula.innerHTML = `Component ${escapeHtml(summary.componentName)}: columns ${escapeHtml(columnName(state.schema?.landCol ?? 0))} · mode ${escapeHtml(state.schema?.landMode || 'auto')} · supports numeric and text references<br>${escapeHtml(methods.join(' · ') || 'No match yet')} · Confirmed ${formatInt.format(stats.verified || 0)} · Anchor ${formatInt.format(anchors)}`;
+  } else if (state.mappingData && currentComponent()) els.mappingFormula.textContent = `${currentComponent().name}: CAD only · No source-table data exists for this component, but CAD viewing, naming, and export remain available`;
+  else if (canCompareCad() && state.cadCompare.result) els.mappingFormula.textContent = `Original CAD ↔ Generated CAD matched by XML ID and coordinates: ${formatInt.format(state.cadCompare.result.summary.matchedLands)} lands without requiring source table data`;
+  else if (state.xmlData) els.mappingFormula.textContent = `${cadRoleLabel(state.activeCadRole)} opened in CAD Viewer · Upload XLSX or the other CAD revision to map`;
+  else els.mappingFormula.textContent = 'No mapping formula yet';
   const ready = Boolean(state.xmlData && state.xlsxData && state.mappingData);
   els.exportCsvButton.disabled = !state.xmlData;
   if (ready) els.projectStatus.textContent = `${availablePairLabel()} · ${formatInt.format(stats.verified || 0)} verified · ${formatInt.format(stats.unverified || 0)} unverified`;
   else if (canCompareCad() && state.cadCompare.result) els.projectStatus.textContent = `${availablePairLabel()} · ${formatInt.format(state.cadCompare.result.summary.matchedLands)} matched`;
   else if (state.xmlData) els.projectStatus.textContent = `${availablePairLabel()} · ${formatInt.format(state.xmlData.totalLands)} lands`;
-  else els.projectStatus.textContent = 'ยังไม่ได้เปิดโปรเจกต์';
+  else els.projectStatus.textContent = 'No project is open';
   els.projectStatus.className = `status-pill ${state.xmlData ? 'ready' : 'muted'}`;
   els.remapButton.disabled = !state.xmlData || !state.xlsxData;
   els.cadInspectorButton.disabled = !state.xmlData;
@@ -1491,20 +1494,20 @@ function updateStats() {
 async function runMapping() {
   if (!state.xmlData || !state.xlsxData) return;
   const hasManual = state.mappingData?.mappings.some((m) => m.manual || m.anchorLocked);
-  if (hasManual && !(await requestAppConfirm({ title: 'คำนวณ Mapping ใหม่?', message: 'ระบบจะคำนวณ Candidate ใหม่และพยายามรักษา Manual Mapping ที่ Target ยังถูกต้อง', detail: 'Manual Mapping ที่ Target หายไปจะเปลี่ยนเป็น Conflict แทนการถูกลบทิ้ง', confirmText: 'Yes - คำนวณใหม่' }))) return;
+  if (hasManual && !(await requestAppConfirm({ title: 'Recalculate mapping?', message: 'The system will recalculate candidates and preserve manual mappings whose targets are still valid', detail: 'Manual mappings whose targets disappeared will become conflicts instead of being deleted', confirmText: 'Yes - Recalculate' }))) return;
   state.schema = readSchemaControls(); state.mappingData = buildMappings(state.xmlData, state.xlsxData, state.schema, { alternateCadData: alternateCadData(), coordinateTolerance: state.cadCompare.tolerance }); normalizeMappings(); resetHistogramState();
   state.undoStack = []; state.redoStack = []; state.preview = null;
   state.selectedComponentId = BOARD_VIEW;
   populateComponents(BOARD_VIEW); state.page = 1;
   updateStats(); renderTable(); renderTeachPanel(); fitView(); draw(); renderHistogram();
-  toast(`จับคู่สำเร็จ ${formatInt.format(state.mappingData.stats.mapped)} จาก ${formatInt.format(state.mappingData.stats.total)} รายการ`);
+  toast(`Mapped ${formatInt.format(state.mappingData.stats.mapped)} from ${formatInt.format(state.mappingData.stats.total)} items`);
 }
 async function processFile(file, cadRole = 'auto') {
   if (!file) return;
   const importStarted = performance.now();
   let importSucceeded = false;
   let autoOpenEditor = false;
-  setLoading(true, `กำลังเปิด ${file.name}…`); await nextFrame();
+  setLoading(true, `Opening ${file.name}…`); await nextFrame();
   try {
     const lowerName = String(file.name || '').toLowerCase();
     let archive = null;
@@ -1522,9 +1525,9 @@ async function processFile(file, cadRole = 'auto') {
         els.archiveDiagnostics.classList.remove('hidden');
         els.archiveDiagnosticsText.textContent = [`Format: ${probe.format}`, `Encoding: ${probe.encoding}`, `Delimiter: ${project.tableData.delimiter === '\t' ? 'TAB' : project.tableData.delimiter}`, `Rows: ${project.tableData.rowCount}`, `Columns: ${project.tableData.columnCount}`, `Unit hint: ${project.tableData.unit}`, ...project.tableData.warnings].join('\n');
       } else if (['gerber', 'excellon'].includes(probe.format)) {
-        throw new ImportError(`${probe.format.toUpperCase()} ถูกตรวจพบ แต่เวอร์ชันนี้รองรับเฉพาะ Format Detection/Preflight และยังไม่มี Geometry Viewer/Writer ที่ครบถ้วน`, { stage: 'format-adapter', fileName: file.name, code: `PARTIAL_${probe.format.toUpperCase()}_IMPORT`, remediation: 'เก็บไฟล์ต้นฉบับไว้ และใช้ ODB++/IPC-2581/Inspection XML หรือ CAD XY สำหรับ Workflow ที่ต้องแก้ไข Component/Land', context: probe });
+        throw new ImportError(`${probe.format.toUpperCase()} was detected, but this version supports detection/preflight only and does not yet include a complete geometry viewer/writer`, { stage: 'format-adapter', fileName: file.name, code: `PARTIAL_${probe.format.toUpperCase()}_IMPORT`, remediation: 'Keep the original source file and use a supported structured CAD or placement format for workflows that edit components or lands', context: probe });
       } else {
-      // ZIP อาจเป็นโปรเจกต์เดิมที่มี XLSX อยู่ข้าง CAD จึงอ่าน XLSX เพิ่มโดยไม่รบกวน Archive tree
+      // A legacy ZIP may contain an XLSX beside CAD data; read it without mutating the archive tree
       if (lowerName.endsWith('.zip')) {
         try {
           const directProject = await extractProjectFiles(file);
@@ -1532,20 +1535,20 @@ async function processFile(file, cadRole = 'auto') {
             project.xlsxBuffer = directProject.xlsxBuffer;
             project.names.xlsx = directProject.names.xlsx || file.name;
           }
-        } catch { /* Nested ZIP/TGZ จะถูกอ่านด้วย package reader ด้านล่าง */ }
+        } catch { /* Nested ZIP/TGZ is handled by the package reader below. */ }
       }
 
-      els.importMessage.textContent = 'กำลังแตก TGZ/ZIP และตรวจ components.Z, eda/data.Z, XML…'; await nextFrame();
+      els.importMessage.textContent = 'Extracting TGZ/ZIP and inspecting candidate CAD files…'; await nextFrame();
       const packageInfo = await readCadPackageFile(file);
       els.archiveDiagnostics.classList.remove('hidden');
       els.archiveDiagnosticsText.textContent = packageInfo.diagnostics.length
         ? packageInfo.diagnostics.join('\n')
-        : `Archive: ${file.name}\nไม่พบข้อความวินิจฉัยเพิ่มเติม`;
+        : `Archive: ${file.name}\nNo additional diagnostic details`;
       const selected = packageInfo.candidates[0];
       if (!selected) {
         if (!project.xlsxBuffer) {
           const detail = packageInfo.diagnostics.length ? ` · ${packageInfo.diagnostics.slice(0, 3).join(' · ')}` : '';
-          throw new ImportError(`ไม่พบ CAD ที่รองรับภายในไฟล์${detail}`, { stage: 'format-detection', fileName: file.name, code: 'IMPORT_NO_SUPPORTED_CAD', remediation: 'ตรวจ Diagnostic Report ว่าไฟล์ใดและโครงสร้างใดถูกตรวจพบ แล้วเลือกไฟล์ CAD/BOM/XY ที่รองรับ', context: { diagnostics: packageInfo.diagnostics.slice(0, 20), candidateCount: packageInfo.candidates.length } });
+          throw new ImportError(`No supported CAD data was found in the file${detail}`, { stage: 'format-detection', fileName: file.name, code: 'IMPORT_NO_SUPPORTED_CAD', remediation: 'Check the diagnostic report for detected files and structures, then choose a supported CAD/BOM/placement file', context: { diagnostics: packageInfo.diagnostics.slice(0, 20), candidateCount: packageInfo.candidates.length } });
         }
       } else {
         archive = {
@@ -1557,7 +1560,7 @@ async function processFile(file, cadRole = 'auto') {
         project.xmlText = selected.text;
         project.names.xml = selected.format === 'odb++' ? `${file.name.replace(/\.(?:zip|tgz|tar\.gz|tar|gz)$/i, '') || 'odb'}_converted.xml` : (selected.node?.name || selected.displayPath || file.name);
         const rootLabel = packageInfo.root.kind.toUpperCase();
-        const nested = packageInfo.candidates.length > 1 ? ` · พบตัวเลือก ${packageInfo.candidates.length} รายการ` : '';
+        const nested = packageInfo.candidates.length > 1 ? ` · candidates found ${packageInfo.candidates.length} items` : '';
         const formatLabel = selected.format === 'odb++' ? `ODB++ → Working Model · ${selected.odbInfo.components} Components / ${selected.odbInfo.lands} Lands` : `${selected.format || 'CAD'} → Working Model · ${selected.displayPath}`;
         els.importMessage.textContent = `${rootLabel} → ${formatLabel}${nested}`;
       }
@@ -1567,17 +1570,17 @@ async function processFile(file, cadRole = 'auto') {
     let importedRole = null;
     if (project.xmlText) {
       importedRole = cadRole === 'generated' ? 'generated' : 'original';
-      els.importMessage.textContent = `กำลังอ่าน ${cadRoleLabel(importedRole)}…`; await nextFrame();
+      els.importMessage.textContent = `Reading ${cadRoleLabel(importedRole)}…`; await nextFrame();
       storeCadFile(importedRole, project.xmlText, project.names.xml || file.name, { archive, sourceFormat: archive?.candidate?.format || 'inspection-xml' });
     }
     if (project.xlsxBuffer) {
       state.xlsxBuffer = project.xlsxBuffer; state.fileNames.xlsx = project.names.xlsx || file.name;
-      els.importMessage.textContent = 'กำลังอ่านตารางผล X-ray จาก XLSX…'; await nextFrame();
+      els.importMessage.textContent = 'Reading source measurement table from XLSX…'; await nextFrame();
       state.xlsxData = await parseXlsx(project.xlsxBuffer);
     } else if (project.tableData) {
       state.xlsxBuffer = null; state.fileNames.xlsx = project.names.xlsx || file.name;
       state.xlsxData = project.tableData;
-      els.importMessage.textContent = `เปิด ${project.tableData.format} แล้ว · ${formatInt.format(project.tableData.rowCount)} แถว · เลือกคอลัมน์เพื่อ Mapping`;
+      els.importMessage.textContent = `Opened ${project.tableData.format} completed · ${formatInt.format(project.tableData.rowCount)} rows · choose columns for mapping`;
     }
     syncCadFileLabels();
 
@@ -1592,29 +1595,29 @@ async function processFile(file, cadRole = 'auto') {
     if (canCompareCad()) {
       rebuildCadComparison();
       const summary = state.cadCompare.result.summary;
-      els.importMessage.textContent = `${availablePairLabel()} · CAD↔CAD จับคู่ ${formatInt.format(summary.matchedLands)} Land · เปลี่ยนชื่อ ${formatInt.format(summary.renamed + summary.renamedMoved)} จุด${state.mappingData ? ` · Raw verified ${formatInt.format(state.mappingData.stats.verified || 0)}` : ''}`;
+      els.importMessage.textContent = `${availablePairLabel()} · CAD↔CAD matched ${formatInt.format(summary.matchedLands)} Land · Rename ${formatInt.format(summary.renamed + summary.renamedMoved)} points${state.mappingData ? ` · Raw verified ${formatInt.format(state.mappingData.stats.verified || 0)}` : ''}`;
       if (importedRole === 'generated') openCadCompare();
     } else if (state.xmlData && state.xlsxData && state.mappingData) {
       const summaries = state.mappingData.componentSummaries;
       const matchedParts = summaries.filter((summary) => summary.matched).length;
       const exactParts = summaries.filter((summary) => summary.countMatch).length;
       const missingParts = summaries.length - matchedParts;
-      els.importMessage.textContent = `เปิดทั้งบอร์ดแล้ว · Raw ${formatInt.format(summaries.length)} Part · จับคู่ CAD ${formatInt.format(matchedParts)} Part · จำนวน Land ตรง ${formatInt.format(exactParts)} Part${missingParts ? ` · ไม่พบใน CAD ${formatInt.format(missingParts)} Part` : ''}`;
+      els.importMessage.textContent = `Full board opened · Raw ${formatInt.format(summaries.length)} Part · matched CAD ${formatInt.format(matchedParts)} Part · land counts match ${formatInt.format(exactParts)} Part${missingParts ? ` · missing in CAD ${formatInt.format(missingParts)} Part` : ''}`;
     } else if (state.xmlData) {
       const convertedOdb = archive?.candidate?.format === 'odb++';
       const archiveLabel = convertedOdb
-        ? ` · e-PM/ODB++ ถูกแปลงเป็น XML (เลือก Export Top/Bottom ได้; ไม่แก้ TGZ ต้นฉบับ)`
-        : (archive?.packageInfo?.root?.kind ? ` · ${archive.packageInfo.root.kind.toUpperCase()} รองรับ Export กลับโครงสร้างเดิม` : '');
-      els.importMessage.textContent = `เปิด ${cadRoleLabel(state.activeCadRole)} แล้ว · แสดงทั้งบอร์ด ${formatInt.format(state.xmlData.components.length)} Components / ${formatInt.format(state.xmlData.totalLands)} Lands${archiveLabel}`;
-    } else if (state.xlsxData) els.importMessage.textContent = 'เปิด XLSX แล้ว · เพิ่ม Original CAD หรือ Generated CAD อย่างใดอย่างหนึ่งเพื่อ Mapping';
+        ? ` · structured archive data was normalized to XML (Top/Bottom export available; the original TGZ remains immutable)`
+        : (archive?.packageInfo?.root?.kind ? ` · ${archive.packageInfo.root.kind.toUpperCase()} supports export back to the original archive structure` : '');
+      els.importMessage.textContent = `Opened ${cadRoleLabel(state.activeCadRole)} completed · ShowingFull board ${formatInt.format(state.xmlData.components.length)} Components / ${formatInt.format(state.xmlData.totalLands)} Lands${archiveLabel}`;
+    } else if (state.xlsxData) els.importMessage.textContent = 'XLSX opened · add Original CAD or Generated CAD to begin mapping';
 
     populateComponents(state.selectedComponentId || BOARD_VIEW); updateStats(); renderTable(); renderTeachPanel(); refreshDuplicateControls(); draw(); renderHistogram();
     importSucceeded = true;
     autoOpenEditor = Boolean(importedRole && state.xmlData && !state.xlsxData && !canCompareCad());
   } catch (error) {
     const typed = asCadError(error, ImportError, { stage: error?.stage || 'import', fileName: file.name, code: error?.code || 'IMPORT_FAILED' });
-    console.error(typed); els.importMessage.textContent = `นำเข้าไม่สำเร็จ [${typed.code}] · ${typed.message}`; toast(`นำเข้าไม่สำเร็จ [${typed.code}]`, 6200);
-    showGlobalError(typed, { title: 'นำเข้าไฟล์ไม่สำเร็จ', operation: 'import', fileName: file.name });
+    console.error(typed); els.importMessage.textContent = `Import failed [${typed.code}] · ${typed.message}`; toast(`Import failed [${typed.code}]`, 6200);
+    showGlobalError(typed, { title: 'File import failed', operation: 'import', fileName: file.name });
   } finally {
     state.diagnostics.record('import', performance.now() - importStarted, { success: importSucceeded, fileName: String(file.name || '').slice(0, 180), components: state.xmlData?.components?.length || 0, packages: new Set((state.xmlData?.components || []).map((item) => item.packageName)).size, lands: state.xmlData?.totalLands || 0 });
     setLoading(false); els.projectFile.value = ''; els.originalCadFile.value = ''; els.generatedCadFile.value = ''; els.archiveCadFile.value = '';
@@ -1646,7 +1649,7 @@ function resetProject() {
     els.landGridOverlay, els.nameGridOverlay,
   ]) overlay?.classList.add('hidden');
   els.duplicateToggle.checked = true; els.duplicateOnlyToggle.checked = false; els.cadCompareOverlayToggle.checked = false;
-  syncCadFileLabels(); els.importMessage.textContent = 'ไฟล์จะถูกประมวลผลในเครื่อง ไม่อัปโหลดไปยังเซิร์ฟเวอร์';
+  syncCadFileLabels(); els.importMessage.textContent = 'Files are processed locally and are not uploaded to a server';
   for (const select of [els.componentColumn, els.packageColumn, els.landColumn, els.measurementColumn, els.componentSelect, els.activeCadSelect]) select.innerHTML = '';
   els.mappingTableBody.innerHTML = ''; clearDetails(); refreshDuplicateControls(); renderTeachPanel(); updateEditPanel(); updateStats(); renderCadCompare(); draw(); renderHistogram();
 }
@@ -1741,7 +1744,7 @@ function renderTable() {
     tr.addEventListener('click', () => selectMapping(mapping, true)); fragment.append(tr);
   }
   const visibleLandCount = isBoardView() ? (state.xmlData?.totalLands || 0) : (component?.lands?.length || 0);
-  els.mappingTableBody.append(fragment); els.tableSummary.textContent = `${formatInt.format(all.length)} รายการ · CAD ${formatInt.format(visibleLandCount)} lands${isBoardView() ? ' · ทั้งบอร์ด' : ''}`; els.pageLabel.textContent = `${state.page} / ${pages}`; els.prevPage.disabled = state.page <= 1; els.nextPage.disabled = state.page >= pages;
+  els.mappingTableBody.append(fragment); els.tableSummary.textContent = `${formatInt.format(all.length)} items · CAD ${formatInt.format(visibleLandCount)} lands${isBoardView() ? ' · full board' : ''}`; els.pageLabel.textContent = `${state.page} / ${pages}`; els.prevPage.disabled = state.page <= 1; els.nextPage.disabled = state.page >= pages;
 }
 function selectMapping(mapping, center = false) {
   state.selected = mapping; if (!state.edit.enabled) { state.manualMode = false; els.manualBanner.classList.add('hidden'); els.manualBanner.classList.remove('preview-active'); }
@@ -1750,7 +1753,7 @@ function selectMapping(mapping, center = false) {
   updateDetails(); updateEditPanel(); renderDuplicatePanel(); renderTable(); if (center && Number.isFinite(mapping.centerX) && Number.isFinite(mapping.centerY)) centerOn(mapping.centerX, mapping.centerY); draw(); renderHistogram();
 }
 function clearDetails() {
-  state.selected = null; els.selectedTitle.textContent = 'ยังไม่ได้เลือก'; els.selectedSubTitle.textContent = 'ค้นหาหรือคลิกตำแหน่งบนกราฟิก';
+  state.selected = null; els.selectedTitle.textContent = 'Nothing selected'; els.selectedSubTitle.textContent = 'Search or click a position in the board view';
   for (const el of [els.dLocal, els.dGlobal, els.dCad, els.dComponent, els.dX, els.dY, els.dMeasurement, els.dConfidence, els.dRow, els.dMethod, els.dVerified, els.dAnchor]) el.textContent = '—';
   els.rawData.textContent = '—'; els.aliasInput.value = ''; els.aliasInput.disabled = true; els.saveAliasButton.disabled = true; els.copyRawButton.disabled = true; els.duplicateWarning.classList.add('hidden');
   for (const button of [els.anchorButton, els.unmapButton, els.nudgePrevButton, els.nudgeNextButton]) button.disabled = true;
@@ -1763,12 +1766,12 @@ function updateDetails() {
   els.dLocal.textContent = mapping.cadOnly ? '—' : (mapping.rawLandId ?? mapping.localIndex ?? '—'); els.dGlobal.textContent = mapping.globalId ?? '—'; els.dCad.textContent = mapping.cadName || '—'; els.dComponent.textContent = mapping.componentName || '—';
   els.dX.textContent = Number.isFinite(mapping.centerX) ? `${formatFloat.format(mapping.centerX)} mm` : '—'; els.dY.textContent = Number.isFinite(mapping.centerY) ? `${formatFloat.format(mapping.centerY)} mm` : '—';
   els.dMeasurement.textContent = mapping.measurement ?? '—'; els.dConfidence.textContent = `${mapping.confidence ?? 0}%${mapping.manual ? ' · manual' : ''}`; els.dRow.textContent = mapping.sourceRow ?? '—';
-  els.dMethod.textContent = mapping.mappingMethod || (mapping.manual ? 'manual' : 'auto'); els.dVerified.textContent = mapping.cadOnly ? 'CAD only' : (isVerifiedMapping(mapping) ? 'ยืนยันแล้ว' : 'ยังไม่ยืนยัน'); els.dAnchor.textContent = mapping.cadOnly ? '—' : (mapping.anchorLocked ? 'ล็อกแล้ว' : 'ไม่ล็อก');
+  els.dMethod.textContent = mapping.mappingMethod || (mapping.manual ? 'manual' : 'auto'); els.dVerified.textContent = mapping.cadOnly ? 'CAD only' : (isVerifiedMapping(mapping) ? 'Confirmed' : 'Unconfirmed'); els.dAnchor.textContent = mapping.cadOnly ? '—' : (mapping.anchorLocked ? 'Locked' : 'Unlocked');
   els.aliasInput.disabled = Boolean(mapping.cadOnly); els.saveAliasButton.disabled = Boolean(mapping.cadOnly); els.copyRawButton.disabled = !mapping.raw; els.aliasInput.value = mapping.alias || '';
   els.rawData.textContent = mapping.raw ? mapping.raw.map((value, index) => `${columnName(index)}: ${value ?? ''}`).join('\n') : JSON.stringify(mapping, null, 2);
-  if (mapping.duplicateCadNameCount > 1) { state.duplicateView.selectedName = String(mapping.cadName || '').trim(); els.duplicateNameSelect.value = state.duplicateView.selectedName; els.duplicateWarning.textContent = `ชื่อ CAD ${mapping.cadName} พบซ้ำ ${mapping.duplicateCadNameCount} ตำแหน่ง ระบบไฮไลต์ทุกตำแหน่งบนกราฟิกและเชื่อมด้วยเส้นประ`; els.duplicateWarning.classList.remove('hidden'); }
+  if (mapping.duplicateCadNameCount > 1) { state.duplicateView.selectedName = String(mapping.cadName || '').trim(); els.duplicateNameSelect.value = state.duplicateView.selectedName; els.duplicateWarning.textContent = `CAD name ${mapping.cadName} duplicated at ${mapping.duplicateCadNameCount} positions All duplicate positions are highlighted and connected with dashed lines`; els.duplicateWarning.classList.remove('hidden'); }
   else els.duplicateWarning.classList.add('hidden');
-  els.manualButton.disabled = !state.mappingData; const editableMapping = Boolean(state.mappingData && !mapping.cadOnly && mapping.sourceRow != null); els.anchorButton.disabled = !editableMapping || !mapping.mapped; els.anchorButton.textContent = mapping.anchorLocked ? 'ปลด Anchor' : 'ล็อกเป็น Anchor'; els.unmapButton.disabled = !editableMapping || !mapping.mapped; els.nudgePrevButton.disabled = !editableMapping || !mapping.mapped; els.nudgeNextButton.disabled = !editableMapping || !mapping.mapped;
+  els.manualButton.disabled = !state.mappingData; const editableMapping = Boolean(state.mappingData && !mapping.cadOnly && mapping.sourceRow != null); els.anchorButton.disabled = !editableMapping || !mapping.mapped; els.anchorButton.textContent = mapping.anchorLocked ? 'Unlock Anchor' : 'Lock as Anchor'; els.unmapButton.disabled = !editableMapping || !mapping.mapped; els.nudgePrevButton.disabled = !editableMapping || !mapping.mapped; els.nudgeNextButton.disabled = !editableMapping || !mapping.mapped;
 }
 
 function getCanvasPoint(event) { const rect = els.canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top }; }
@@ -1799,7 +1802,7 @@ function fitLands(lands, paddingWorld = 1.2) {
 }
 function fitDuplicateGroup() {
   const lands = selectedDuplicateLands();
-  if (!lands.length) return toast('ยังไม่ได้เลือกชื่อ CAD ซ้ำ');
+  if (!lands.length) return toast('No duplicate CAD name selected');
   fitLands(lands, 1.6);
 }
 function zoomAt(factor, screenX = els.canvas.clientWidth / 2, screenY = els.canvas.clientHeight / 2) {
@@ -1825,7 +1828,7 @@ function renderHistogram() {
   els.histCount.textContent = formatInt.format(values.length);
   if (!values.length) {
     for (const el of [els.histMin, els.histAverage, els.histMedian, els.histMax]) el.textContent = '—';
-    els.histogramMessage.textContent = component ? `${component.name}: ไม่พบ Measurement ที่เป็นตัวเลขในข้อมูลดิบ` : 'เลือก Part ที่พบในข้อมูลดิบเพื่อแสดง Histogram';
+    els.histogramMessage.textContent = component ? `${component.name}: No numeric measurements were found in the source table` : 'Select a part present in the source table to display the histogram';
     hctx.fillStyle = '#91a0b7'; hctx.font = '11px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
     if (!els.histogramOverlay.classList.contains('hidden')) renderDetailedHistogram();
     return;
@@ -1881,7 +1884,7 @@ function renderHistogram() {
   }
 
   const binWidth = binCount === 1 ? 0 : span / binCount;
-  els.histogramMessage.textContent = `${component?.name || 'Part'} · ${formatInt.format(values.length)} ค่า · ${binCount} bins${binWidth ? ` · bin width ${display(binWidth)}` : ''}`;
+  els.histogramMessage.textContent = `${component?.name || 'Part'} · ${formatInt.format(values.length)} values · ${binCount} bins${binWidth ? ` · bin width ${display(binWidth)}` : ''}`;
   if (!els.histogramOverlay.classList.contains('hidden')) renderDetailedHistogram();
 }
 
@@ -1959,7 +1962,7 @@ function updateSelectedBinDetails(model) {
   const bin = model.bins?.[state.histogram.selectedBin];
   els.zoomHistogramBinButton.disabled = !bin;
   if (!bin) {
-    els.selectedBinRange.textContent = 'ยังไม่ได้เลือกแท่ง';
+    els.selectedBinRange.textContent = 'No bar selected';
     els.selectedBinCount.textContent = '—';
     els.selectedBinPercent.textContent = '—';
     els.selectedBinCumulative.textContent = '—';
@@ -1988,12 +1991,12 @@ function renderDetailedHistogram() {
 
   const component = currentComponent();
   const model = buildDetailedHistogramModel();
-  els.detailedHistogramPart.textContent = component ? `${component.name} · ${component.packageName || 'Unknown package'} · Measurement ${formatInt.format(model.values.length)} ค่า` : 'เลือก Part เพื่อแสดงข้อมูล';
+  els.detailedHistogramPart.textContent = component ? `${component.name} · ${component.packageName || 'Unknown package'} · Measurement ${formatInt.format(model.values.length)} values` : 'Select a part to display data';
   els.detailHistTotal.textContent = formatInt.format(model.values.length);
   els.detailHistInRange.textContent = formatInt.format(model.inRange.length);
   if (!model.values.length) {
     for (const el of [els.detailHistMin, els.detailHistQ1, els.detailHistAverage, els.detailHistMedian, els.detailHistQ3, els.detailHistMax, els.detailHistStdDev]) el.textContent = '—';
-    els.detailedHistogramMessage.textContent = component ? `${component.name}: ไม่พบ Measurement ที่เป็นตัวเลข` : 'เลือก Part ที่พบในข้อมูลดิบ';
+    els.detailedHistogramMessage.textContent = component ? `${component.name}: No numeric measurements found` : 'Select a part present in the source table';
     hctx.fillStyle = '#91a0b7'; hctx.font = '14px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
     state.histogram.layout = null; updateSelectedBinDetails(model); return;
   }
@@ -2072,7 +2075,7 @@ function renderDetailedHistogram() {
   state.histogram.layout = { ...model, margin, chartW, chartH, slot, width, height, yMode, peak };
   updateSelectedBinDetails(model);
   const binWidth = model.bins.length === 1 ? 0 : model.span / model.bins.length;
-  els.detailedHistogramMessage.textContent = `${component?.name || 'Part'} · ช่วง ${display(model.rangeMin)} ถึง ${display(model.rangeMax)} · ${formatInt.format(model.inRange.length)} ค่า · ${model.bins.length} bins${binWidth ? ` · bin width ${display(binWidth)}` : ''}`;
+  els.detailedHistogramMessage.textContent = `${component?.name || 'Part'} · Range ${display(model.rangeMin)} to ${display(model.rangeMax)} · ${formatInt.format(model.inRange.length)} values · ${model.bins.length} bins${binWidth ? ` · bin width ${display(binWidth)}` : ''}`;
 }
 function openDetailedHistogram() {
   els.histogramOverlay.classList.remove('hidden');
@@ -2121,7 +2124,7 @@ function applyHistogramRangeFromInputs() {
   const values = measurementValues(); if (!values.length) return;
   const min = els.histogramRangeMin.value === '' ? values[0] : Number(els.histogramRangeMin.value);
   const max = els.histogramRangeMax.value === '' ? values[values.length - 1] : Number(els.histogramRangeMax.value);
-  if (!Number.isFinite(min) || !Number.isFinite(max)) { toast('กรุณากรอกช่วง Measurement เป็นตัวเลข'); return; }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) { toast('Enter a numeric measurement range'); return; }
   setHistogramRange(min, max);
 }
 function resetHistogramRange() {
@@ -2133,7 +2136,7 @@ function zoomToSelectedHistogramBin() {
   setHistogramRange(bin.low, bin.high);
 }
 function exportHistogramCsv() {
-  const model = buildDetailedHistogramModel(); if (!model.bins.length) { toast('ไม่มี Measurement สำหรับส่งออก'); return; }
+  const model = buildDetailedHistogramModel(); if (!model.bins.length) { toast('No measurements are available to export'); return; }
   const denominator = model.inRange.length || 1;
   const rows = [['bin','lower_bound','upper_bound','count','percent','cumulative_count','cumulative_percent']];
   for (const bin of model.bins) rows.push([bin.index + 1, bin.low, bin.high, bin.count, (bin.count / denominator) * 100, bin.cumulative, (bin.cumulative / denominator) * 100]);
@@ -2202,7 +2205,7 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#090f19'; ctx.fillRect(0, 0, width, height); drawGrid(width, height);
 
   const components = visibleComponents();
-  if (!components.length) { els.viewerTitle.textContent = 'ไม่มีข้อมูล'; els.viewerSubtitle.textContent = 'นำเข้าไฟล์เพื่อแสดงตำแหน่ง Land'; return; }
+  if (!components.length) { els.viewerTitle.textContent = 'No data'; els.viewerSubtitle.textContent = 'Import a file to display land positions'; return; }
   const boardMode = isBoardView();
   const activeComponent = currentComponent();
   const current = currentMappings();
@@ -2219,11 +2222,11 @@ function draw() {
   const duplicateLandCount = [...activeDuplicates.values()].reduce((sum, lands) => sum + lands.length, 0);
 
   if (boardMode) {
-    els.viewerTitle.textContent = `${state.xmlData?.board?.Name || 'CAD Board'} · ทั้งบอร์ด`;
-    els.viewerSubtitle.textContent = `${formatInt.format(components.length)} Components · ${formatInt.format(state.xmlData?.totalLands || 0)} lands · คลิกจุดหรือเลือก Component เพื่อดูรายละเอียด · scale ${state.view.scale.toFixed(2)} px/mm`;
+    els.viewerTitle.textContent = `${state.xmlData?.board?.Name || 'CAD Board'} · full board`;
+    els.viewerSubtitle.textContent = `${formatInt.format(components.length)} Components · ${formatInt.format(state.xmlData?.totalLands || 0)} lands · click a point or select a component for details · scale ${state.view.scale.toFixed(2)} px/mm`;
   } else {
     els.viewerTitle.textContent = `${activeComponent.name} · ${activeComponent.packageName || 'Unknown package'}`;
-    els.viewerSubtitle.textContent = `${formatInt.format(activeComponent.lands.length)} lands · ชื่อซ้ำ ${formatInt.format(activeDuplicates.size)} กลุ่ม / ${formatInt.format(duplicateLandCount)} จุด · scale ${state.view.scale.toFixed(1)} px/mm${state.preview ? ' · Preview active' : ''}`;
+    els.viewerSubtitle.textContent = `${formatInt.format(activeComponent.lands.length)} lands · duplicate names ${formatInt.format(activeDuplicates.size)} groups / ${formatInt.format(duplicateLandCount)} points · scale ${state.view.scale.toFixed(1)} px/mm${state.preview ? ' · Preview active' : ''}`;
   }
 
   const showLandLabels = els.labelToggle.checked && state.view.scale >= (boardMode ? 48 : 28);
@@ -2310,7 +2313,7 @@ function showTooltip(event, land) {
   const mapping = mappingForLand(land);
   const preview = !isBoardView() ? state.preview?.lookup?.get(Number(land.globalId)) : null;
   const duplicateCount = duplicateGroupsForComponent(component).get(String(land.cadName || '').trim())?.length || 1;
-  els.tooltip.innerHTML = `<strong>${escapeHtml(mapping?.alias || land.cadName)}</strong><br>Component: ${escapeHtml(component?.name || land.componentId || '—')}<br>Package: ${escapeHtml(component?.packageName || '—')}<br>X-ray: ${escapeHtml(mapping?.localIndex ?? '—')}<br>XML ID: ${escapeHtml(land.globalId)}<br>X: ${formatFloat.format(land.centerX)} · Y: ${formatFloat.format(land.centerY)}${mapping ? `<br>Measurement: ${escapeHtml(mapping.measurement ?? '—')}<br>Status: ${isVerifiedMapping(mapping) ? 'Confirmed' : 'Unverified'}` : ''}${duplicateCount > 1 ? `<br><b>ชื่อซ้ำ ${duplicateCount} ตำแหน่ง</b>` : ''}${preview ? `<br>Preview: X-ray ${escapeHtml(preview.localIndex)} · ${escapeHtml(preview.status)}` : ''}`;
+  els.tooltip.innerHTML = `<strong>${escapeHtml(mapping?.alias || land.cadName)}</strong><br>Component: ${escapeHtml(component?.name || land.componentId || '—')}<br>Package: ${escapeHtml(component?.packageName || '—')}<br>Source: ${escapeHtml(mapping?.localIndex ?? '—')}<br>XML ID: ${escapeHtml(land.globalId)}<br>X: ${formatFloat.format(land.centerX)} · Y: ${formatFloat.format(land.centerY)}${mapping ? `<br>Measurement: ${escapeHtml(mapping.measurement ?? '—')}<br>Status: ${isVerifiedMapping(mapping) ? 'Confirmed' : 'Unverified'}` : ''}${duplicateCount > 1 ? `<br><b>duplicate names ${duplicateCount} positions</b>` : ''}${preview ? `<br>Preview: Source ${escapeHtml(preview.localIndex)} · ${escapeHtml(preview.status)}` : ''}`;
   const rect = els.canvas.getBoundingClientRect(); els.tooltip.style.left = `${Math.min(rect.width - 220, event.clientX - rect.left + 13)}px`; els.tooltip.style.top = `${Math.min(rect.height - 160, event.clientY - rect.top + 13)}px`; els.tooltip.classList.remove('hidden');
 }
 async function directRemap(mapping, land, label = 'Edit mapping') {
@@ -2321,7 +2324,7 @@ async function directRemap(mapping, land, label = 'Edit mapping') {
 
   if (occupied) {
     if (isVerifiedMapping(occupied)) {
-      const proceed = await requestAppConfirm({ title: 'ตำแหน่ง Mapping ซ้ำ', message: `ตำแหน่ง ${land.cadName} ถูกยืนยันให้ X-ray ${occupied.localIndex} อยู่แล้ว`, detail: `รายการเดิมจะถูก Unmap และเก็บใน Mapping History`, confirmText: 'Yes - ย้าย Mapping', destructive: true });
+      const proceed = await requestAppConfirm({ title: 'Mapping position conflict', message: `positions ${land.cadName} is already confirmed for Source ${occupied.localIndex} `, detail: `The existing mapping will be unmapped and retained in Mapping History`, confirmText: 'Yes - Move Mapping', destructive: true });
       if (!proceed) return;
     }
     changes.push({
@@ -2354,7 +2357,7 @@ async function directRemap(mapping, land, label = 'Edit mapping') {
   }
 
   state.selected = mapping;
-  toast(`ยืนยัน X-ray ${mapping.localIndex} → ${land.cadName}${occupied ? ` · Unmap X-ray ${occupied.localIndex}` : ''}`);
+  toast(`Confirmed Source ${mapping.localIndex} → ${land.cadName}${occupied ? ` · Unmap Source ${occupied.localIndex}` : ''}`);
   if (state.edit.enabled && state.edit.autoNext) advanceSelected(1);
   else { updateDetails(); updateEditPanel(); renderTable(); draw(); }
 }
@@ -2373,7 +2376,7 @@ async function selectLand(land) {
   }
   const existing = mappingForLand(land);
   if (existing) selectMapping(existing, true);
-  else if (state.edit.enabled) toast('ตำแหน่งนี้ยังไม่มี X-ray Land เลือกแถว X-ray จากตารางก่อน แล้วคลิกตำแหน่งนี้อีกครั้ง');
+  else if (state.edit.enabled) toast('No source land is selected for this position. Select a source row in the table, then click this position again');
   else {
     selectMapping({ sourceRow: null, componentName: component?.name, packageName: component?.packageName, localIndex: land.localIndex, componentId: land.componentId, globalId: land.globalId, cadName: land.cadName, left: land.left, top: land.top, centerX: land.centerX, centerY: land.centerY, width: land.width, length: land.length, measurement: null, confidence: 0, mapped: true, manual: false, verified: false, anchorLocked: false, mappingMethod: 'xml-only', duplicateCadNameCount: duplicateCountForLand(land), raw: null }, true);
   }
@@ -2382,15 +2385,15 @@ function toggleAnchor() {
   const mapping = state.selected; if (!mapping?.mapped) return; const before = snapshotMapping(mapping);
   const locking = !mapping.anchorLocked;
   const after = { ...before, anchorLocked: locking, manual: true, verified: locking ? true : Boolean(mapping.verified), confidence: locking ? 100 : mapping.confidence, mappingMethod: locking ? 'manual-anchor' : (mapping.verified ? 'manual-direct' : 'manual-unverified') };
-  applyTransaction(locking ? 'Lock anchor' : 'Unlock anchor', [{ mapping, before, after }]); toast(locking ? `ล็อก X-ray ${mapping.localIndex} เป็น Anchor แล้ว` : `ปลด Anchor X-ray ${mapping.localIndex} แล้ว`);
+  applyTransaction(locking ? 'Lock anchor' : 'Unlock anchor', [{ mapping, before, after }]); toast(locking ? `Locked Source ${mapping.localIndex} as an anchor` : `Unlock Anchor Source ${mapping.localIndex} completed`);
 }
 async function unmapSelected() {
-  const mapping = state.selected; if (!mapping?.mapped) return; if (!(await requestAppConfirm({ title: 'ยกเลิก Mapping?', message: `X-ray Land ${mapping.localIndex} จะกลับเป็นสถานะ Unmapped`, confirmText: 'Yes - Unmap', destructive: true }))) return;
-  applyTransaction('Unmap selected land', [{ mapping, before: snapshotMapping(mapping), after: stateForUnmapped(mapping) }]); toast(`ยกเลิก Mapping X-ray ${mapping.localIndex} แล้ว`);
+  const mapping = state.selected; if (!mapping?.mapped) return; if (!(await requestAppConfirm({ title: 'Unmap this item?', message: `Source Land ${mapping.localIndex} will return to Unmapped status`, confirmText: 'Yes - Unmap', destructive: true }))) return;
+  applyTransaction('Unmap selected land', [{ mapping, before: snapshotMapping(mapping), after: stateForUnmapped(mapping) }]); toast(`Cancel Mapping Source ${mapping.localIndex} completed`);
 }
 async function nudgeSelected(delta) {
   const mapping = state.selected; const component = currentComponent(); if (!mapping?.mapped || !component) return; const index = findLandIndex(component, mapping.globalId); const land = component.lands[index + delta];
-  if (!land) return toast('ไม่สามารถเลื่อนได้ เพราะถึงขอบเขต CAD แล้ว'); await directRemap(mapping, land, `Nudge selected ${delta > 0 ? '+1' : '-1'}`);
+  if (!land) return toast('Cannot move further because the CAD boundary was reached'); await directRemap(mapping, land, `Nudge selected ${delta > 0 ? '+1' : '-1'}`);
 }
 function search() {
   const query = els.searchInput.value.trim(); if (!query) return;
@@ -2415,29 +2418,29 @@ function search() {
           state.selectedComponentId = component.id; els.componentSelect.value = component.id; state.duplicateView.selectedName = '';
           refreshDuplicateControls(); fitView(); selectLand(land);
           if (duplicateCountForLand(land) > 1) setSelectedDuplicateName(String(land.cadName).trim(), { fit: true });
-          toast('พบใน CAD แต่ไม่มีแถวข้อมูลที่จับคู่'); return;
+          toast('Found in CAD but no matching source-data row exists'); return;
         }
       }
     }
   }
-  if (!matches.length) return toast(`ไม่พบ ${query}`);
+  if (!matches.length) return toast(`Not found ${query}`);
   selectMapping(matches[0], true);
   const name = String(matches[0].cadName || '').trim(); const duplicateLands = duplicateGroupsForComponent().get(name) || [];
-  if (duplicateLands.length > 1) { setSelectedDuplicateName(name, { fit: true }); toast(`ชื่อ ${name} ซ้ำ ${duplicateLands.length} ตำแหน่ง และแสดงครบทุกจุดบนกราฟิก`); }
-  else if (matches.length > 1) toast(`พบ ${matches.length} ตำแหน่ง เลือกตำแหน่งแรก`);
+  if (duplicateLands.length > 1) { setSelectedDuplicateName(name, { fit: true }); toast(`Name ${name} appears at ${duplicateLands.length} positions; all are displayed in the board view`); }
+  else if (matches.length > 1) toast(`Found ${matches.length} positions selecting the first position`);
 }
 function openTeachPanel() { if (!state.mappingData) return; els.teachOverlay.classList.remove('hidden'); renderTeachPanel(); }
 function closeTeachPanel() { els.teachOverlay.classList.add('hidden'); }
 function renderTeachPanel() {
   const component = currentComponent(); const mappings = currentMappings(); const anchors = mappings.filter((mapping) => mapping.anchorLocked).sort((a, b) => mappingOrder(a) - mappingOrder(b));
-  els.teachComponentLabel.textContent = component ? `${component.name} · ${formatInt.format(component.lands.length)} CAD lands · ${formatInt.format(mappings.length)} X-ray rows` : 'ยังไม่มี Component';
-  els.anchorCountLabel.textContent = `${formatInt.format(anchors.length)} จุด`; els.anchorList.innerHTML = '';
-  if (!anchors.length) els.anchorList.innerHTML = '<p class="empty-state">ยังไม่มี Anchor — เลือก Land แล้วกด “ล็อกเป็น Anchor”</p>';
+  els.teachComponentLabel.textContent = component ? `${component.name} · ${formatInt.format(component.lands.length)} CAD lands · ${formatInt.format(mappings.length)} source rows` : 'No component selected';
+  els.anchorCountLabel.textContent = `${formatInt.format(anchors.length)} points`; els.anchorList.innerHTML = '';
+  if (!anchors.length) els.anchorList.innerHTML = '<p class="empty-state">No anchors yet — select a land and choose “Lock as Anchor”</p>';
   else {
     const fragment = document.createDocumentFragment();
     for (const mapping of anchors) {
-      const item = document.createElement('div'); item.className = 'anchor-item'; const left = document.createElement('div'); left.innerHTML = `<span>X-ray</span><br><strong>${escapeHtml(mapping.localIndex)}</strong>`; const middle = document.createElement('div'); middle.innerHTML = `<span>CAD / XML</span><br><strong>${escapeHtml(mapping.cadName || '—')} · ${escapeHtml(mapping.globalId ?? '—')}</strong>`;
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'ปลด'; button.addEventListener('click', () => { state.selected = mapping; toggleAnchor(); }); item.append(left, middle, button); fragment.append(item);
+      const item = document.createElement('div'); item.className = 'anchor-item'; const left = document.createElement('div'); left.innerHTML = `<span>Source</span><br><strong>${escapeHtml(mapping.localIndex)}</strong>`; const middle = document.createElement('div'); middle.innerHTML = `<span>CAD / XML</span><br><strong>${escapeHtml(mapping.cadName || '—')} · ${escapeHtml(mapping.globalId ?? '—')}</strong>`;
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Unlock'; button.addEventListener('click', () => { state.selected = mapping; toggleAnchor(); }); item.append(left, middle, button); fragment.append(item);
     }
     els.anchorList.append(fragment);
   }
@@ -2451,18 +2454,18 @@ function createPatternPreview(overrides = {}) {
   const preview = createSequencePreview(readPatternOptions(overrides)); if (!preview.ok) return toast(preview.error, 4200);
   preview.lookup = new Map(preview.proposals.filter((proposal) => proposal.land).map((proposal) => [Number(proposal.land.globalId), proposal])); state.preview = preview;
   if (overrides.direction) els.patternDirection.value = overrides.direction; if (overrides.startLocal != null) els.patternStart.value = overrides.startLocal; if (overrides.endLocal != null) els.patternEnd.value = overrides.endLocal;
-  renderPreviewSummary(); renderTable(); draw(); toast(`Safe Preview: ${formatInt.format(preview.counts.segments || 0)} ช่วง · ข้อเสนอ ${formatInt.format(preview.counts.highConfidence)}`);
+  renderPreviewSummary(); renderTable(); draw(); toast(`Safe Preview: ${formatInt.format(preview.counts.segments || 0)} segments · suggestions ${formatInt.format(preview.counts.highConfidence)}`);
 }
-function previewBetweenAnchors() { const range = getAnchorRange(currentMappings()); if (!range) return toast('ต้องมี Anchor อย่างน้อย 2 จุด'); createPatternPreview({ startLocal: range.start, endLocal: range.end }); }
+function previewBetweenAnchors() { const range = getAnchorRange(currentMappings()); if (!range) return toast('At least two anchors are required'); createPatternPreview({ startLocal: range.start, endLocal: range.end }); }
 function clearPreview() { state.preview = null; if (!state.edit.enabled) els.manualBanner.classList.add('hidden'); els.manualBanner.classList.remove('preview-active'); renderPreviewSummary(); renderTable(); draw(); }
 function renderPreviewSummary() {
   const preview = state.preview;
   if (!preview) {
-    els.previewTitle.textContent = 'ยังไม่มี Preview'; els.previewDirectionBadge.textContent = '—'; els.previewDirectionBadge.className = 'status-pill muted'; els.previewApplicable.textContent = '0'; els.previewHigh.textContent = '0'; els.previewReview.textContent = '0'; els.previewConflict.textContent = '0'; els.previewFormula.textContent = 'วาง Anchor แล้วกดสร้าง Preview'; els.previewWarning.classList.add('hidden'); els.applyPatternButton.disabled = true; els.applyHighButton.disabled = true; els.clearPreviewButton.disabled = true; return;
+    els.previewTitle.textContent = 'No preview available'; els.previewDirectionBadge.textContent = '—'; els.previewDirectionBadge.className = 'status-pill muted'; els.previewApplicable.textContent = '0'; els.previewHigh.textContent = '0'; els.previewReview.textContent = '0'; els.previewConflict.textContent = '0'; els.previewFormula.textContent = 'Place anchors, then generate a preview'; els.previewWarning.classList.add('hidden'); els.applyPatternButton.disabled = true; els.applyHighButton.disabled = true; els.clearPreviewButton.disabled = true; return;
   }
-  const counts = preview.counts; els.previewTitle.textContent = `${formatInt.format(counts.total)} จุดในช่วง ${preview.range.start}–${preview.range.end}`; els.previewDirectionBadge.textContent = preview.direction === 'mixed' ? 'Mixed' : (preview.direction === 'reverse' ? 'Reverse' : 'Forward'); els.previewDirectionBadge.className = 'status-pill ready';
-  els.previewApplicable.textContent = formatInt.format(counts.applicable); els.previewHigh.textContent = formatInt.format(counts.highConfidence); els.previewReview.textContent = formatInt.format(counts.rejectedSegments || 0); els.previewConflict.textContent = formatInt.format(counts.conflicts + counts.outOfRange); els.previewFormula.innerHTML = `${escapeHtml(preview.formula)}<br>Anchor ${counts.anchors} จุด · ช่วงที่ผ่าน ${counts.segments || 0} · ช่วงที่ไม่ผ่าน ${counts.rejectedSegments || 0}`;
-  const warnings = []; if (counts.rejectedSegments) warnings.push(`ข้าม ${counts.rejectedSegments} ช่วง เพราะ Anchor ไม่พิสูจน์ลำดับต่อเนื่อง`); if (counts.conflicts || counts.outOfRange) warnings.push(`มี Conflict/Out of range ${counts.conflicts + counts.outOfRange} จุด ระบบจะไม่ Apply จุดเหล่านี้`); warnings.push('ผล Pattern เป็นเพียงข้อเสนอ ยังไม่ถือว่า Confirmed');
+  const counts = preview.counts; els.previewTitle.textContent = `${formatInt.format(counts.total)} pointsinRange ${preview.range.start}–${preview.range.end}`; els.previewDirectionBadge.textContent = preview.direction === 'mixed' ? 'Mixed' : (preview.direction === 'reverse' ? 'Reverse' : 'Forward'); els.previewDirectionBadge.className = 'status-pill ready';
+  els.previewApplicable.textContent = formatInt.format(counts.applicable); els.previewHigh.textContent = formatInt.format(counts.highConfidence); els.previewReview.textContent = formatInt.format(counts.rejectedSegments || 0); els.previewConflict.textContent = formatInt.format(counts.conflicts + counts.outOfRange); els.previewFormula.innerHTML = `${escapeHtml(preview.formula)}<br>Anchor ${counts.anchors} points · accepted segments ${counts.segments || 0} · rejected segments ${counts.rejectedSegments || 0}`;
+  const warnings = []; if (counts.rejectedSegments) warnings.push(`skipped ${counts.rejectedSegments} Range because the anchors do not prove a continuous sequence`); if (counts.conflicts || counts.outOfRange) warnings.push(`Conflict/Out-of-range ${counts.conflicts + counts.outOfRange} points these items will not be applied`); warnings.push('Pattern results are suggestions only and are not confirmed mappings');
   if (warnings.length) { els.previewWarning.textContent = warnings.join(' · '); els.previewWarning.classList.remove('hidden'); } else els.previewWarning.classList.add('hidden');
   els.applyPatternButton.disabled = counts.applicable === 0; els.applyHighButton.disabled = counts.highConfidence === 0; els.clearPreviewButton.disabled = false;
 }
@@ -2472,13 +2475,13 @@ function applyPattern(highOnly = false) {
     if (!proposal.land || proposal.status !== 'suggested' || (highOnly && proposal.confidence < 95) || proposal.mapping.anchorLocked || isVerifiedMapping(proposal.mapping)) continue;
     changes.push({ mapping: proposal.mapping, before: snapshotMapping(proposal.mapping), after: stateForLand(proposal.mapping, proposal.land, { manual: false, verified: false, anchorLocked: false, confidence: 60, mappingMethod: 'pattern-suggestion', duplicateCadNameCount: duplicateCountForLand(proposal.land) }) });
   }
-  if (!changes.length) return toast('ไม่มีข้อเสนอที่สามารถ Apply ได้');
+  if (!changes.length) return toast('No applicable suggestions are available');
   applyTransaction('Apply safe pattern suggestions', changes);
-  toast(`ใช้เป็นข้อเสนอแล้ว ${formatInt.format(changes.length)} จุด · ยังไม่ Confirmed`);
+  toast(`Applied as suggestions ${formatInt.format(changes.length)} points · not yet confirmed`);
 }
 async function clearAllAnchors() {
-  const anchors = currentMappings().filter((mapping) => mapping.anchorLocked); if (!anchors.length) return; if (!(await requestAppConfirm({ title: 'ปลด Anchor ทั้งหมด?', message: `Anchor ${anchors.length} จุดจะถูกปลด แต่ Confirmed Mapping จะยังคงอยู่`, confirmText: 'Yes - ปลด Anchor' }))) return;
-  const changes = anchors.map((mapping) => ({ mapping, before: snapshotMapping(mapping), after: { ...snapshotMapping(mapping), anchorLocked: false, verified: Boolean(mapping.verified), mappingMethod: mapping.verified ? 'manual-direct' : 'local-order-guess' } })); applyTransaction('Clear all anchors', changes); toast('ปลด Anchor ทั้งหมดแล้ว');
+  const anchors = currentMappings().filter((mapping) => mapping.anchorLocked); if (!anchors.length) return; if (!(await requestAppConfirm({ title: 'Unlock all anchors?', message: `Anchor ${anchors.length} points will be unlocked while confirmed mappings remain unchanged`, confirmText: 'Yes - Unlock Anchors' }))) return;
+  const changes = anchors.map((mapping) => ({ mapping, before: snapshotMapping(mapping), after: { ...snapshotMapping(mapping), anchorLocked: false, verified: Boolean(mapping.verified), mappingMethod: mapping.verified ? 'manual-direct' : 'local-order-guess' } })); applyTransaction('Clear all anchors', changes); toast('All anchors unlocked');
 }
 async function shiftCurrentMappings(delta) {
   const component = currentComponent(); if (!component) return; const start = els.patternStart.value === '' ? -Infinity : Number(els.patternStart.value); const end = els.patternEnd.value === '' ? Infinity : Number(els.patternEnd.value);
@@ -2488,12 +2491,12 @@ async function shiftCurrentMappings(delta) {
     if (!mapping.mapped || mapping.anchorLocked || isVerifiedMapping(mapping)) continue; const index = findLandIndex(component, mapping.globalId); const land = component.lands[index + delta]; if (!land || occupiedOutside.has(Number(land.globalId))) continue;
     changes.push({ mapping, before: snapshotMapping(mapping), after: stateForLand(mapping, land, { manual: false, verified: false, anchorLocked: false, confidence: 30, mappingMethod: `shift-suggestion-${delta > 0 ? 'plus' : 'minus'}1`, duplicateCadNameCount: duplicateCountForLand(land) }) });
   }
-  if (!changes.length) return toast('ไม่มีรายการที่เลื่อนได้ หรือชนกับ Anchor/ขอบเขต'); if (!(await requestAppConfirm({ title: 'Shift Mapping?', message: `เลื่อน Candidate ${delta > 0 ? '+1' : '-1'} จำนวน ${changes.length} จุด`, detail: 'Confirmed Mapping และ Anchor จะไม่ถูกเลื่อน', confirmText: 'Yes - Shift' }))) return; applyTransaction(`Shift mappings ${delta > 0 ? '+1' : '-1'}`, changes); toast(`Shift แล้ว ${formatInt.format(changes.length)} จุด`);
+  if (!changes.length) return toast('No items can be shifted, or the shift would collide with an anchor/boundary'); if (!(await requestAppConfirm({ title: 'Shift Mapping?', message: `Shift candidates ${delta > 0 ? '+1' : '-1'} for ${changes.length} points`, detail: 'Confirmed mappings and anchors will not be shifted', confirmText: 'Yes - Shift' }))) return; applyTransaction(`Shift mappings ${delta > 0 ? '+1' : '-1'}`, changes); toast(`Shifted ${formatInt.format(changes.length)} points`);
 }
 async function unmapRange() {
   const start = els.patternStart.value === '' ? -Infinity : Number(els.patternStart.value); const end = els.patternEnd.value === '' ? Infinity : Number(els.patternEnd.value);
   const targets = currentMappings().filter((m) => mappingOrder(m) >= Math.min(start, end) && mappingOrder(m) <= Math.max(start, end) && !m.anchorLocked && m.mapped);
-  if (!targets.length) return toast('ไม่มีรายการในช่วงที่สามารถ Unmap ได้'); if (!(await requestAppConfirm({ title: 'Unmap ช่วงที่เลือก?', message: `Unmap ${targets.length} จุด โดยรักษา Anchor`, confirmText: 'Yes - Unmap', destructive: true }))) return; applyTransaction('Unmap range', targets.map((mapping) => ({ mapping, before: snapshotMapping(mapping), after: stateForUnmapped(mapping) }))); toast(`Unmap แล้ว ${formatInt.format(targets.length)} จุด`);
+  if (!targets.length) return toast('No items in the selected range can be unmapped'); if (!(await requestAppConfirm({ title: 'Unmap selected range?', message: `Unmap ${targets.length} points while preserving anchors`, confirmText: 'Yes - Unmap', destructive: true }))) return; applyTransaction('Unmap range', targets.map((mapping) => ({ mapping, before: snapshotMapping(mapping), after: stateForUnmapped(mapping) }))); toast(`Unmapped ${formatInt.format(targets.length)} points`);
 }
 
 function counterpartComponent(role, component) {
@@ -2570,11 +2573,11 @@ function updateComponentReportPreview() {
   if (els.componentReportNameSource.selectedOptions[0]?.disabled) els.componentReportNameSource.value = 'active';
   els.generateComponentReportButton.disabled = !components.length;
   els.componentReportMessage.textContent = components.length
-    ? `จะสร้าง ${formatInt.format(components.length)} Component · ${formatInt.format(landCount)} Land · ${formatInt.format(components.length * zones * zones)} ภาพขยาย` 
-    : 'ไม่พบ Component สำหรับสร้างรายงาน';
+    ? `Will generate ${formatInt.format(components.length)} Component · ${formatInt.format(landCount)} Land · ${formatInt.format(components.length * zones * zones)} detail images` 
+    : 'No components are available for the report';
 }
 function openComponentReport() {
-  if (!state.xmlData) return toast('กรุณานำเข้า CAD ก่อน');
+  if (!state.xmlData) return toast('Import CAD first');
   els.componentReportOverlay.classList.remove('hidden');
   updateComponentReportPreview();
 }
@@ -2582,13 +2585,13 @@ function closeComponentReport() {
   els.componentReportOverlay.classList.add('hidden');
 }
 function reportFileStem(value) {
-  return String(value || 'component').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9ก-๙_-]+/g, '_').replace(/^_+|_+$/g, '') || 'component';
+  return String(value || 'component').replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') || 'component';
 }
 async function generateComponentReport() {
   let components = reportComponents();
-  if (!components.length) return toast('ไม่พบ Component สำหรับสร้างรายงาน');
+  if (!components.length) return toast('No components are available for the report');
   if (els.componentReportScope.value === 'all' && components.length > 80) {
-    toast(`CAD มี ${formatInt.format(components.length)} Components · รายงานภาพจำกัด 80 Components ต่อไฟล์เพื่อป้องกัน Excel ค้าง`, 5200);
+    toast(`CAD contains ${formatInt.format(components.length)} components · Image reports are limited to 80 components per file to prevent Excel from becoming unresponsive`, 5200);
     components = components.slice(0, 80);
   }
   const grid = Math.max(2, Math.min(4, Number(els.componentReportZones.value) || 3));
@@ -2599,7 +2602,7 @@ async function generateComponentReport() {
   const heatmap = els.componentReportHeatmap.checked;
   const dialog = els.componentReportOverlay.querySelector('.component-report-dialog');
   const oldText = els.generateComponentReportButton.textContent;
-  dialog?.classList.add('is-building'); els.generateComponentReportButton.disabled = true; els.generateComponentReportButton.textContent = 'กำลังสร้าง…';
+  dialog?.classList.add('is-building'); els.generateComponentReportButton.disabled = true; els.generateComponentReportButton.textContent = 'Generating…';
   try {
     const file = activeCadFile();
     const preflight = assertAppliedRevisionExportable(file, file?.editorModel || null);
@@ -2607,7 +2610,7 @@ async function generateComponentReport() {
     const reportComponentsData = [];
     for (let componentIndex = 0; componentIndex < components.length; componentIndex += 1) {
       const component = components[componentIndex];
-      els.componentReportMessage.textContent = `กำลังเตรียม ${component.name} (${componentIndex + 1}/${components.length})…`; await nextFrame();
+      els.componentReportMessage.textContent = `Preparing ${component.name} (${componentIndex + 1}/${components.length})…`; await nextFrame();
       const rows = componentReportRows(component, nameSource);
       const layout = buildZones(component, rows, grid);
       const overviewCanvas = renderOverviewImage({ component, rows, bounds: layout.bounds, zones: layout.zones, width, height, heatmap });
@@ -2615,7 +2618,7 @@ async function generateComponentReport() {
       const zones = [];
       for (let zoneIndex = 0; zoneIndex < layout.zones.length; zoneIndex += 1) {
         const zone = layout.zones[zoneIndex];
-        els.componentReportMessage.textContent = `กำลังวาด ${component.name} · Zone ${zone.label} (${zoneIndex + 1}/${layout.zones.length})…`; await nextFrame();
+        els.componentReportMessage.textContent = `Rendering ${component.name} · Zone ${zone.label} (${zoneIndex + 1}/${layout.zones.length})…`; await nextFrame();
         const zoneCanvas = renderZoneImage({ component, zone, width, height, labels, heatmap });
         zones.push({ ...zone, imagePng: await canvasToPngBytes(zoneCanvas) });
       }
@@ -2628,19 +2631,19 @@ async function generateComponentReport() {
         overviewPng, measurementCount: values.length, histogram: { ...histogram, imagePng },
       });
     }
-    els.componentReportMessage.textContent = 'กำลังประกอบไฟล์ Excel และฝังรูปภาพ…'; await nextFrame();
-    const nameSourceLabel = ({ active: `${cadRoleLabel(state.activeCadRole)} / ชื่อที่กำลังแสดง`, original: 'Original CAD', generated: 'Generated CAD' })[nameSource] || 'Active CAD';
+    els.componentReportMessage.textContent = 'Building the Excel workbook and embedding images…'; await nextFrame();
+    const nameSourceLabel = ({ active: `${cadRoleLabel(state.activeCadRole)} / displayed names`, original: 'Original CAD', generated: 'Generated CAD' })[nameSource] || 'Active CAD';
     const blob = await buildComponentReportXlsx({
       title: `${state.xmlData.board?.Name || 'Board'} · Component CAD Report`, boardName: state.xmlData.board?.Name || '', cadFileName: state.fileNames.xml || activeCadFile()?.name || '', xlsxFileName: state.fileNames.xlsx || '',
       generatedAt: exportMetadata.exportTime, zoneGrid: grid, nameSourceLabel, compatibilityMode: els.componentReportCompatibility?.checked !== false, components: reportComponentsData,
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.25.2.xlsx`));
-    els.componentReportMessage.textContent = `สร้าง Excel สำเร็จ · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
-    toast('สร้าง Component Report Excel สำเร็จ', 4200);
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.26.0.xlsx`));
+    els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
+    toast('Component Report Excel created successfully', 4200);
   } catch (error) {
-    console.error(error); els.componentReportMessage.textContent = `สร้าง Excel ไม่สำเร็จ: ${error.message}`; toast(`สร้าง Excel ไม่สำเร็จ: ${error.message}`, 5200); showGlobalError(error, { title: 'สร้าง Excel ไม่สำเร็จ', operation: 'xlsx-export' });
+    console.error(error); els.componentReportMessage.textContent = `Excel generation failed: ${error.message}`; toast(`Excel generation failed: ${error.message}`, 5200); showGlobalError(error, { title: 'Excel generation failed', operation: 'xlsx-export' });
   } finally {
     dialog?.classList.remove('is-building'); els.generateComponentReportButton.disabled = false; els.generateComponentReportButton.textContent = oldText; updateComponentReportPreview();
   }
@@ -2666,7 +2669,7 @@ function mappingExportTail(mapping, metadata) {
 function exportCsv() {
   const exportStarted = performance.now();
   try {
-    if (!state.xmlData) return toast('กรุณานำเข้า CAD ก่อน');
+    if (!state.xmlData) return toast('Import CAD first');
     const file = activeCadFile();
     const preflight = assertAppliedRevisionExportable(file, file?.editorModel || null);
     const metadata = projectExportMetadata(file, 'csv-placement-mapping', validationStatusFromPreflight(preflight));
@@ -2696,15 +2699,15 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.25.2.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.26.0.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
-    toast(`Export CSV Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
+    toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: false });
     console.error(error);
-    toast(`Export CSV ไม่สำเร็จ [${error?.code || 'EXPORT_ERROR'}]: ${error?.message || error}`, 6200);
-    showGlobalError(error, { title: 'Export CSV ไม่สำเร็จ', operation: 'csv-export' });
+    toast(`CSV export failed [${error?.code || 'EXPORT_ERROR'}]: ${error?.message || error}`, 6200);
+    showGlobalError(error, { title: 'CSV export failed', operation: 'csv-export' });
   }
 }
 function exportJson() {
@@ -2722,7 +2725,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.25.2', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.26.0', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2731,14 +2734,14 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.25.2.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.26.0.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
-    toast(`Export JSON Model Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
+    toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: false });
     console.error(error);
-    toast(`Export JSON ไม่สำเร็จ [${error?.code || 'EXPORT_ERROR'}]: ${error?.message || error}`, 6200);
-    showGlobalError(error, { title: 'Export JSON ไม่สำเร็จ', operation: 'json-export' });
+    toast(`JSON export failed [${error?.code || 'EXPORT_ERROR'}]: ${error?.message || error}`, 6200);
+    showGlobalError(error, { title: 'JSON export failed', operation: 'json-export' });
   }
 }
 
@@ -2753,7 +2756,7 @@ async function restoreBackup(file) {
   try {
     const payload = JSON.parse(await file.text(), jsonBackupReviver);
     if (payload?.project) { await restoreStoredProject({ project: payload.project, workspace: payload.projectWorkspace || payload.workspace || {} }); return; }
-    if (!state.xmlData) throw new Error('Backup แบบ Mapping ต้องเปิด CAD ก่อน หรือเลือก Project Backup ที่มี project model');
+    if (!state.xmlData) throw new Error('Mapping backup restore requires an open CAD file or a project backup containing a project model');
     let restoredCadNames = 0;
     if (payload.cadNameRules?.maxLength) state.cadInspector.maxLength = Math.max(2, Number(payload.cadNameRules.maxLength) || 5);
     if (payload.cadNameRules?.prefix) state.cadInspector.prefix = String(payload.cadNameRules.prefix);
@@ -2809,9 +2812,9 @@ async function restoreBackup(file) {
       if (changes.length) { applyTransaction('Restore safe backup JSON', changes); mappingChanges = changes.length; }
     }
 
-    if (!restoredCadNames && !mappingChanges) throw new Error('ไม่พบข้อมูลชื่อ CAD หรือจุด Mapping ที่กู้คืนได้ใน Backup นี้');
-    toast(`กู้คืนชื่อ CAD ${formatInt.format(restoredCadNames)} จุด${restoredConfirmed ? ` · Confirmed ${formatInt.format(restoredConfirmed)} จุด` : ''}${restoredNotes ? ` · หมายเหตุ ${formatInt.format(restoredNotes)}` : ''}${ignoredGenerated ? ` · ตัด Mapping ที่ระบบกระจาย ${formatInt.format(ignoredGenerated)} จุด` : ''}${skipped ? ` · ข้าม ${formatInt.format(skipped)}` : ''}`, 6500);
-  } catch (error) { console.error(error); toast(`นำเข้า Backup ไม่สำเร็จ: ${error.message}`, 5200); showGlobalError(error, { title: 'นำเข้า Backup ไม่สำเร็จ', operation: 'project-backup-import', fileName: file.name }); }
+    if (!restoredCadNames && !mappingChanges) throw new Error('No recoverable CAD names or mapping points were found in this backup');
+    toast(`Restored CAD names ${formatInt.format(restoredCadNames)} points${restoredConfirmed ? ` · Confirmed ${formatInt.format(restoredConfirmed)} points` : ''}${restoredNotes ? ` · notes ${formatInt.format(restoredNotes)}` : ''}${ignoredGenerated ? ` · discarded generated mappings ${formatInt.format(ignoredGenerated)} points` : ''}${skipped ? ` · skipped ${formatInt.format(skipped)}` : ''}`, 6500);
+  } catch (error) { console.error(error); toast(`Backup import failed: ${error.message}`, 5200); showGlobalError(error, { title: 'Backup import failed', operation: 'project-backup-import', fileName: file.name }); }
   finally { els.restoreFile.value = ''; }
 }
 
@@ -3022,7 +3025,7 @@ function cadEditorConfirmVisible() {
   return Boolean(els.cadEditorConfirmOverlay && !els.cadEditorConfirmOverlay.classList.contains('hidden'));
 }
 function cadEditorTaskCancelledError() {
-  const error = new Error('ยกเลิกการทำงานแล้ว');
+  const error = new Error('The operation was cancelled.');
   error.name = 'AbortError';
   return error;
 }
@@ -3040,7 +3043,7 @@ function updateCadEditorBusyProgress(value = null, detail = null) {
   }
   if (detail != null && els.cadEditorBusyDetail) els.cadEditorBusyDetail.textContent = detail;
 }
-function setCadEditorBusy(active, title = 'กำลังประมวลผล…', detail = 'กรุณารอสักครู่') {
+function setCadEditorBusy(active, title = 'Processing…', detail = 'Please wait') {
   const nextActive = Boolean(active);
   state.cadEditor.busy = nextActive;
   state.cadEditor.busyStartedAt = nextActive ? Date.now() : 0;
@@ -3063,7 +3066,7 @@ function setCadEditorBusy(active, title = 'กำลังประมวลผ�
   for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton]) if (button) button.disabled = nextActive || !state.cadEditor.model;
   if (els.cadEditorBusyCancelButton) {
     els.cadEditorBusyCancelButton.disabled = !nextActive;
-    els.cadEditorBusyCancelButton.textContent = 'ยกเลิกงาน';
+    els.cadEditorBusyCancelButton.textContent = 'Cancel Task';
   }
   if (els.cadEditorBusyCloseButton) els.cadEditorBusyCloseButton.disabled = !nextActive;
   updateCadEditorMenuState();
@@ -3071,7 +3074,7 @@ function setCadEditorBusy(active, title = 'กำลังประมวลผ�
     clearCadEditorBusyWatchdog();
     state.cadEditor.busyWatchdog = window.setTimeout(() => {
       if (!state.cadEditor.busy) return;
-      if (els.cadEditorBusyDetail) els.cadEditorBusyDetail.textContent = 'งานใช้เวลานานกว่าปกติ สามารถกดยกเลิกงานหรือปิด Editor ได้';
+      if (els.cadEditorBusyDetail) els.cadEditorBusyDetail.textContent = 'This task is taking longer than usual. You can cancel it or close the editor';
     }, 12000);
   }
 }
@@ -3079,17 +3082,17 @@ function cancelCadEditorTask({ closeAfter = false } = {}) {
   if (!state.cadEditor.busy) return false;
   state.cadEditor.taskCancelRequested = true;
   state.cadEditor.pendingCloseAfterTask = Boolean(closeAfter || state.cadEditor.pendingCloseAfterTask);
-  if (els.cadEditorBusyTitle) els.cadEditorBusyTitle.textContent = closeAfter ? 'กำลังยกเลิกและปิด Editor…' : 'กำลังยกเลิกงาน…';
-  if (els.cadEditorBusyDetail) els.cadEditorBusyDetail.textContent = 'ระบบจะหยุดที่จุดพักถัดไป';
+  if (els.cadEditorBusyTitle) els.cadEditorBusyTitle.textContent = closeAfter ? 'Cancelling and closing the editor…' : 'Cancelling task…';
+  if (els.cadEditorBusyDetail) els.cadEditorBusyDetail.textContent = 'The task will stop at the next safe cancellation point';
   if (els.cadEditorBusyCancelButton) {
     els.cadEditorBusyCancelButton.disabled = true;
-    els.cadEditorBusyCancelButton.textContent = 'กำลังยกเลิก…';
+    els.cadEditorBusyCancelButton.textContent = 'Cancelling…';
   }
   return true;
 }
 async function runCadEditorTask(title, detail, task) {
   if (state.cadEditor.busy) {
-    toast('กำลังทำงานรายการก่อนหน้า กรุณารอสักครู่', 2800);
+    toast('Another operation is still running. Please wait', 2800);
     return false;
   }
   setCadEditorBusy(true, title, detail);
@@ -3115,11 +3118,11 @@ async function runCadEditorTask(title, detail, task) {
     return await task(taskContext);
   } catch (error) {
     if (error?.name === 'AbortError') {
-      toast('ยกเลิกการทำงานแล้ว', 3000);
+      toast('The operation was cancelled.', 3000);
       return false;
     }
     console.error(error);
-    toast(`${title} ไม่สำเร็จ: ${error?.message || error}`, 6500);
+    toast(`${title} failed: ${error?.message || error}`, 6500);
     return false;
   } finally {
     const closeAfter = Boolean(state.cadEditor.pendingCloseAfterTask);
@@ -3136,7 +3139,7 @@ function cadEditorSelectedLandCount() {
 }
 function runCadEditorOperation(label, task, { alwaysBusy = false } = {}) {
   if (state.cadEditor.busy) {
-    toast('กำลังทำงานรายการก่อนหน้า กรุณารอสักครู่', 2800);
+    toast('Another operation is still running. Please wait', 2800);
     return false;
   }
   const componentCount = cadEditorSelectionSet().size;
@@ -3145,12 +3148,12 @@ function runCadEditorOperation(label, task, { alwaysBusy = false } = {}) {
   if (!heavy) {
     try {
       const result = task();
-      if (result && typeof result.then === 'function') return result.catch((error) => { console.error(error); toast(`${label} ไม่สำเร็จ: ${error?.message || error}`, 6000); return false; });
+      if (result && typeof result.then === 'function') return result.catch((error) => { console.error(error); toast(`${label} failed: ${error?.message || error}`, 6000); return false; });
       return result;
-    } catch (error) { console.error(error); toast(`${label} ไม่สำเร็จ: ${error?.message || error}`, 6000); return false; }
+    } catch (error) { console.error(error); toast(`${label} failed: ${error?.message || error}`, 6000); return false; }
   }
   return runCadEditorTask(
-    `กำลัง${label}…`,
+    `Processing ${label}…`,
     `${formatInt.format(componentCount)} Components · ${formatInt.format(landCount)} Lands`,
     async () => task(),
   );
@@ -3185,17 +3188,17 @@ function showCadEditorConfirm(mode, { pendingAction = null } = {}) {
   if (mode === 'discard') {
     els.cadEditorConfirmIcon.textContent = '!';
     els.cadEditorConfirmEyebrow.textContent = 'UNSAVED CHANGES';
-    els.cadEditorConfirmTitle.textContent = 'ยกเลิกการแก้ไขที่ยังไม่ได้ Apply?';
-    els.cadEditorConfirmMessage.textContent = 'การแก้ไขหลัง Apply ครั้งล่าสุดจะถูกทิ้ง และหน้า Mapping จะไม่ถูกเปลี่ยน';
-    els.cadEditorConfirmYes.textContent = 'Yes-ทิ้งการแก้ไข';
-    els.cadEditorConfirmNo.textContent = 'No-กลับไปแก้ต่อ';
+    els.cadEditorConfirmTitle.textContent = 'Discard unapplied changes?';
+    els.cadEditorConfirmMessage.textContent = 'Changes made after the last Apply will be discarded and the Mapping view will remain unchanged';
+    els.cadEditorConfirmYes.textContent = 'Yes - Discard Changes';
+    els.cadEditorConfirmNo.textContent = 'No - Continue Editing';
   } else {
     els.cadEditorConfirmIcon.textContent = '✓';
     els.cadEditorConfirmEyebrow.textContent = 'CONFIRM APPLY';
-    els.cadEditorConfirmTitle.textContent = 'ยืนยันการ Apply CAD ที่แก้ไข?';
-    els.cadEditorConfirmMessage.textContent = 'ระบบจะตรวจสอบ CAD แล้วซิงก์ข้อมูลล่าสุดไปยัง Viewer และหน้า Mapping';
-    els.cadEditorConfirmYes.textContent = 'Yes - ยืนยัน';
-    els.cadEditorConfirmNo.textContent = 'ยกเลิก';
+    els.cadEditorConfirmTitle.textContent = 'Apply the edited CAD?';
+    els.cadEditorConfirmMessage.textContent = 'The CAD will be validated, then the latest revision will be synchronized to Viewer and Mapping';
+    els.cadEditorConfirmYes.textContent = 'Yes - Confirm';
+    els.cadEditorConfirmNo.textContent = 'Cancel';
   }
   const validation = validateCadEditorModel(state.cadEditor.model);
   const summaryItems = [
@@ -3210,7 +3213,7 @@ function showCadEditorConfirm(mode, { pendingAction = null } = {}) {
     return item;
   }));
   if (mode === 'apply' && !validation.valid) {
-    els.cadEditorConfirmMessage.textContent = `ยัง Apply ไม่ได้: ${validation.errors.slice(0, 3).join(' · ')}`;
+    els.cadEditorConfirmMessage.textContent = `Apply blocked: ${validation.errors.slice(0, 3).join(' · ')}`;
     els.cadEditorConfirmYes.disabled = true;
   }
   requestAnimationFrame(() => (els.cadEditorConfirmYes.disabled ? els.cadEditorConfirmNo : els.cadEditorConfirmYes)?.focus());
@@ -3260,12 +3263,12 @@ async function confirmCadEditorChoice() {
 
   if (mode === 'apply') {
     const applied = await runCadEditorTask(
-      'กำลังยืนยันและ Apply CAD…',
-      'เริ่มตรวจสอบข้อมูล CAD',
+      'Validating and applying CAD…',
+      'Starting CAD validation',
       async (taskContext) => commitCadEditorToProject({ keepEditorOpen: true, showToast: false, fitViewer: false, taskContext }),
     );
     if (!applied) return false;
-    toast('ยืนยันและ Apply CAD สำเร็จ · Mapping ใช้ข้อมูลล่าสุดแล้ว', 3600);
+    toast('CAD applied successfully · Mapping now uses the latest revision', 3600);
     return true;
   }
 
@@ -3573,12 +3576,12 @@ function cloneCadEditorComponent(source, dx, dy) {
 function duplicateSelectedCadEditorComponents() {
   const selected = cadEditorSelectedComponents();
   if (!selected.length) return false;
-  const historyTransaction = beginCadEditorHistory(`ทำสำเนา ${selected.length} Component`, { componentUids: selected, structure: true });
+  const historyTransaction = beginCadEditorHistory(`Duplicate ${selected.length} Component`, { componentUids: selected, structure: true });
   const step = Math.max(.1, Number(els.cadEditorNudgeStep?.value) || .1);
   const offset = step * 5;
   const copies = selected.map((component) => cloneCadEditorComponent(component, offset, -offset));
   invalidateCadEditorBounds();
-  markCadEditorChanged(`ทำสำเนา ${formatInt.format(copies.length)} Component แล้ว · ลากไปยังตำแหน่งใหม่ได้ทันที`);
+  markCadEditorChanged(`Duplicate ${formatInt.format(copies.length)} Component completed · drag to a new position immediately`);
   renderCadEditorSummary();
   setCadEditorSelection(copies, { primary: copies[0] || null });
   commitCadEditorHistory(historyTransaction, { componentUids: copies });
@@ -3594,14 +3597,14 @@ function copyCadEditorSelection() {
     centerX: Number(component.centerX), centerY: Number(component.centerY), angle: Number(component.angle || 0),
     lands: (component.lands || []).map((land) => ({ cadName: land.cadName, side: land.side, left: Number(land.left), top: Number(land.top), width: Number(land.width), length: Number(land.length) })),
   }));
-  els.cadEditorMessage.textContent = `คัดลอก ${formatInt.format(selected.length)} Component แล้ว`;
+  els.cadEditorMessage.textContent = `Copied ${formatInt.format(selected.length)} Component completed`;
   updateCadEditorMenuState();
   return true;
 }
 function pasteCadEditorClipboard() {
   const clipboard = state.cadEditor.clipboard || [];
   if (!clipboard.length) return false;
-  const historyTransaction = beginCadEditorHistory(`วาง ${clipboard.length} Component`, { structure: true });
+  const historyTransaction = beginCadEditorHistory(`Paste ${clipboard.length} Component`, { structure: true });
   const step = Math.max(.1, Number(els.cadEditorNudgeStep?.value) || .1) * 5;
   const copies = [];
   for (const source of clipboard) {
@@ -3615,7 +3618,7 @@ function pasteCadEditorClipboard() {
     copies.push(component);
   }
   invalidateCadEditorBounds();
-  markCadEditorChanged(`วาง ${formatInt.format(copies.length)} Component แล้ว`);
+  markCadEditorChanged(`Paste ${formatInt.format(copies.length)} Component completed`);
   renderCadEditorSummary();
   setCadEditorSelection(copies, { primary: copies[0] || null });
   commitCadEditorHistory(historyTransaction, { componentUids: copies });
@@ -3629,7 +3632,7 @@ function rotateCadEditorSelection(degrees = 90) {
   if (!landMode && !selected.length) return false;
   const affectedComponents = selectedLands.length ? [cadEditorComponent()].filter(Boolean) : selected;
   const targetLabel = selectedLands.length ? `${selectedLands.length} Land` : `${selected.length} Component`;
-  const historyTransaction = beginCadEditorHistory(`หมุน ${targetLabel} ${degrees > 0 ? 'ขวา' : 'ซ้าย'} 90°`, { componentUids: affectedComponents });
+  const historyTransaction = beginCadEditorHistory(`Rotate ${targetLabel} ${degrees > 0 ? 'right' : 'left'} 90°`, { componentUids: affectedComponents });
   const normalized = ((Number(degrees) % 360) + 360) % 360;
   const rotatePoint = (x, y, px, py) => {
     const rad = normalized * Math.PI / 180;
@@ -3664,7 +3667,7 @@ function rotateCadEditorSelection(degrees = 90) {
       invalidateCadEditorBounds(component);
     }
   }
-  markCadEditorChanged(`หมุน ${targetLabel} ${degrees > 0 ? 'ขวา' : 'ซ้าย'} 90° แล้ว`);
+  markCadEditorChanged(`Rotate ${targetLabel} ${degrees > 0 ? 'right' : 'left'} 90° completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: affectedComponents });
   return true;
@@ -3677,23 +3680,23 @@ function flipCadEditorSelectionSide() {
   const targets = landMode ? selectedLands : selected.flatMap((component) => component.lands || []);
   if (!targets.length) return false;
   const affectedComponents = selectedLands.length ? [cadEditorComponent()].filter(Boolean) : selected;
-  const historyTransaction = beginCadEditorHistory(`เปลี่ยนด้าน ${targets.length} Land`, { componentUids: affectedComponents });
+  const historyTransaction = beginCadEditorHistory(`Change side ${targets.length} Land`, { componentUids: affectedComponents });
   for (const item of targets) {
     const side = normalizeSide(item.side);
     item.side = side === 'bottom' ? 'Top' : 'Bottom';
   }
-  markCadEditorChanged(`เปลี่ยนด้าน ${formatInt.format(targets.length)} Land แล้ว`);
+  markCadEditorChanged(`Change side ${formatInt.format(targets.length)} Land completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: affectedComponents });
   return true;
 }
 
 const BOARD_TRANSFORM_LABELS = Object.freeze({
-  'rotate-left': 'หมุนบอร์ดซ้าย 90°',
-  'rotate-right': 'หมุนบอร์ดขวา 90°',
-  'rotate-180': 'กลับทิศบอร์ด 180°',
-  'mirror-left-right': 'Mirror บอร์ดซ้าย ↔ ขวา',
-  'mirror-top-bottom': 'Mirror บอร์ดบน ↔ ล่าง',
+  'rotate-left': 'Rotate board left 90°',
+  'rotate-right': 'Rotate board right 90°',
+  'rotate-180': 'Rotate board 180°',
+  'mirror-left-right': 'Mirror board left ↔ right',
+  'mirror-top-bottom': 'Mirror board top ↔ bottom',
 });
 
 async function requestCadEditorBoardTransform(operation) {
@@ -3704,8 +3707,8 @@ async function requestCadEditorBoardTransform(operation) {
   const summary = modelSummary(model);
   const confirmed = await requestAppConfirm({
     title: `${label}?`,
-    message: `ระบบจะเปลี่ยนพิกัดทั้งบอร์ด ${formatInt.format(summary.components)} Component / ${formatInt.format(summary.lands)} Land บน Working Model`,
-    detail: 'ไฟล์ต้นฉบับจะไม่ถูกแก้ไข การทำรายการนี้ Undo/Redo ได้ และต้องกด Apply ก่อน Export',
+    message: `The system will transform the full-board coordinates ${formatInt.format(summary.components)} Component / ${formatInt.format(summary.lands)} Land in the working model`,
+    detail: 'The original source file will not be modified. This operation supports Undo/Redo and must be applied before export',
     confirmText: `Yes - ${label}`,
   });
   if (!confirmed) return false;
@@ -3714,15 +3717,15 @@ async function requestCadEditorBoardTransform(operation) {
   try {
     const result = transformCadEditorBoard(model, operation);
     invalidateCadEditorBounds();
-    markCadEditorChanged(`${label} แล้ว`);
+    markCadEditorChanged(`${label} completed`);
     renderCadEditor();
     fitCadEditorView();
     commitCadEditorHistory(historyTransaction, { componentUids: components });
-    els.cadEditorMessage.textContent = `${label} สำเร็จ · ${formatInt.format(result.componentCount)} Components / ${formatInt.format(result.landCount)} Lands · Undo ได้`;
+    els.cadEditorMessage.textContent = `${label} successful · ${formatInt.format(result.componentCount)} Components / ${formatInt.format(result.landCount)} Lands · Undo is available`;
     return true;
   } catch (error) {
     console.error(error);
-    showGlobalError(error, { title: 'กลับทิศทางบอร์ดไม่สำเร็จ', operation: 'board-transform', fileName: cadEditorFile()?.name });
+    showGlobalError(error, { title: 'Board transform failed', operation: 'board-transform', fileName: cadEditorFile()?.name });
     return false;
   }
 }
@@ -3765,7 +3768,7 @@ function closeLandGridMapper() {
 function gridMapDefaultSettings() {
   return {
     namingMode: 'grid', gapMode: 'compact', order: 'row-major', reverseRows: false, reverseColumns: false,
-    prefix: '', separator: '', suffix: '', rowStart: 'A', columnStart: 1, columnStep: 1,
+    prefix: '', separator: '', suffix: '', rowStart: 'A', alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', skipLetters: '', startRow: null, startColumn: null, columnStart: 1, columnStep: 1,
     start: 1, step: 1, padding: 0,
   };
 }
@@ -3781,6 +3784,10 @@ function gridMapSettingsFromControls() {
     separator: els.landGridSeparator.value,
     suffix: els.landGridSuffix.value,
     rowStart: els.landGridRowStart.value,
+    alphabet: els.landGridAlphabet?.value || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    skipLetters: els.landGridSkipLetters?.value || '',
+    startRow: els.landGridStartRow?.value ? Number(els.landGridStartRow.value) - 1 : null,
+    startColumn: els.landGridStartColumn?.value ? Number(els.landGridStartColumn.value) - 1 : null,
     columnStart: Number(els.landGridColumnStart.value || 1),
     columnStep: Number(els.landGridColumnStep.value || 1),
     start: Number(els.landGridStart.value || 1),
@@ -3800,6 +3807,10 @@ function applyGridMapSettingsToControls(settings = {}) {
   els.landGridSeparator.value = config.separator;
   els.landGridSuffix.value = config.suffix;
   els.landGridRowStart.value = config.rowStart;
+  if (els.landGridAlphabet) els.landGridAlphabet.value = config.alphabet || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (els.landGridSkipLetters) els.landGridSkipLetters.value = config.skipLetters || '';
+  if (els.landGridStartRow) els.landGridStartRow.value = config.startRow == null ? '' : String(Number(config.startRow) + 1);
+  if (els.landGridStartColumn) els.landGridStartColumn.value = config.startColumn == null ? '' : String(Number(config.startColumn) + 1);
   els.landGridColumnStart.value = String(config.columnStart);
   els.landGridColumnStep.value = String(config.columnStep);
   els.landGridStart.value = String(config.start);
@@ -3812,6 +3823,8 @@ function updateGridMapControlState() {
   const gridMode = mode === 'grid';
   els.landGridGapMode.disabled = !gridMode;
   els.landGridRowStart.disabled = !gridMode;
+  if (els.landGridAlphabet) els.landGridAlphabet.disabled = !gridMode;
+  if (els.landGridSkipLetters) els.landGridSkipLetters.disabled = !gridMode;
   els.landGridColumnStart.disabled = !gridMode;
   els.landGridColumnStep.disabled = !gridMode;
   els.landGridSeparator.disabled = !gridMode;
@@ -3841,11 +3854,11 @@ function updateGridMapManualEditor(mapper, plan) {
   els.landGridApplyManualButton.disabled = !enabled;
   els.landGridClearManualButton.disabled = !enabled || !mapper.manualOverrides.has(item?.landKey);
   if (!item) {
-    els.landGridSelectedInfo.textContent = 'คลิก Land ใน Preview เพื่อแก้ชื่อใหม่เฉพาะจุด';
+    els.landGridSelectedInfo.textContent = 'Click a land in the preview to override its generated name';
     els.landGridManualName.value = '';
     return;
   }
-  els.landGridSelectedInfo.textContent = `CAD ${item.cadName || '—'} · XML ${item.globalId} · ตำแหน่ง R${item.physicalRow + 1} C${item.physicalColumn + 1}`;
+  els.landGridSelectedInfo.textContent = `CAD ${item.cadName || '—'} · XML ${item.globalId} · positions R${item.physicalRow + 1} C${item.physicalColumn + 1}`;
   els.landGridManualName.value = mapper.manualOverrides.get(item.landKey) ?? item.newName;
 }
 
@@ -3855,7 +3868,7 @@ function renderLandGridMapper() {
   updateGridMapControlState();
   const plan = currentLandGridPlan();
   mapper.plan = plan;
-  els.landGridSubtitle.textContent = `${mapper.component.name || `ID ${mapper.component.id}`} · ${mapper.component.packageName || 'ไม่มีชื่อ Package'} · สร้างชื่อใหม่แล้ว Mapping เข้ากับชื่อ CAD โดยไม่ Rename CAD`;
+  els.landGridSubtitle.textContent = `${mapper.component.name || `ID ${mapper.component.id}`} · ${mapper.component.packageName || 'Unnamed package'} · generated names map to existing CAD names without renaming CAD`;
   els.landGridTableHead.textContent = '';
   els.landGridTableBody.textContent = '';
 
@@ -3880,10 +3893,10 @@ function renderLandGridMapper() {
         if (item.changed) content.classList.add('changed');
         if (item.manualOverride) content.classList.add('manual');
         if (mapper.selectedLandKey === item.landKey) content.classList.add('selected');
-        const strong = document.createElement('strong'); strong.textContent = item.newName || 'ชื่อว่าง';
+        const strong = document.createElement('strong'); strong.textContent = item.newName || 'Blank name';
         const small = document.createElement('small'); small.textContent = `CAD: ${item.cadName || '—'} · XML ${item.globalId}`;
         content.append(strong, small);
-        content.title = `ชื่อใหม่: ${item.newName}\nชื่อ CAD: ${item.cadName}\nคลิกเพื่อแก้ชื่อใหม่เฉพาะจุด`;
+        content.title = `Generated name: ${item.newName}\nCAD name: ${item.cadName}\nclick to override this generated name`;
         content.addEventListener('click', () => {
           mapper.selectedLandKey = item.landKey;
           renderLandGridMapper();
@@ -3894,14 +3907,14 @@ function renderLandGridMapper() {
     }
     els.landGridTableBody.append(row);
   }
-  const modeText = plan.namingMode === 'grid' ? `Grid ${plan.gapMode === 'compact' ? 'ข้ามช่องว่าง' : 'รักษาช่องว่าง'}` : (plan.namingMode === 'sequence' ? 'LAND Sequence' : 'Number Only');
-  els.landGridDimensions.textContent = `${mapper.grid.rowCount} แถว × ${mapper.grid.columnCount} คอลัมน์ · ${mapper.grid.landCount} Lands`;
-  els.landGridChanged.textContent = `${modeText} · Mapping ${formatInt.format(plan.plan.length)} จุด · เปลี่ยนจากที่บันทึก ${formatInt.format(plan.changedCount)} จุด`;
+  const modeText = plan.namingMode === 'grid' ? `Grid ${plan.gapMode === 'compact' ? 'Compact gaps' : 'Preserve gaps'}` : (plan.namingMode === 'sequence' ? 'LAND Sequence' : 'Number Only');
+  els.landGridDimensions.textContent = `${mapper.grid.rowCount} rows × ${mapper.grid.columnCount} columns · ${mapper.grid.landCount} Lands`;
+  els.landGridChanged.textContent = `${modeText} · Mapping ${formatInt.format(plan.plan.length)} points · changed from saved mapping ${formatInt.format(plan.changedCount)} points`;
   const issues = [];
-  if (mapper.grid.missingCount) issues.push(`ช่องว่าง ${formatInt.format(mapper.grid.missingCount)}`);
-  if (plan.manualCount) issues.push(`กำหนดเอง ${formatInt.format(plan.manualCount)}`);
-  if (plan.duplicates.length) issues.push(`ชื่อซ้ำ/ว่าง ${formatInt.format(plan.duplicates.length)} กลุ่ม`);
-  els.landGridIssues.textContent = issues.length ? issues.join(' · ') : 'ชื่อใหม่ไม่ซ้ำ และ Mapping ครบทุก CAD Land';
+  if (mapper.grid.missingCount) issues.push(`gaps ${formatInt.format(mapper.grid.missingCount)}`);
+  if (plan.manualCount) issues.push(`manual overrides ${formatInt.format(plan.manualCount)}`);
+  if (plan.duplicates.length) issues.push(`duplicate/blank names ${formatInt.format(plan.duplicates.length)} groups`);
+  els.landGridIssues.textContent = issues.length ? issues.join(' · ') : 'Generated names are unique and every CAD land is mapped';
   els.landGridIssues.classList.toggle('is-error', Boolean(plan.duplicates.length || mapper.grid.collisions.length));
   els.landGridApplyButton.disabled = Boolean(plan.duplicates.length || mapper.grid.collisions.length || !plan.plan.length || !plan.changedCount);
   els.landGridExportExcelButton.disabled = Boolean(plan.duplicates.length || mapper.grid.collisions.length || !plan.plan.length);
@@ -3911,11 +3924,11 @@ function renderLandGridMapper() {
 function openLandGridMapper() {
   ensureCadToolState();
   const component = cadEditorSingleComponentForTool();
-  if (!component) return toast('กรุณาเลือก Component เพียง 1 ตัวก่อนเปิด Grid / Land Map');
-  if (state.cadEditor.model?.changed) return toast('กรุณากด Apply CAD ก่อน เพื่อให้ Grid Mapping อ้างอิง Land ID ของ Revision ล่าสุด');
+  if (!component) return toast('Select exactly one component before opening Grid / Land Map');
+  if (state.cadEditor.model?.changed) return toast('Apply CAD first so Grid Mapping uses land IDs from the latest revision');
   try {
     const grid = detectLandGrid(component);
-    if (grid.collisions.length) throw new Error(`พบ Land ซ้อน Grid ${grid.collisions.length} ตำแหน่ง`);
+    if (grid.collisions.length) throw new Error(`Found ${grid.collisions.length} grid-cell land collision(s).`);
     const file = cadEditorFile();
     const savedRecord = gridLandMapRecord(file, component);
     const manualOverrides = new Map(Object.entries(savedRecord?.manualOverrides || {}));
@@ -3925,7 +3938,7 @@ function openLandGridMapper() {
     els.landGridOverlay.classList.remove('hidden');
     els.landGridCloseButton.focus();
   } catch (error) {
-    showGlobalError(error, { title: 'เปิด Grid / Land Map ไม่สำเร็จ', operation: 'grid-land-mapping', fileName: cadEditorFile()?.name });
+    showGlobalError(error, { title: 'Failed to open Grid / Land Map', operation: 'grid-land-mapping', fileName: cadEditorFile()?.name });
   }
 }
 
@@ -3936,8 +3949,8 @@ async function applyLandGridMapper() {
   if (!mapper || !plan || !file || plan.duplicates.length || !plan.plan.length || !plan.changedCount) return false;
   const confirmed = await requestAppConfirm({
     title: 'Apply Grid / Land Mapping?',
-    message: `บันทึกชื่อใหม่ ${formatInt.format(plan.plan.length)} จุดให้ ${mapper.component.name || mapper.component.id}`,
-    detail: `ชื่อใหม่จะ Mapping กับชื่อ CAD เดิมแบบ 1:1 · ไม่ Rename CAD · เปลี่ยนจาก Mapping ที่บันทึก ${formatInt.format(plan.changedCount)} จุด`,
+    message: `Save generated names ${formatInt.format(plan.plan.length)} pointsfor ${mapper.component.name || mapper.component.id}`,
+    detail: `Generated names map 1:1 to the existing CAD names · CAD is not renamed · changes from saved mapping ${formatInt.format(plan.changedCount)} points`,
     confirmText: 'Yes - Apply Mapping',
   });
   if (!confirmed) return false;
@@ -3982,10 +3995,10 @@ async function applyLandGridMapper() {
     mapper.savedRecord = store.components[key];
     scheduleProjectAutosave(file);
     renderLandGridMapper();
-    toast(`บันทึก Grid / Land Mapping สำเร็จ · ${formatInt.format(assignments.length)} ชื่อใหม่ ↔ CAD Land · ไม่เปลี่ยนชื่อ CAD`, 5200);
+    toast(`Grid / Land Mapping saved · ${formatInt.format(assignments.length)} Generated name ↔ CAD Land · CAD names unchanged`, 5200);
     return true;
   } catch (error) {
-    showGlobalError(error, { title: 'Apply Grid / Land Mapping ไม่สำเร็จ', operation: 'grid-land-mapping-apply', fileName: file?.name });
+    showGlobalError(error, { title: 'Failed to apply Grid / Land Mapping', operation: 'grid-land-mapping-apply', fileName: file?.name });
     return false;
   }
 }
@@ -4005,7 +4018,7 @@ async function exportGridMapExcel() {
   try {
     const preflight = assertAppliedRevisionExportable(file, state.cadEditor.model);
     els.landGridExportExcelButton.disabled = true;
-    els.landGridExportExcelButton.textContent = 'กำลังสร้าง Excel…';
+    els.landGridExportExcelButton.textContent = 'Generating Excel…';
     const metadata = projectExportMetadata(file, 'xlsx-grid-land-map', validationStatusFromPreflight(preflight));
     const model = createGridMapExcelModel(mapper.component, {
       grid: mapper.grid,
@@ -4015,11 +4028,11 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.25.2.xlsx`);
-    toast(`Export Grid / Land Map Excel สำเร็จ · ${formatInt.format(model.cells.length)} ชื่อใหม่ ↔ CAD Land`, 4800);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.26.0.xlsx`);
+    toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
-    showGlobalError(error, { title: 'Export Grid / Land Map Excel ไม่สำเร็จ', operation: 'grid-land-map-xlsx-export', fileName: file?.name });
+    showGlobalError(error, { title: 'Grid / Land Map Excel export failed', operation: 'grid-land-map-xlsx-export', fileName: file?.name });
     return false;
   } finally {
     els.landGridExportExcelButton.textContent = oldText;
@@ -4084,7 +4097,7 @@ function renderNameGridRenamer() {
   updateNameGridControlState();
   const plan = currentNameGridPlan();
   model.plan = plan;
-  els.nameGridSubtitle.textContent = `${model.component.name || `ID ${model.component.id}`} · ${model.component.packageName || 'ไม่มีชื่อ Package'} · Preview บน Working Model`;
+  els.nameGridSubtitle.textContent = `${model.component.name || `ID ${model.component.id}`} · ${model.component.packageName || 'Unnamed package'} · Preview on working model`;
   els.nameGridTableHead.textContent = '';
   els.nameGridTableBody.textContent = '';
   const mode = els.nameGridMode.value;
@@ -4121,8 +4134,8 @@ function renderNameGridRenamer() {
       if (!item) content.textContent = '—';
       else {
         if (item.previousName !== item.nextName) content.classList.add('changed');
-        const strong = document.createElement('strong'); strong.textContent = item.nextName || 'ว่าง';
-        const small = document.createElement('small'); small.textContent = `${item.previousName || 'ว่าง'} · XML ${item.land.globalId}`;
+        const strong = document.createElement('strong'); strong.textContent = item.nextName || 'blank';
+        const small = document.createElement('small'); small.textContent = `${item.previousName || 'blank'} · XML ${item.land.globalId}`;
         content.append(strong, small);
       }
       cell.append(content); row.append(cell);
@@ -4131,17 +4144,17 @@ function renderNameGridRenamer() {
   }
   const previewMaxLength = Math.max(2, Math.min(64, Number(els.nameGridMaxLength.value) || state.cadInspector.maxLength));
   const tooLong = plan.plan.filter((item) => [...item.nextName].length > previewMaxLength).length;
-  els.nameGridDimensions.textContent = `${model.grid.rowCount} แถว × ${model.grid.columnCount} คอลัมน์ · ${model.grid.landCount} Lands`;
-  els.nameGridChanged.textContent = `เปลี่ยน ${formatInt.format(plan.changedCount)} ชื่อ · ช่องว่าง ${model.grid.missingCount} ช่อง`;
+  els.nameGridDimensions.textContent = `${model.grid.rowCount} rows × ${model.grid.columnCount} columns · ${model.grid.landCount} Lands`;
+  els.nameGridChanged.textContent = `Changed ${formatInt.format(plan.changedCount)} names · ${model.grid.missingCount} gaps`;
   els.nameGridIssues.textContent = plan.duplicates.length
-    ? `ชื่อซ้ำ/ว่าง ${plan.duplicates.length} กลุ่ม`
-    : tooLong ? `ชื่อยาวเกิน ${previewMaxLength} ตัวอักษร ${tooLong} จุด · เพิ่มความยาวสูงสุดก่อน Apply` : 'Preview ผ่านการตรวจชื่อซ้ำและความยาว';
+    ? `duplicate/blank names ${plan.duplicates.length} groups`
+    : tooLong ? `Names exceed ${previewMaxLength} characters ${tooLong} points · increase the maximum length before Apply` : 'Preview passed duplicate-name and length validation';
   els.nameGridIssues.classList.toggle('is-error', Boolean(plan.duplicates.length || tooLong));
   els.nameGridApplyButton.disabled = Boolean(plan.duplicates.length || tooLong || model.grid.collisions.length || !plan.changedCount);
 }
 
 function openNameGridRenamer(options = {}) {
-  if (!state.xmlData?.components?.length) return toast('กรุณานำเข้า CAD ก่อน');
+  if (!state.xmlData?.components?.length) return toast('Import CAD first');
   els.nameGridComponentSelect.textContent = '';
   for (const component of state.xmlData.components.filter((item) => item.lands?.length)) {
     const option = document.createElement('option'); option.value = String(component.id); option.textContent = `${component.name || component.id} · ${component.packageName || '—'} · ${formatInt.format(component.lands.length)} Lands`; els.nameGridComponentSelect.append(option);
@@ -4164,7 +4177,7 @@ function openNameGridRenamer(options = {}) {
     els.nameGridOverlay.classList.remove('hidden');
     els.nameGridCloseButton.focus();
   } catch (error) {
-    showGlobalError(error, { title: 'เปิด Grid Rename Preview ไม่สำเร็จ', operation: 'name-grid-preview', fileName: activeCadFile()?.name });
+    showGlobalError(error, { title: 'Failed to open Grid Rename Preview', operation: 'name-grid-preview', fileName: activeCadFile()?.name });
   }
 }
 
@@ -4175,10 +4188,10 @@ async function applyNameGridRenamer() {
   const tooLong = plan?.plan?.filter((item) => [...item.nextName].length > maxLength).length || 0;
   if (!model || !plan || plan.duplicates.length || tooLong || !plan.changedCount) return false;
   const confirmed = await requestAppConfirm({
-    title: 'Apply ชื่อจาก Grid Preview?',
-    message: `เปลี่ยนชื่อ ${formatInt.format(plan.changedCount)} Land ใน ${model.component.name || model.component.id}`,
-    detail: 'ชื่อจะเขียนลง Working Model ของฟังก์ชันตรวจสอบชื่อ และยังไม่แก้ Immutable Source',
-    confirmText: 'Yes - Apply ชื่อจาก Preview',
+    title: 'Apply names from Grid Preview?',
+    message: `Rename ${formatInt.format(plan.changedCount)} Land in ${model.component.name || model.component.id}`,
+    detail: 'Names will be written to the Name Check working model; the immutable source remains unchanged',
+    confirmText: 'Yes - Apply Preview Names',
   });
   if (!confirmed) return false;
   try {
@@ -4194,10 +4207,10 @@ async function applyNameGridRenamer() {
     state.cadInspector.page = 1;
     refreshCadInspector();
     closeNameGridRenamer();
-    toast(`Grid Rename สำเร็จ · เปลี่ยน ${formatInt.format(plan.changedCount)} ชื่อ · Preview และตารางตรวจชื่อซิงก์แล้ว`, 4800);
+    toast(`Grid Rename completed · changed ${formatInt.format(plan.changedCount)} names · Preview and Name Check table synchronized`, 4800);
     return true;
   } catch (error) {
-    showGlobalError(error, { title: 'Apply Grid Rename ไม่สำเร็จ', operation: 'name-grid-apply', fileName: activeCadFile()?.name });
+    showGlobalError(error, { title: 'Grid Rename apply failed', operation: 'name-grid-apply', fileName: activeCadFile()?.name });
     return false;
   }
 }
@@ -4205,7 +4218,7 @@ async function applyNameGridRenamer() {
 function alignCadEditorSelection(kind) {
   const selected = cadEditorSelectedComponents();
   if (selected.length < 2) return false;
-  const historyTransaction = beginCadEditorHistory(`จัดแนว ${selected.length} Component`, { componentUids: selected });
+  const historyTransaction = beginCadEditorHistory(`Align ${selected.length} Component`, { componentUids: selected });
   const items = selected.map((component) => ({ component, bounds: cadEditorBounds(component) }));
   const group = combinedCadEditorBounds(selected);
   for (const item of items) {
@@ -4219,7 +4232,7 @@ function alignCadEditorSelection(kind) {
     moveComponent(item.component, dx, dy);
     invalidateCadEditorBounds(item.component);
   }
-  markCadEditorChanged(`จัดแนว ${formatInt.format(selected.length)} Component แล้ว`);
+  markCadEditorChanged(`Align ${formatInt.format(selected.length)} Component completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: selected });
   return true;
@@ -4287,15 +4300,15 @@ function runCadEditorActionNow(action) {
 }
 function runCadEditorAction(action) {
   const labels = {
-    duplicate: 'ทำสำเนา',
-    'rotate-left': 'หมุนซ้าย',
-    'rotate-right': 'หมุนขวา',
-    'flip-side': 'เปลี่ยนด้าน',
-    'fit-selection': 'Fit ที่เลือก',
-    'split-lands': 'แยก Land เป็น Component ใหม่',
-    delete: 'ลบที่เลือก',
+    duplicate: 'Duplicate',
+    'rotate-left': 'Rotate Left',
+    'rotate-right': 'Rotate Right',
+    'flip-side': 'Change side',
+    'fit-selection': 'Fit Selection',
+    'split-lands': 'Split Lands into New Component',
+    delete: 'Delete Selection',
   };
-  return runCadEditorOperation(labels[action] || 'ประมวลผล CAD', () => runCadEditorActionNow(action));
+  return runCadEditorOperation(labels[action] || 'Process CAD', () => runCadEditorActionNow(action));
 }
 
 function drawCadEditorLands(component, selectedComponent, width, height) {
@@ -4503,25 +4516,25 @@ function renderCadEditorVisualProperties() {
   const isLand = landMode && landCount > 0;
   const activeTargets = landMode ? isLand : count > 0;
 
-  els.cadEditorComponentLabel.textContent = count ? `${formatInt.format(count)} Component ที่เลือก` : '0 Component ที่เลือก';
+  els.cadEditorComponentLabel.textContent = count ? `${formatInt.format(count)} Component selected` : '0 components selected';
   els.cadEditorSelectionLabel.textContent = isLand
-    ? (landCount === 1 ? `Land ${land.cadName || land.globalId} · ${primary?.name || primary?.id}` : `เลือก ${formatInt.format(landCount)} Lands · ${primary?.name || primary?.id}`)
-    : (count ? `เลือก ${formatInt.format(count)} Component` : 'ยังไม่ได้เลือก Component');
+    ? (landCount === 1 ? `Land ${land.cadName || land.globalId} · ${primary?.name || primary?.id}` : `Selected ${formatInt.format(landCount)} lands · ${primary?.name || primary?.id}`)
+    : (count ? `Selected ${formatInt.format(count)} components` : 'No component selected');
 
   if (isLand) {
     els.cadEditorPropertyTitle.textContent = landCount === 1 ? (land.cadName || `Land ${land.globalId}`) : `${formatInt.format(landCount)} Lands`;
     els.cadEditorPropertySubtitle.textContent = landCount === 1
-      ? `${primary?.name || primary?.id} · ${normalizeSide(land.side) === 'bottom' ? 'Bottom' : 'Top'} · ลากจุดจับเพื่อปรับขนาด`
-      : `${primary?.name || primary?.id} · ลากเพื่อย้ายพร้อมกัน · Split เพื่อแยกเป็น Component ใหม่`;
+      ? `${primary?.name || primary?.id} · ${normalizeSide(land.side) === 'bottom' ? 'Bottom' : 'Top'} · drag handles to resize`
+      : `${primary?.name || primary?.id} · drag to move together · Split creates a new component`;
   } else if (!count) {
-    els.cadEditorPropertyTitle.textContent = 'ยังไม่ได้เลือก';
-    els.cadEditorPropertySubtitle.textContent = 'คลิก Component บนบอร์ดหรือลากกรอบคลุม';
+    els.cadEditorPropertyTitle.textContent = 'Nothing selected';
+    els.cadEditorPropertySubtitle.textContent = 'Click a component on the board or drag a selection rectangle';
   } else if (count === 1) {
     els.cadEditorPropertyTitle.textContent = primary?.name || `Component ${primary?.id}`;
     els.cadEditorPropertySubtitle.textContent = `${primary?.packageName || 'No package'} · ${formatInt.format(primary?.lands?.length || 0)} Lands`;
   } else {
     els.cadEditorPropertyTitle.textContent = `${formatInt.format(count)} Components`;
-    els.cadEditorPropertySubtitle.textContent = selected.slice(0, 4).map((component) => component.name || component.id).join(', ') + (count > 4 ? ` และอีก ${count - 4}` : '');
+    els.cadEditorPropertySubtitle.textContent = selected.slice(0, 4).map((component) => component.name || component.id).join(', ') + (count > 4 ? ` and ${count - 4}` : '');
   }
 
   const setDisabled = (control, disabled) => { if (control) control.disabled = disabled; };
@@ -4552,11 +4565,11 @@ function renderCadEditorVisualProperties() {
   els.cadEditorPanTool.classList.toggle('active', state.cadEditor.visual.tool === 'pan');
   els.cadEditorCanvas.classList.toggle('pan-tool', state.cadEditor.visual.tool === 'pan' || state.cadEditor.visual.spaceDown);
   els.cadEditorSelectionHint.textContent = state.cadEditor.visual.mode === 'land'
-    ? 'คลิก Land · Shift/Ctrl เพิ่มการเลือก · ลากพื้นที่ว่างเพื่อคลุมหลาย Land · Split แยก Component · Delete ลบ'
-    : 'คลิก Component · Shift/Ctrl เพิ่มการเลือก · ลากกรอบคลุม · ลากที่เลือกเพื่อย้าย · Ctrl+D ทำสำเนา';
+    ? 'Click a land · Shift/Ctrl to extend selection · drag empty space to select multiple lands · Split creates a new component · Delete removes'
+    : 'Click a component · Shift/Ctrl to extend selection · drag a rectangle to select · drag selection to move · Ctrl+D duplicates';
   els.cadEditorLandLabel.textContent = land
-    ? (landCount === 1 ? `${primary?.name || primary?.id} · ${land.cadName || land.globalId}` : `${primary?.name || primary?.id} · เลือก ${formatInt.format(landCount)} Lands`)
-    : (primary ? `${primary.name || primary.id} · กด Land แล้วคลิก Pad` : 'เลือก Component ก่อน');
+    ? (landCount === 1 ? `${primary?.name || primary?.id} · ${land.cadName || land.globalId}` : `${primary?.name || primary?.id} · selected ${formatInt.format(landCount)} lands`)
+    : (primary ? `${primary.name || primary.id} · select Land, then click a pad` : 'Select a component first');
 
   let infoType = '—', infoName = '—', infoPackage = '—', infoSide = '—', infoPosition = '—', infoSize = '—';
   if (isLand) {
@@ -4631,10 +4644,10 @@ function renderCadEditorSummary() {
   const canExplainArchiveExport = unsupportedArchiveWriter;
   els.cadEditorExportTgzButton.disabled = state.cadEditor.busy || (!canExportPackage && !canExplainArchiveExport);
   const unsupportedLabel = archiveFormat === 'odb++' ? 'ODB++' : archiveFormat === 'ipc-2581' ? 'IPC-2581' : (archiveFormat || 'Source');
-  els.cadEditorExportTgzButton.textContent = canExportPackage ? `Export ${packageInfo.label}` : (unsupportedArchiveWriter ? `Export Archive · ${unsupportedLabel} Writer ยังไม่รองรับ` : 'Export Archive');
-  els.cadEditorExportTgzButton.title = unsupportedArchiveWriter ? `กดเพื่อดูคำอธิบาย: ยังไม่มี Writer ที่เขียน ${unsupportedLabel} กลับเข้า Archive โดยไม่เปลี่ยนชนิดข้อมูล` : (canExportPackage ? `ส่งออก ${packageInfo.label} พร้อมเขียนกลับเป็น ${archiveFormat} และเก็บไฟล์ประกอบเดิม` : 'ไฟล์นี้ไม่ได้เปิดจาก Archive');
+  els.cadEditorExportTgzButton.textContent = canExportPackage ? `Export ${packageInfo.label}` : (unsupportedArchiveWriter ? `Export Archive · ${unsupportedLabel} writer not supported` : 'Export Archive');
+  els.cadEditorExportTgzButton.title = unsupportedArchiveWriter ? `Details: no writer can safely write ${unsupportedLabel} back into the archive without changing the data type` : (canExportPackage ? `Export ${packageInfo.label} and write back as ${archiveFormat} while preserving companion files` : 'This project was not opened from an archive');
   const archiveText = file?.archive ? ` · ${rootKind.toUpperCase()} ${file.archive.name} · ${archiveFormat || 'CAD'} ${file.archive.candidate?.displayPath || file.name}` : '';
-  els.cadEditorSource.textContent = file ? `${cadRoleLabel(state.activeCadRole)} · ${file.name}${archiveText}` : 'เปิด XML, ZIP หรือ TGZ เพื่อเริ่มแก้ไข';
+  els.cadEditorSource.textContent = file ? `${cadRoleLabel(state.activeCadRole)} · ${file.name}${archiveText}` : 'Open XML, ZIP, TGZ, CAD, or FAB to begin editing';
   const hasModel = Boolean(state.cadEditor.model?.components?.length);
   const hasSingleComponent = Boolean(cadEditorSingleComponentForTool());
   if (els.cadEditorBoardReverseButton) els.cadEditorBoardReverseButton.disabled = state.cadEditor.busy || !hasModel;
@@ -4648,7 +4661,7 @@ function renderCadEditorComponents() {
   const selected = matches.find((component) => component.uid === state.cadEditor.selectedComponentUid);
   if (selected && !components.includes(selected)) components.unshift(selected);
   const limited = matches.length > components.length;
-  els.cadEditorComponentLabel.textContent = `${limited ? 'แสดง ' : ''}${formatInt.format(components.length)} / ${formatInt.format(matches.length)} ที่ตรงค้นหา · ทั้งหมด ${formatInt.format(model?.components?.length || 0)}`;
+  els.cadEditorComponentLabel.textContent = `${limited ? 'Showing ' : ''}${formatInt.format(components.length)} / ${formatInt.format(matches.length)} matching search · total ${formatInt.format(model?.components?.length || 0)}`;
   els.cadEditorComponentList.innerHTML = '';
   for (const component of components) {
     const button = document.createElement('button');
@@ -4661,9 +4674,9 @@ function renderCadEditorComponents() {
     els.cadEditorComponentList.append(button);
   }
   if (!components.length) {
-    const empty = document.createElement('p'); empty.className = 'empty-state'; empty.textContent = 'ไม่พบ Component ตามคำค้น'; els.cadEditorComponentList.append(empty);
+    const empty = document.createElement('p'); empty.className = 'empty-state'; empty.textContent = 'No components match the search'; els.cadEditorComponentList.append(empty);
   } else if (limited) {
-    const hint = document.createElement('p'); hint.className = 'empty-state cad-editor-limit-hint'; hint.textContent = `แสดงครั้งละ ${formatInt.format(CAD_EDITOR_RENDER_LIMIT)} รายการเพื่อให้ไฟล์ใหญ่ทำงานลื่น · พิมพ์ RefDes หรือ Package ในช่องค้นหา`; els.cadEditorComponentList.append(hint);
+    const hint = document.createElement('p'); hint.className = 'empty-state cad-editor-limit-hint'; hint.textContent = `Showing up to ${formatInt.format(CAD_EDITOR_RENDER_LIMIT)} items at a time for large-project responsiveness · search by RefDes or Package`; els.cadEditorComponentList.append(hint);
   }
 }
 function renderCadEditorComponentForm() {
@@ -4684,13 +4697,13 @@ function createLandEditorInput(land, property, type = 'text', step = '') {
   input.addEventListener('click', (event) => event.stopPropagation());
   input.addEventListener('change', () => {
     const component = cadEditorComponent();
-    const historyTransaction = beginCadEditorHistory(`แก้ ${property} ของ Land ${land.cadName || land.globalId}`, { componentUids: component ? [component] : [] });
+    const historyTransaction = beginCadEditorHistory(`Edit ${property} of land ${land.cadName || land.globalId}`, { componentUids: component ? [component] : [] });
     if (type === 'number') {
       const value = String(input.value).trim() === '' ? null : Number(input.value);
-      if (value != null && !Number.isFinite(value)) { input.value = land[property] ?? ''; return toast('ค่าตัวเลขไม่ถูกต้อง'); }
+      if (value != null && !Number.isFinite(value)) { input.value = land[property] ?? ''; return toast('Invalid numeric value'); }
       land[property] = value;
     } else land[property] = input.value;
-    markCadEditorChanged(`แก้ ${property} ของ Land แล้ว`);
+    markCadEditorChanged(`Edit ${property} of land completed`);
     invalidateCadEditorBounds(component);
     renderCadEditorSummary();
     commitCadEditorHistory(historyTransaction, { componentUids: component ? [component] : [] });
@@ -4705,14 +4718,14 @@ function createLandSideSelect(land) {
   const selectedValue = normalized === 'top' ? 'Top' : normalized === 'bottom' ? 'Bottom' : current;
   if (selectedValue && !values.includes(selectedValue)) values.push(selectedValue);
   if (!selectedValue) values.push('');
-  for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value || 'ไม่ระบุ'; select.append(option); }
+  for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value || 'Unspecified'; select.append(option); }
   select.value = selectedValue;
   select.addEventListener('click', (event) => event.stopPropagation());
   select.addEventListener('change', () => {
     const component = cadEditorComponent();
-    const historyTransaction = beginCadEditorHistory(`เปลี่ยนด้าน Land ${land.cadName || land.globalId}`, { componentUids: component ? [component] : [] });
+    const historyTransaction = beginCadEditorHistory(`Change land side ${land.cadName || land.globalId}`, { componentUids: component ? [component] : [] });
     land.side = select.value;
-    markCadEditorChanged('เปลี่ยนด้าน Land แล้ว');
+    markCadEditorChanged('Land side changed');
     renderCadEditorSummary();
     commitCadEditorHistory(historyTransaction, { componentUids: component ? [component] : [] });
   });
@@ -4733,7 +4746,7 @@ function renderCadEditorLands() {
   const selected = matches.find((land) => land.uid === state.cadEditor.selectedLandUid);
   if (selected && !lands.includes(selected)) lands.unshift(selected);
   const limited = matches.length > lands.length;
-  els.cadEditorLandLabel.textContent = component ? `${component.name || `ID ${component.id}`} · ${limited ? 'แสดง ' : ''}${formatInt.format(lands.length)} / ${formatInt.format(matches.length)} ที่ตรงตัวกรอง · ทั้งหมด ${formatInt.format(component.lands.length)} lands` : 'เลือก Component';
+  els.cadEditorLandLabel.textContent = component ? `${component.name || `ID ${component.id}`} · ${limited ? 'Showing ' : ''}${formatInt.format(lands.length)} / ${formatInt.format(matches.length)} matching filter · total ${formatInt.format(component.lands.length)} lands` : 'Select Component';
   els.cadEditorLandTableBody.innerHTML = '';
   for (const land of lands) {
     const row = document.createElement('tr');
@@ -4751,9 +4764,9 @@ function renderCadEditorLands() {
     els.cadEditorLandTableBody.append(row);
   }
   if (!lands.length) {
-    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state'; cell.textContent = component ? 'ไม่พบ Land ตามตัวกรอง' : 'เลือก Component จากรายการด้านซ้าย'; row.append(cell); els.cadEditorLandTableBody.append(row);
+    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state'; cell.textContent = component ? 'No lands match the filter' : 'Select a component from the list on the left'; row.append(cell); els.cadEditorLandTableBody.append(row);
   } else if (limited) {
-    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state cad-editor-limit-hint'; cell.textContent = `แสดงครั้งละ ${formatInt.format(CAD_EDITOR_RENDER_LIMIT)} Land เพื่อรองรับ BGA/LGA ขนาดใหญ่ · ค้นหาด้วยชื่อ Land หรือ XML ID`; row.append(cell); els.cadEditorLandTableBody.append(row);
+    const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 8; cell.className = 'empty-state cad-editor-limit-hint'; cell.textContent = `Showing up to ${formatInt.format(CAD_EDITOR_RENDER_LIMIT)} lands at a time for large BGA/LGA packages · search by land name or XML ID`; row.append(cell); els.cadEditorLandTableBody.append(row);
   }
   const selectedCount = cadEditorSelectedLands().length;
   els.cadEditorDuplicateLandButton.disabled = selectedCount === 0;
@@ -4772,7 +4785,7 @@ function renderCadEditor() {
 }
 function openCadEditor() {
   const file = cadEditorFile();
-  if (!file) return toast('กรุณาเปิด CAD XML, ZIP หรือ TGZ ก่อน');
+  if (!file) return toast('Open a supported CAD, XML, ZIP, or TGZ file first');
   if (!file.editorModel) {
     const activeText = file.editedText || file.text;
     const source = file.renames?.size ? rewriteCadXml(activeText, file.renames) : activeText;
@@ -4814,7 +4827,7 @@ async function refreshMainViewAfterCadEditor(file) {
   const needsMappingRebuild = Boolean(file.mappingDirty);
   const needsRefresh = Boolean(file.viewerDirty || file.mappingDirty || state.cadEditor.viewerRefreshPending);
   if (!needsRefresh) return true;
-  setLoading(true, needsMappingRebuild ? 'กำลังสร้าง Mapping ใหม่จาก CAD ที่แก้ไข…' : 'กำลังรีเฟรช Viewer และ Mapping…');
+  setLoading(true, needsMappingRebuild ? 'Rebuilding mapping from the edited CAD…' : 'Refreshing Viewer and Mapping…');
   await nextFrame();
   try {
     if (needsMappingRebuild) rebuildMappingForActiveCad();
@@ -4831,14 +4844,14 @@ async function refreshMainViewAfterCadEditor(file) {
     file.mappingDirty = false;
     file.viewerDirty = false;
     state.cadEditor.viewerRefreshPending = false;
-    toast(needsMappingRebuild ? 'สร้าง Mapping ใหม่จาก CAD ที่แก้ไขแล้ว' : 'Viewer และ Mapping อัปเดตแล้ว', 3600);
+    toast(needsMappingRebuild ? 'Mapping rebuilt from the edited CAD' : 'Viewer and Mapping updated', 3600);
     return true;
   } catch (error) {
     console.error(error);
     file.mappingDirty = needsMappingRebuild;
     file.viewerDirty = true;
     state.cadEditor.viewerRefreshPending = true;
-    toast(`รีเฟรชข้อมูลหลังปิด Editor ไม่สำเร็จ: ${error?.message || error}`, 6500);
+    toast(`Failed to refresh data after closing the editor: ${error?.message || error}`, 6500);
     return false;
   } finally {
     setLoading(false);
@@ -4865,7 +4878,7 @@ function closeCadEditor(options = {}) {
     state.cadEditor.pendingCloseAfterTask = true;
     if (pendingAction) state.cadEditor.pendingActionAfterClose = pendingAction;
     cancelCadEditorTask({ closeAfter: true });
-    toast('กำลังยกเลิกงาน แล้วจะเปิดหน้าต่างยืนยันการปิด Editor', 3600);
+    toast('Cancelling the task, then the close confirmation will open', 3600);
     return false;
   }
   if (!options.force && state.cadEditor.model?.changed) {
@@ -4880,7 +4893,7 @@ function closeCadEditor(options = {}) {
 }
 function saveCadEditorComponent() {
   const component = cadEditorComponent(); if (!component || cadEditorSelectedComponents().length !== 1) return;
-  const historyTransaction = beginCadEditorHistory(`แก้ข้อมูล Component ${component.name || component.id}`, { componentUids: [component] });
+  const historyTransaction = beginCadEditorHistory(`Edit component data ${component.name || component.id}`, { componentUids: [component] });
   const oldBounds = cadEditorBounds(component);
   const oldX = Number.isFinite(Number(component.centerX)) ? Number(component.centerX) : oldBounds.centerX;
   const oldY = Number.isFinite(Number(component.centerY)) ? Number(component.centerY) : oldBounds.centerY;
@@ -4893,17 +4906,17 @@ function saveCadEditorComponent() {
   component.centerX = nextX; component.centerY = nextY;
   component.angle = numberFromEditorInput(els.cadEditorAngle, null);
   invalidateCadEditorBounds(component);
-  markCadEditorChanged('บันทึกข้อมูล Component และตำแหน่งแล้ว');
+  markCadEditorChanged('Component data and placement saved');
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: [component] });
-  toast('บันทึกข้อมูล Component และตำแหน่งแล้ว');
+  toast('Component data and placement saved');
 }
 function saveCadEditorLand() {
   const component = cadEditorComponent(); const land = cadEditorLand(); if (!component || !land) return;
-  const historyTransaction = beginCadEditorHistory(`แก้ Land ${land.cadName || land.globalId}`, { componentUids: [component] });
+  const historyTransaction = beginCadEditorHistory(`Edit land ${land.cadName || land.globalId}`, { componentUids: [component] });
   const id = numberFromEditorInput(els.cadEditorLandId, land.globalId);
-  if (!Number.isFinite(id)) return toast('XML Land ID ไม่ถูกต้อง');
-  for (const current of state.cadEditor.model.components || []) for (const item of current.lands || []) if (item !== land && Number(item.globalId) === id) return toast(`XML Land ID ${id} มีอยู่แล้ว`);
+  if (!Number.isFinite(id)) return toast('Invalid XML Land ID');
+  for (const current of state.cadEditor.model.components || []) for (const item of current.lands || []) if (item !== land && Number(item.globalId) === id) return toast(`XML Land ID ${id} already exists`);
   land.globalId = id;
   land.cadName = els.cadEditorLandName.value.trim();
   land.side = els.cadEditorLandSide.value;
@@ -4912,21 +4925,21 @@ function saveCadEditorLand() {
   land.width = numberFromEditorInput(els.cadEditorLandWidth, land.width);
   land.length = numberFromEditorInput(els.cadEditorLandLength, land.length);
   invalidateCadEditorBounds(component);
-  markCadEditorChanged('บันทึก Land แล้ว');
+  markCadEditorChanged('Land saved');
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: [component] });
-  toast('บันทึก Land แล้ว');
+  toast('Land saved');
 }
 function addCadEditorComponent() {
-  if (!cadEditorSelectedComponents().length) return toast('เลือก Component ต้นแบบบนบอร์ดก่อน แล้วกดทำสำเนา');
+  if (!cadEditorSelectedComponents().length) return toast('Select a source component on the board, then choose Duplicate');
   try { duplicateSelectedCadEditorComponents(); }
   catch (error) { toast(error.message, 5000); }
 }
 function addCadEditorLand() {
   const component = cadEditorComponent();
-  if (!component || cadEditorSelectedComponents().length !== 1) return toast('เลือก Component เพียง 1 ชิ้นก่อนเพิ่ม Land');
+  if (!component || cadEditorSelectedComponents().length !== 1) return toast('Select exactly one component before adding a land');
   try {
-    const historyTransaction = beginCadEditorHistory(`เพิ่ม Land ใน ${component.name || component.id}`, { componentUids: [component] });
+    const historyTransaction = beginCadEditorHistory(`Add land in ${component.name || component.id}`, { componentUids: [component] });
     const center = cadEditorScreenToWorld(els.cadEditorCanvas.clientWidth / 2, els.cadEditorCanvas.clientHeight / 2);
     const step = Math.max(.1, Number(els.cadEditorNudgeStep?.value) || .1);
     const land = addLand(state.cadEditor.model, component, { left: cadEditorSnapValue(center.x - step * 2), top: cadEditorSnapValue(center.y + step * 2), width: step * 4, length: step * 4 });
@@ -4934,7 +4947,7 @@ function addCadEditorLand() {
     state.cadEditor.selectedLandUids = new Set([land.uid]);
     state.cadEditor.visual.mode = 'land';
     invalidateCadEditorBounds(component);
-    markCadEditorChanged('เพิ่ม Land กลางมุมมองแล้ว · ลากเพื่อย้ายและลากจุดจับเพื่อปรับขนาด');
+    markCadEditorChanged('Land added at the center of the view · drag to move and use handles to resize');
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: [component] });
   } catch (error) { toast(error.message, 5000); }
@@ -4944,11 +4957,11 @@ function duplicateCadEditorLand() {
   const selected = cadEditorSelectedLands();
   try {
     if (!component || !selected.length) return false;
-    const historyTransaction = beginCadEditorHistory(`ทำสำเนา ${selected.length} Land`, { componentUids: [component] });
+    const historyTransaction = beginCadEditorHistory(`Duplicate ${selected.length} Land`, { componentUids: [component] });
     const copies = selected.map((land) => duplicateLand(state.cadEditor.model, component, land));
     setCadEditorLandSelection(copies, { primary: copies[0] || null });
     invalidateCadEditorBounds(component);
-    markCadEditorChanged(`ทำสำเนา ${formatInt.format(copies.length)} Land แล้ว · ลากไปยังตำแหน่งใหม่ได้ทันที`);
+    markCadEditorChanged(`Duplicate ${formatInt.format(copies.length)} Land completed · drag to a new position immediately`);
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: [component] });
     return true;
@@ -4959,15 +4972,15 @@ async function removeCadEditorLand() {
   const selected = cadEditorSelectedLands();
   if (!component || !selected.length) return false;
   if (selected.length >= component.lands.length) {
-    toast('ไม่สามารถลบ Land ทั้งหมดด้วยคำสั่งนี้ · หากต้องการลบทั้งชิ้นให้เปลี่ยนเป็นโหมด Component');
+    toast('This command cannot delete every land in a component. Switch to Component mode to delete the whole component');
     return false;
   }
-  if (selected.length > 20 && !(await requestAppConfirm({ title: 'ลบ Land จำนวนมาก?', message: `ลบ Land ${selected.length} จุดจาก ${component.name || component.id}`, detail: 'รายการนี้ Undo ได้ก่อน Apply', confirmText: 'Yes - ลบ Land', destructive: true }))) return false;
-  const historyTransaction = beginCadEditorHistory(`ลบ ${selected.length} Land`, { componentUids: [component] });
+  if (selected.length > 20 && !(await requestAppConfirm({ title: 'Delete multiple lands?', message: `Delete lands ${selected.length} pointsfrom ${component.name || component.id}`, detail: 'This operation can be undone before Apply', confirmText: 'Yes - Delete Lands', destructive: true }))) return false;
+  const historyTransaction = beginCadEditorHistory(`Delete ${selected.length} Land`, { componentUids: [component] });
   for (const land of [...selected]) deleteLand(state.cadEditor.model, component, land);
   clearCadEditorLandSelection();
   invalidateCadEditorBounds(component);
-  markCadEditorChanged(`ลบ ${formatInt.format(selected.length)} Land แล้ว`);
+  markCadEditorChanged(`Delete ${formatInt.format(selected.length)} Land completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: [component] });
   return true;
@@ -4983,32 +4996,32 @@ function nextCadEditorSplitName(component) {
 function cutSelectedCadEditorLand() {
   const component = cadEditorComponent();
   const selected = cadEditorSelectedLands();
-  if (!component || selected.length !== 1) { toast('เลือก Land 1 จุดเพื่อ Cut ½'); return false; }
-  const historyTransaction = beginCadEditorHistory('ตัด Land ครึ่งหนึ่ง', { componentUids: [component] });
+  if (!component || selected.length !== 1) { toast('Select one land for Cut ½'); return false; }
+  const historyTransaction = beginCadEditorHistory('Cut Land in Half', { componentUids: [component] });
   try {
     const pieces = splitLandRectangle(state.cadEditor.model, component, selected[0], { axis: 'auto', ratio: 0.5 });
     setCadEditorLandSelection(pieces, { primary: pieces[0] });
     invalidateCadEditorBounds(component);
-    markCadEditorChanged(`Cut Land เป็น ${pieces.length} ส่วนแล้ว`);
+    markCadEditorChanged(`Cut land into ${pieces.length} pieces`);
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: [component] });
     return true;
-  } catch (error) { toast(`Cut Land ไม่สำเร็จ: ${error.message}`, 5500); return false; }
+  } catch (error) { toast(`Cut Land failed: ${error.message}`, 5500); return false; }
 }
 function mergeSelectedCadEditorLands() {
   const component = cadEditorComponent();
   const selected = cadEditorSelectedLands();
-  if (!component || selected.length < 2) { toast('เลือก Land ที่ติดกันอย่างน้อย 2 จุดเพื่อ Merge'); return false; }
-  const historyTransaction = beginCadEditorHistory(`รวม ${selected.length} Land`, { componentUids: [component] });
+  if (!component || selected.length < 2) { toast('Select at least two adjacent lands to merge'); return false; }
+  const historyTransaction = beginCadEditorHistory(`total ${selected.length} Land`, { componentUids: [component] });
   try {
     const merged = mergeLandRectangles(state.cadEditor.model, component, selected);
     setCadEditorLandSelection([merged], { primary: merged });
     invalidateCadEditorBounds(component);
-    markCadEditorChanged(`Merge ${selected.length} Land แล้ว`);
+    markCadEditorChanged(`Merge ${selected.length} Land completed`);
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: [component] });
     return true;
-  } catch (error) { toast(`Merge Land ไม่สำเร็จ: ${error.message}`, 5500); return false; }
+  } catch (error) { toast(`Merge Lands failed: ${error.message}`, 5500); return false; }
 }
 
 function splitSelectedCadEditorLands() {
@@ -5016,35 +5029,35 @@ function splitSelectedCadEditorLands() {
   const selected = cadEditorSelectedLands();
   if (!component || !selected.length) return false;
   if (selected.length >= component.lands.length) {
-    toast('ต้องเหลือ Land อย่างน้อย 1 จุดใน Component เดิม');
+    toast('At least one land must remain in the original component.');
     return false;
   }
-  const historyTransaction = beginCadEditorHistory(`แยก ${selected.length} Land เป็น Component ใหม่`, { componentUids: [component], structure: true });
+  const historyTransaction = beginCadEditorHistory(`Split ${selected.length} Land into a new component`, { componentUids: [component], structure: true });
   try {
     const split = splitComponentLands(state.cadEditor.model, component, new Set(selected.map((land) => land.uid)), { name: nextCadEditorSplitName(component) });
     invalidateCadEditorBounds();
     setCadEditorSelection([split], { primary: split });
     state.cadEditor.visual.mode = 'land';
     setCadEditorLandSelection(split.lands, { primary: split.lands[0] || null });
-    markCadEditorChanged(`แยก ${formatInt.format(split.lands.length)} Land เป็น ${split.name} แล้ว`);
+    markCadEditorChanged(`Split ${formatInt.format(split.lands.length)} lands into ${split.name}`);
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: [component, split] });
-    toast(`แบ่ง Component สำเร็จ · ${split.name} มี ${formatInt.format(split.lands.length)} Land`);
+    toast(`Component split completed · ${split.name} contains ${formatInt.format(split.lands.length)} lands`);
     return true;
   } catch (error) {
-    toast(`แบ่ง Component ไม่สำเร็จ: ${error.message}`, 5500);
+    toast(`Component split failed: ${error.message}`, 5500);
     return false;
   }
 }
 async function removeCadEditorComponent() {
   const selected = cadEditorSelectedComponents(); if (!selected.length) return false;
   const lands = selected.reduce((sum, component) => sum + (component.lands?.length || 0), 0);
-  if (selected.length > 10 && !(await requestAppConfirm({ title: 'ลบ Component จำนวนมาก?', message: `ลบ ${selected.length} Component และ Land ${lands} จุด`, detail: 'รายการนี้ Undo ได้ก่อน Apply', confirmText: 'Yes - ลบ Component', destructive: true }))) return false;
-  const historyTransaction = beginCadEditorHistory(`ลบ ${selected.length} Component`, { componentUids: selected, structure: true });
+  if (selected.length > 10 && !(await requestAppConfirm({ title: 'Delete multiple components?', message: `Delete ${selected.length} Component and lands ${lands} points`, detail: 'This operation can be undone before Apply', confirmText: 'Yes - Delete Components', destructive: true }))) return false;
+  const historyTransaction = beginCadEditorHistory(`Delete ${selected.length} Component`, { componentUids: selected, structure: true });
   for (const component of [...selected]) deleteComponent(state.cadEditor.model, component);
   state.cadEditor.selectedComponentUids.clear(); state.cadEditor.selectedComponentUid = null; clearCadEditorLandSelection();
   invalidateCadEditorBounds();
-  markCadEditorChanged(`ลบ ${formatInt.format(selected.length)} Component แล้ว`);
+  markCadEditorChanged(`Delete ${formatInt.format(selected.length)} Component completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: selected });
   return true;
@@ -5053,12 +5066,12 @@ function moveSelectedCadEditorComponents(dx, dy, { toastMessage = true, recordHi
   const selected = cadEditorSelectedComponents();
   const x = Number(dx), y = Number(dy);
   if (!selected.length || !Number.isFinite(x) || !Number.isFinite(y) || (!x && !y)) return false;
-  const historyTransaction = recordHistory ? beginCadEditorHistory(`ย้าย ${selected.length} Component`, { componentUids: selected, mergeKey }) : null;
+  const historyTransaction = recordHistory ? beginCadEditorHistory(`Move ${selected.length} Component`, { componentUids: selected, mergeKey }) : null;
   for (const component of selected) { moveComponent(component, x, y); invalidateCadEditorBounds(component); }
-  markCadEditorChanged(`ย้าย ${formatInt.format(selected.length)} Component · X ${formatFloat.format(x)} · Y ${formatFloat.format(y)}`);
+  markCadEditorChanged(`Move ${formatInt.format(selected.length)} Component · X ${formatFloat.format(x)} · Y ${formatFloat.format(y)}`);
   renderCadEditor();
   if (recordHistory) commitCadEditorHistory(historyTransaction, { componentUids: selected });
-  if (toastMessage) toast(`ย้าย ${formatInt.format(selected.length)} Component · X ${formatFloat.format(x)} · Y ${formatFloat.format(y)}`);
+  if (toastMessage) toast(`Move ${formatInt.format(selected.length)} Component · X ${formatFloat.format(x)} · Y ${formatFloat.format(y)}`);
   return true;
 }
 function selectAllVisibleCadEditorComponents() {
@@ -5094,7 +5107,7 @@ function cadEditorPointerDown(event) {
     if (handle && selectedLand) {
       visual.interaction = {
         kind: 'resize-land', pointerId: event.pointerId, start: point, handle, moved: false,
-        historyTransaction: beginCadEditorHistory(`ปรับขนาด Land ${selectedLand.cadName || selectedLand.globalId}`, { componentUids: [cadEditorComponent()].filter(Boolean) }),
+        historyTransaction: beginCadEditorHistory(`Resize land ${selectedLand.cadName || selectedLand.globalId}`, { componentUids: [cadEditorComponent()].filter(Boolean) }),
         snapshot: {
           land: selectedLand,
           component: cadEditorComponent(),
@@ -5129,7 +5142,7 @@ function cadEditorPointerDown(event) {
     const world = cadEditorScreenToWorld(point.x, point.y);
     visual.interaction = {
       kind: 'move-lands', pointerId: event.pointerId, start: point, startWorld: world, moved: false, collapseOnClick, hit: target.land,
-      historyTransaction: beginCadEditorHistory(`ย้าย ${lands.length} Land`, { componentUids: [target.component] }),
+      historyTransaction: beginCadEditorHistory(`Move ${lands.length} Land`, { componentUids: [target.component] }),
       snapshot: lands.map((land) => ({
         land, component: target.component,
         left: land.left, top: land.top, centerX: land.centerX, centerY: land.centerY,
@@ -5155,7 +5168,7 @@ function cadEditorPointerDown(event) {
     visual.interaction = {
       kind: 'move-components', pointerId: event.pointerId, start: point,
       startWorld: cadEditorScreenToWorld(point.x, point.y), moved: false, collapseOnClick, hit,
-      historyTransaction: beginCadEditorHistory(`ย้าย ${selected.length} Component`, { componentUids: selected }),
+      historyTransaction: beginCadEditorHistory(`Move ${selected.length} Component`, { componentUids: selected }),
       snapshot: captureCadEditorComponentPositions(selected),
     };
     els.cadEditorCanvas.classList.add('moving-selection');
@@ -5240,7 +5253,7 @@ function cadEditorPointerUp(event) {
     if (moved) {
       const lands = landsInsideCadEditorMarquee(interaction.component, interaction.start, point);
       setCadEditorLandSelection(lands, { additive: interaction.additive, toggle: interaction.toggle, primary: lands.at(-1) || null });
-      els.cadEditorMessage.textContent = lands.length ? `เลือก Land จากกรอบ ${formatInt.format(lands.length)} จุด` : 'ไม่พบ Land ในกรอบที่ลาก';
+      els.cadEditorMessage.textContent = lands.length ? `Selected lands from rectangle ${formatInt.format(lands.length)} points` : 'No lands found in the selection rectangle';
     } else if (!interaction.additive && !interaction.toggle) {
       clearCadEditorLandSelection();
       renderCadEditorVisualProperties();
@@ -5258,8 +5271,8 @@ function cadEditorPointerUp(event) {
   }
   if (['move-components', 'move-lands', 'resize-land'].includes(interaction.kind) && interaction.moved) {
     const message = interaction.kind === 'move-components'
-      ? `ย้าย ${formatInt.format(cadEditorSelectedComponents().length)} Component แล้ว`
-      : interaction.kind === 'resize-land' ? 'ปรับขนาด Land แล้ว' : `ย้าย ${formatInt.format(cadEditorSelectedLands().length)} Land แล้ว`;
+      ? `Move ${formatInt.format(cadEditorSelectedComponents().length)} Component completed`
+      : interaction.kind === 'resize-land' ? 'Land resized' : `Move ${formatInt.format(cadEditorSelectedLands().length)} Land completed`;
     markCadEditorChanged(message);
     renderCadEditorComponentForm();
     renderCadEditorVisualProperties();
@@ -5304,10 +5317,10 @@ function nudgeCadEditorSelection(dx, dy) {
   if (lands.length) {
     const component = cadEditorComponent();
     const mergeKey = `nudge-lands:${component?.uid || ''}:${lands.map((land) => land.uid).sort().join('|')}`;
-    const historyTransaction = beginCadEditorHistory(`ขยับ ${lands.length} Land`, { componentUids: component ? [component] : [], mergeKey });
+    const historyTransaction = beginCadEditorHistory(`Nudge ${lands.length} Land`, { componentUids: component ? [component] : [], mergeKey });
     for (const land of lands) moveLand(land, dx, dy);
     invalidateCadEditorBounds(component);
-    markCadEditorChanged(`ขยับ ${formatInt.format(lands.length)} Land · X ${formatFloat.format(dx)} · Y ${formatFloat.format(dy)}`);
+    markCadEditorChanged(`Nudge ${formatInt.format(lands.length)} Land · X ${formatFloat.format(dx)} · Y ${formatFloat.format(dy)}`);
     renderCadEditor();
     commitCadEditorHistory(historyTransaction, { componentUids: component ? [component] : [] });
     return true;
@@ -5354,11 +5367,11 @@ function handleCadEditorKeyboard(event) {
     if (key === 'o') { event.preventDefault(); closeCadEditorMenus(); closeCadEditor({ pendingAction: () => els.projectFile.click() }); return true; }
     if (key === 's') { event.preventDefault(); applyCadEditorToViewer(); return true; }
     if (key === 'e') { event.preventDefault(); requestCadEditorSelectedExport(); return true; }
-    if (key === 'a') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land' && cadEditorComponent()) setCadEditorLandSelection(filteredCadEditorLands(cadEditorComponent()), { primary: filteredCadEditorLands(cadEditorComponent())[0] || null }); else runCadEditorOperation('เลือกทั้งหมด', () => { selectAllVisibleCadEditorComponents(); return true; }, { alwaysBusy: true }); return true; }
+    if (key === 'a') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land' && cadEditorComponent()) setCadEditorLandSelection(filteredCadEditorLands(cadEditorComponent()), { primary: filteredCadEditorLands(cadEditorComponent())[0] || null }); else runCadEditorOperation('Select All', () => { selectAllVisibleCadEditorComponents(); return true; }, { alwaysBusy: true }); return true; }
     if (key === 'd') { event.preventDefault(); runCadEditorAction('duplicate'); return true; }
-    if (key === 'x') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') runCadEditorOperation('แยก Land เป็น Component ใหม่', splitSelectedCadEditorLands); else runCadEditorOperation('Cut', () => { if (!copyCadEditorSelection()) return false; return removeCadEditorComponent(); }); return true; }
-    if (key === 'c') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') toast('โหมด Land: ใช้ Ctrl+D เพื่อทำสำเนา หรือ Ctrl+X เพื่อแยกเป็น Component ใหม่'); else runCadEditorOperation('Copy', copyCadEditorSelection); return true; }
-    if (key === 'v') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') toast('วาง Component ได้เมื่ออยู่โหมด Component'); else runCadEditorOperation('Paste', pasteCadEditorClipboard, { alwaysBusy: true }); return true; }
+    if (key === 'x') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') runCadEditorOperation('Split Lands into New Component', splitSelectedCadEditorLands); else runCadEditorOperation('Cut', () => { if (!copyCadEditorSelection()) return false; return removeCadEditorComponent(); }); return true; }
+    if (key === 'c') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') toast('Land mode: use Ctrl+D to duplicate or Ctrl+X to split into a new component'); else runCadEditorOperation('Copy', copyCadEditorSelection); return true; }
+    if (key === 'v') { event.preventDefault(); if (state.cadEditor.visual.mode === 'land') toast('Components can be pasted only in Component mode'); else runCadEditorOperation('Paste', pasteCadEditorClipboard, { alwaysBusy: true }); return true; }
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault();
@@ -5394,16 +5407,16 @@ function handleCadEditorKeyboard(event) {
 }
 function assertCadEditorValid(model) {
   const validation = validateCadEditorModel(model);
-  if (!validation.valid) throw new Error(`${validation.errors.slice(0, 4).join(' · ')}${validation.errors.length > 4 ? ` · และอีก ${validation.errors.length - 4} รายการ` : ''}`);
+  if (!validation.valid) throw new Error(`${validation.errors.slice(0, 4).join(' · ')}${validation.errors.length > 4 ? ` · and ${validation.errors.length - 4} items` : ''}`);
   return validation;
 }
 async function assertCadEditorValidAsync(model, taskContext, progressBase = 0, progressSpan = 20) {
   const validation = await validateCadEditorModelAsync(model, {
     batchSize: 700,
     isCancelled: () => taskContext?.isCancelled?.() || false,
-    onProgress: ({ ratio }) => taskContext?.progress?.(progressBase + ratio * progressSpan, `ตรวจสอบ CAD ${Math.round(ratio * 100)}%`),
+    onProgress: ({ ratio }) => taskContext?.progress?.(progressBase + ratio * progressSpan, `Validating CAD ${Math.round(ratio * 100)}%`),
   });
-  if (!validation.valid) throw new Error(`${validation.errors.slice(0, 4).join(' · ')}${validation.errors.length > 4 ? ` · และอีก ${validation.errors.length - 4} รายการ` : ''}`);
+  if (!validation.valid) throw new Error(`${validation.errors.slice(0, 4).join(' · ')}${validation.errors.length > 4 ? ` · and ${validation.errors.length - 4} items` : ''}`);
   return validation;
 }
 function cadDataTopologySignature(data) {
@@ -5460,7 +5473,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     const nextData = await cadEditorModelToDataAsync(model, {
       batchSize: 600,
       isCancelled: () => taskContext?.isCancelled?.() || false,
-      onProgress: ({ ratio }) => taskContext?.progress?.(20 + ratio * 30, `เตรียมข้อมูล Viewer ${Math.round(ratio * 100)}%`),
+      onProgress: ({ ratio }) => taskContext?.progress?.(20 + ratio * 30, `Preparing Viewer data ${Math.round(ratio * 100)}%`),
     });
     taskContext?.throwIfCancelled?.();
 
@@ -5469,7 +5482,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
       side: 'all',
       batchSize: 900,
       isCancelled: () => taskContext?.isCancelled?.() || false,
-      onProgress: ({ ratio }) => taskContext?.progress?.(50 + ratio * 22, `สร้าง Working XML ${Math.round(ratio * 100)}%`),
+      onProgress: ({ ratio }) => taskContext?.progress?.(50 + ratio * 22, `Generating working XML ${Math.round(ratio * 100)}%`),
     });
     taskContext?.throwIfCancelled?.();
 
@@ -5477,7 +5490,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     const snapshot = await cloneCadEditorModelAsync(model, {
       batchSize: 900,
       isCancelled: () => taskContext?.isCancelled?.() || false,
-      onProgress: ({ ratio }) => taskContext?.progress?.(72 + ratio * 13, `สร้าง Applied Snapshot ${Math.round(ratio * 100)}%`),
+      onProgress: ({ ratio }) => taskContext?.progress?.(72 + ratio * 13, `Generating applied snapshot ${Math.round(ratio * 100)}%`),
     });
     taskContext?.throwIfCancelled?.();
 
@@ -5502,7 +5515,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     });
     if (validationCenter.blockingCount) {
       const first = validationCenter.issues.filter((item) => item.level === 'blocking-error').slice(0, 4).map((item) => `${item.code}: ${item.message}`).join(' · ');
-      throw new CadTransactionError(`Validation Center พบ Blocking Error ${validationCenter.blockingCount} รายการ · ${first}`, { stage: 'validation-center', fileName, code: 'APPLY_BLOCKING_VALIDATION', context: { blockingCount: validationCenter.blockingCount } });
+      throw new CadTransactionError(`Validation Center found blocking errors ${validationCenter.blockingCount} items · ${first}`, { stage: 'validation-center', fileName, code: 'APPLY_BLOCKING_VALIDATION', context: { blockingCount: validationCenter.blockingCount } });
     }
     const validationStatus = validationCenter.counts.error ? 'errors' : (validationCenter.counts.warning ? 'warnings' : 'passed');
     preparedRevision.model.validationIssues = validationCenter.issues;
@@ -5512,7 +5525,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     const nextRevision = preparedRevision.revisionNumber;
 
     stage = 'prepare-mapping';
-    taskContext?.progress?.(86, 'เตรียม Mapping จาก Revision ใหม่');
+    taskContext?.progress?.(86, 'Preparing mapping for the new revision');
     await taskContext?.yield?.();
     const preparedMapping = prepareMappingForCadData(nextData, {
       previousMappingData: state.mappingData,
@@ -5561,11 +5574,11 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     state.cadCompare.result = null;
     updateCadCompareControls();
     els.cadStudioDirtyBadge?.classList.add('hidden');
-    taskContext?.progress?.(100, 'Apply และ Mapping Commit สำเร็จ');
-    els.cadEditorMessage.textContent = `Apply Revision ${nextRevision} แล้ว · ${formatInt.format(nextData.components.length)} Components / ${formatInt.format(nextData.totalLands)} Lands · Validation ${validationStatus} (${validationCenter.counts.warning} Warning / ${validationCenter.counts.error} Error) · Viewer, Mapping และ Export ใช้ Revision เดียวกัน`;
+    taskContext?.progress?.(100, 'Apply and mapping commit completed');
+    els.cadEditorMessage.textContent = `Apply Revision ${nextRevision} completed · ${formatInt.format(nextData.components.length)} Components / ${formatInt.format(nextData.totalLands)} Lands · Validation ${validationStatus} (${validationCenter.counts.warning} Warning / ${validationCenter.counts.error} Error) · Viewer, Mapping, and Export use the same revision`;
     state.diagnostics.record('apply', performance.now() - applyStarted, { success: true, revision: nextRevision, components: nextData.components.length, lands: nextData.totalLands });
     scheduleProjectAutosave(file);
-    if (showToast) toast(`Apply สำเร็จ · Revision ${nextRevision}${topologyChanged ? ' · โครงสร้าง CAD เปลี่ยน' : ''}`, 4800);
+    if (showToast) toast(`Apply completed · Revision ${nextRevision}${topologyChanged ? ' · CAD topology changed' : ''}`, 4800);
     return true;
   } catch (error) {
     state.diagnostics.record('apply', performance.now() - applyStarted, { success: false, stage });
@@ -5598,7 +5611,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
       error.fileName ||= fileName;
       throw error;
     }
-    throw new CadTransactionError(`Apply rollback แล้ว · ขั้นตอน ${stage} · ไฟล์ ${fileName} · ${error?.message || error}`, {
+    throw new CadTransactionError(`Apply rolled back · stage ${stage} · file ${fileName} · ${error?.message || error}`, {
       stage, fileName, code: 'CAD-APPLY-ROLLBACK', cause: error, technicalDetail: error?.stack || '',
       context: { originalCode: error?.code || '', revision: projectRevision(file) },
     });
@@ -5609,14 +5622,14 @@ function applyCadEditorToViewer() {
   return requestCadEditorApply();
 }
 function assertAppliedRevisionExportable(file, model = null) {
-  if (!file) throw new ExportError('ไม่มี Project สำหรับ Export', { stage: 'export-preflight', code: 'EXPORT_NO_PROJECT' });
-  if (model?.changed) throw new ExportError('Working Model มีการแก้ไขที่ยังไม่ได้ Apply กรุณา Apply ก่อน Export เพื่อให้ Revision ตรงกัน', { stage: 'export-preflight', fileName: file.name, code: 'EXPORT_UNAPPLIED_CHANGES' });
+  if (!file) throw new ExportError('No project is available for export', { stage: 'export-preflight', code: 'EXPORT_NO_PROJECT' });
+  if (model?.changed) throw new ExportError('The working model contains unapplied changes. Apply them before export so the revision remains consistent', { stage: 'export-preflight', fileName: file.name, code: 'EXPORT_UNAPPLIED_CHANGES' });
   const session = ensureProjectSession(file);
   const preflight = exportPreflight(session.project.currentModel, { unsupportedRecords: file.archive?.candidate?.adapterInfo?.unsupportedRecords || [] });
   file.lastValidation = preflight;
   if (!preflight.exportAllowed) {
     const detail = preflight.blockingErrors.slice(0, 4).map((item) => `${item.code}: ${item.message}`).join(' · ');
-    throw new ExportError(`Export ถูกบล็อกโดย Validation ${preflight.blockingCount} รายการ · ${detail}`, { stage: 'export-preflight', fileName: file.name, code: 'EXPORT_BLOCKING_VALIDATION', context: { blockingCount: preflight.blockingCount } });
+    throw new ExportError(`Export blocked by validation ${preflight.blockingCount} items · ${detail}`, { stage: 'export-preflight', fileName: file.name, code: 'EXPORT_BLOCKING_VALIDATION', context: { blockingCount: preflight.blockingCount } });
   }
   return preflight;
 }
@@ -5638,22 +5651,22 @@ async function exportCadEditorXml(taskContext = null) {
   const side = els.cadEditorExportSide.value;
   const preflight = assertAppliedRevisionExportable(file, model);
   await assertCadEditorValidAsync(model, taskContext, 0, 25);
-  taskContext?.progress?.(35, 'สร้าง XML โครงสร้าง VT-X / ePM');
+  taskContext?.progress?.(35, 'Generating structured inspection XML');
   await taskContext?.yield?.();
-  const output = exportVtxInspectionXml(model, { side });
+  const output = exportInspectionXml(model, { side });
   taskContext?.throwIfCancelled?.();
   // Machine-compatible XML intentionally has no custom comment/header before DataList.
-  // Export audit metadata remains in the project session/diagnostic state instead of altering the ePM schema.
-  projectExportMetadata(file, 'vtx-epm-inspection-xml', preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
+  // Export audit metadata remains in the project session/diagnostic state instead of altering the inspection schema.
+  projectExportMetadata(file, 'inspection-xml', preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
   downloadBlob(new Blob([output], { type: 'application/xml;charset=utf-8' }), `${cadExportStem(file, side)}.xml`);
   const summary = modelSummary(model);
   const omitted = side === 'all' ? 0 : summary.unknown;
-  taskContext?.progress?.(100, 'Export VT-X / ePM XML สำเร็จ');
-  els.cadEditorMessage.textContent = `Export VT-X / ePM XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} สำเร็จ · พิกัด Normalize แล้ว${omitted ? ` · Land ไม่ระบุด้าน ${omitted} จุดไม่ถูกรวม` : ''}`;
+  taskContext?.progress?.(100, 'Structured inspection XML exported successfully');
+  els.cadEditorMessage.textContent = `Export Inspection XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} successful · coordinates normalized${omitted ? ` · lands with unspecified side ${omitted} points omitted` : ''}`;
   return true;
 }
 function requestCadEditorXmlExport() {
-  return runCadEditorTask('กำลัง Export VT-X / ePM XML…', 'ตรวจสอบ Applied Revision และสร้าง XML ที่เข้ากับ ePM/VT-X', (taskContext) => exportCadEditorXml(taskContext));
+  return runCadEditorTask('Exporting structured inspection XML…', 'Validating the applied revision and generating structured inspection XML', (taskContext) => exportCadEditorXml(taskContext));
 }
 async function exportCadEditorAsciiFormat(format, taskContext = null) {
   const file = cadEditorFile(); const model = state.cadEditor.model;
@@ -5662,7 +5675,7 @@ async function exportCadEditorAsciiFormat(format, taskContext = null) {
   const preflight = assertAppliedRevisionExportable(file, model);
   await assertCadEditorValidAsync(model, taskContext, 0, 30);
   taskContext?.throwIfCancelled?.();
-  taskContext?.progress?.(40, format === 'gencad-1.4' ? 'กำลังสร้าง GenCAD 1.4' : 'กำลังสร้าง FABmaster ASCII');
+  taskContext?.progress?.(40, format === 'gencad-1.4' ? 'Generating CAD ASCII 1.4' : 'Generating manufacturing ASCII');
   await taskContext?.yield?.();
   const validationStatus = preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed');
   const metadata = projectExportMetadata(file, format, validationStatus);
@@ -5670,17 +5683,17 @@ async function exportCadEditorAsciiFormat(format, taskContext = null) {
   const result = format === 'gencad-1.4' ? exportGenCad14(model, writerOptions) : exportFabmasterAscii(model, writerOptions);
   taskContext?.throwIfCancelled?.();
   downloadBlob(new Blob([result.text], { type: result.mime }), `${cadExportStem(file, side)}${result.extension}`);
-  taskContext?.progress?.(100, `Export ${format === 'gencad-1.4' ? 'GenCAD' : 'FABmaster'} สำเร็จ`);
-  const warningText = result.warnings?.length ? ` · Partial writer · คำเตือน ${result.warnings.length} รายการ` : '';
-  els.cadEditorMessage.textContent = `Export ${format === 'gencad-1.4' ? 'GenCAD 1.4 (.cad)' : 'FABmaster ASCII (.fab)'} สำเร็จ${warningText}`;
-  if (result.warnings?.length) toast(`${result.warnings[0]}${result.warnings.length > 1 ? ` · และอีก ${result.warnings.length - 1} รายการ` : ''}`, 9000);
+  taskContext?.progress?.(100, `Export ${format === 'gencad-1.4' ? 'CAD ASCII' : 'Manufacturing ASCII'} successful`);
+  const warningText = result.warnings?.length ? ` · Partial writer · warnings ${result.warnings.length} items` : '';
+  els.cadEditorMessage.textContent = `Export ${format === 'gencad-1.4' ? 'CAD ASCII 1.4 (.cad)' : 'Manufacturing ASCII (.fab)'} successful${warningText}`;
+  if (result.warnings?.length) toast(`${result.warnings[0]}${result.warnings.length > 1 ? ` · and ${result.warnings.length - 1} items` : ''}`, 9000);
   return true;
 }
 function requestCadEditorGenCadExport() {
-  return runCadEditorTask('กำลัง Export GenCAD 1.4…', 'ตรวจสอบ Applied Revision และสร้าง .cad', (taskContext) => exportCadEditorAsciiFormat('gencad-1.4', taskContext));
+  return runCadEditorTask('Exporting CAD ASCII 1.4…', 'Validating the applied revision and generating .cad', (taskContext) => exportCadEditorAsciiFormat('gencad-1.4', taskContext));
 }
 function requestCadEditorFabmasterExport() {
-  return runCadEditorTask('กำลัง Export FABmaster ASCII…', 'ตรวจสอบ Applied Revision และสร้าง .fab', (taskContext) => exportCadEditorAsciiFormat('fabmaster-ascii', taskContext));
+  return runCadEditorTask('Exporting manufacturing ASCII…', 'Validating the applied revision and generating .fab', (taskContext) => exportCadEditorAsciiFormat('fabmaster-ascii', taskContext));
 }
 function selectedCadEditorExportFormat() {
   return els.cadEditorExportFormat?.value || 'inspection-xml';
@@ -5688,7 +5701,7 @@ function selectedCadEditorExportFormat() {
 function updateCadEditorExportButtonLabel() {
   if (!els.cadEditorExportXmlButton) return;
   const format = selectedCadEditorExportFormat();
-  els.cadEditorExportXmlButton.textContent = format === 'gencad-1.4' ? 'Export .CAD' : format === 'fabmaster-ascii' ? 'Export .FAB' : 'Export VT-X XML';
+  els.cadEditorExportXmlButton.textContent = format === 'gencad-1.4' ? 'Export .CAD' : format === 'fabmaster-ascii' ? 'Export .FAB' : 'Export Inspection XML';
 }
 function requestCadEditorSelectedExport() {
   const format = selectedCadEditorExportFormat();
@@ -5699,11 +5712,11 @@ function requestCadEditorSelectedExport() {
 async function exportCadEditorTgz(taskContext = null) {
   const file = cadEditorFile(); const model = state.cadEditor.model;
   const archive = file?.archive;
-  if (!archive?.packageInfo || archive.packageInfo.root.kind === 'file' || !model) { toast('ไฟล์นี้ไม่ได้เปิดมาจาก ZIP / TGZ / TAR'); return false; }
+  if (!archive?.packageInfo || archive.packageInfo.root.kind === 'file' || !model) { toast('This project was not opened from ZIP / TGZ / TAR'); return false; }
   const sourceFormat = archive.candidate?.format || '';
   if (!archive.candidate?.node || !['inspection-xml', 'gencad-1.4', 'fabmaster-ascii'].includes(sourceFormat)) {
-    const label = sourceFormat === 'odb++' ? 'ODB++' : sourceFormat === 'ipc-2581' ? 'IPC-2581' : (sourceFormat || 'Source format นี้');
-    toast(`${label} ถูก Normalize เข้า Working Model แล้ว แต่ยังไม่มี Writer ที่เขียน format เดิมกลับเข้า Archive อย่างปลอดภัย กรุณา Export เป็น XML/.cad/.fab แยกแทน`, 9000);
+    const label = sourceFormat === 'odb++' ? 'ODB++' : sourceFormat === 'ipc-2581' ? 'IPC-2581' : (sourceFormat || 'this source format');
+    toast(`${label} has been normalized into the working model, but a safe writer for the original archive format is not available. Export XML/.cad/.fab separately instead`, 9000);
     return false;
   }
   const side = els.cadEditorExportSide.value;
@@ -5711,10 +5724,10 @@ async function exportCadEditorTgz(taskContext = null) {
   const originalText = els.cadEditorExportTgzButton.textContent;
   try {
     els.cadEditorExportTgzButton.disabled = true;
-    els.cadEditorExportTgzButton.textContent = `กำลังสร้าง ${outputInfo.label}…`;
+    els.cadEditorExportTgzButton.textContent = `Generating ${outputInfo.label}…`;
     const preflight = assertAppliedRevisionExportable(file, model);
     await assertCadEditorValidAsync(model, taskContext, 0, 25);
-    taskContext?.progress?.(35, `กำลังสร้าง ${outputInfo.label}`);
+    taskContext?.progress?.(35, `Generating ${outputInfo.label}`);
     await taskContext?.yield?.();
     const validationStatus = preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed');
     const metadata = projectExportMetadata(file, `archive-${sourceFormat}`, validationStatus);
@@ -5728,15 +5741,15 @@ async function exportCadEditorTgz(taskContext = null) {
       output = result.text; writerWarnings = result.warnings || [];
     } else {
       const rawOutput = serializeCadEditorModel(file.text, model, { side });
-      output = isVtxEpmXml(rawOutput) ? rawOutput : addXmlExportMetadata(rawOutput, metadata);
+      output = isStructuredInspectionXml(rawOutput) ? rawOutput : addXmlExportMetadata(rawOutput, metadata);
     }
     taskContext?.throwIfCancelled?.();
-    taskContext?.progress?.(65, 'กำลังประกอบ Archive กลับ');
+    taskContext?.progress?.(65, 'Rebuilding archive');
     const bytes = await rebuildCadPackage(archive.packageInfo, archive.candidate, output);
     taskContext?.throwIfCancelled?.();
     downloadBlob(new Blob([bytes], { type: outputInfo.mime }), outputInfo.filename);
-    taskContext?.progress?.(100, `Export ${outputInfo.label} สำเร็จ`);
-    els.cadEditorMessage.textContent = `Export ${outputInfo.label} สำเร็จ · เขียน ${sourceFormat} กลับที่ ${archive.candidate.displayPath} และเก็บไฟล์ประกอบ/Archive ซ้อนเดิมไว้${writerWarnings.length ? ` · Partial writer warnings ${writerWarnings.length}` : ''}`;
+    taskContext?.progress?.(100, `Export ${outputInfo.label} successful`);
+    els.cadEditorMessage.textContent = `Export ${outputInfo.label} successful · wrote ${sourceFormat} back to ${archive.candidate.displayPath} while preserving companion and nested archive files${writerWarnings.length ? ` · Partial writer warnings ${writerWarnings.length}` : ''}`;
     if (writerWarnings.length) toast(writerWarnings[0], 9000);
     return true;
   } finally {
@@ -5745,7 +5758,7 @@ async function exportCadEditorTgz(taskContext = null) {
   }
 }
 function requestCadEditorArchiveExport() {
-  return runCadEditorTask('กำลัง Export Archive…', 'ตรวจสอบ Writer ของ Source format และประกอบไฟล์กลับ', (taskContext) => exportCadEditorTgz(taskContext));
+  return runCadEditorTask('Exporting archive…', 'Validating the source-format writer and rebuilding the archive', (taskContext) => exportCadEditorTgz(taskContext));
 }
 
 function closeCadEditorMenus() {
@@ -5860,15 +5873,15 @@ async function toggleCadEditorFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await (els.cadEditorOverlay.requestFullscreen?.() || els.cadEditorOverlay.webkitRequestFullscreen?.());
-  } catch (error) { toast(`เปิดเต็มหน้าจอไม่สำเร็จ: ${error.message}`, 5000); }
+  } catch (error) { toast(`Failed to enter fullscreen: ${error.message}`, 5000); }
 }
 function validateCadEditorFromMenu() {
   if (!state.cadEditor.model) return false;
   const validation = validateCadEditorModel(state.cadEditor.model);
   if (validation.valid) {
     const summary = modelSummary(state.cadEditor.model);
-    toast(`CAD ถูกต้อง · ${formatInt.format(summary.components)} Components · ${formatInt.format(summary.lands)} Lands${validation.warnings?.length ? ` · คำเตือน ${validation.warnings.length}` : ''}`, 5500);
-  } else toast(`พบข้อผิดพลาด ${validation.errors.length} รายการ: ${validation.errors.slice(0, 3).join(' · ')}`, 7000);
+    toast(`CAD validation passed · ${formatInt.format(summary.components)} Components · ${formatInt.format(summary.lands)} Lands${validation.warnings?.length ? ` · warnings ${validation.warnings.length}` : ''}`, 5500);
+  } else toast(`Validation errors found ${validation.errors.length} items: ${validation.errors.slice(0, 3).join(' · ')}`, 7000);
   return validation.valid;
 }
 function runCadEditorCommand(command) {
@@ -5883,12 +5896,12 @@ function runCadEditorCommand(command) {
     case 'close': closeCadEditor(); return true;
     case 'undo': return runCadEditorOperation('Undo', undoCadEditor);
     case 'redo': return runCadEditorOperation('Redo', redoCadEditor);
-    case 'cut': return state.cadEditor.visual.mode === 'land' ? runCadEditorOperation('แยก Land เป็น Component ใหม่', splitSelectedCadEditorLands) : runCadEditorOperation('Cut', () => { if (!copyCadEditorSelection()) return false; return removeCadEditorComponent(); });
-    case 'copy': if (state.cadEditor.visual.mode === 'land') { toast('โหมด Land: ใช้ Duplicate หรือ Split'); return false; } return runCadEditorOperation('Copy', copyCadEditorSelection);
-    case 'paste': if (state.cadEditor.visual.mode === 'land') { toast('เปลี่ยนเป็นโหมด Component ก่อนวาง'); return false; } return runCadEditorOperation('Paste', pasteCadEditorClipboard, { alwaysBusy: true });
+    case 'cut': return state.cadEditor.visual.mode === 'land' ? runCadEditorOperation('Split Lands into New Component', splitSelectedCadEditorLands) : runCadEditorOperation('Cut', () => { if (!copyCadEditorSelection()) return false; return removeCadEditorComponent(); });
+    case 'copy': if (state.cadEditor.visual.mode === 'land') { toast('Land mode: use Duplicate or Split'); return false; } return runCadEditorOperation('Copy', copyCadEditorSelection);
+    case 'paste': if (state.cadEditor.visual.mode === 'land') { toast('Switch to Component mode before pasting'); return false; } return runCadEditorOperation('Paste', pasteCadEditorClipboard, { alwaysBusy: true });
     case 'duplicate': return runCadEditorAction('duplicate');
     case 'delete': return runCadEditorAction('delete');
-    case 'select-all': if (state.cadEditor.visual.mode === 'land' && cadEditorComponent()) { const lands = filteredCadEditorLands(cadEditorComponent()); setCadEditorLandSelection(lands, { primary: lands[0] || null }); } else runCadEditorOperation('เลือกทั้งหมด', () => { selectAllVisibleCadEditorComponents(); return true; }, { alwaysBusy: true }); return true;
+    case 'select-all': if (state.cadEditor.visual.mode === 'land' && cadEditorComponent()) { const lands = filteredCadEditorLands(cadEditorComponent()); setCadEditorLandSelection(lands, { primary: lands[0] || null }); } else runCadEditorOperation('Select All', () => { selectAllVisibleCadEditorComponents(); return true; }, { alwaysBusy: true }); return true;
     case 'clear-selection': if (state.cadEditor.visual.mode === 'land') { clearCadEditorLandSelection(); renderCadEditor(); } else clearCadEditorSelection(); return true;
     case 'fit-board': fitCadEditorView(); return true;
     case 'fit-selection': return runCadEditorAction('fit-selection');
@@ -5905,7 +5918,7 @@ function runCadEditorCommand(command) {
     case 'pan-tool': setCadEditorTool('pan'); return true;
     case 'component-mode': setCadEditorMode('component'); return true;
     case 'land-mode':
-      if (cadEditorSelectedComponents().length !== 1) { toast('เลือก Component เพียง 1 ชิ้นก่อนเข้าโหมด Land'); return false; }
+      if (cadEditorSelectedComponents().length !== 1) { toast('Select exactly one component before entering Land mode'); return false; }
       setCadEditorMode('land'); return true;
     case 'rotate-left': return runCadEditorAction('rotate-left');
     case 'rotate-right': return runCadEditorAction('rotate-right');
@@ -5947,20 +5960,20 @@ els.restoreFile.addEventListener('change', (event) => restoreBackup(event.target
 els.projectBackupButton.addEventListener('click', exportFullProjectBackup);
 els.recoveryButton.addEventListener('click', async () => {
   const record = state.recoveryRecord || (await refreshRecoveryNotice())[0]; if (!record) return;
-  const accepted = await requestAppConfirm({ title: 'กู้คืน Autosave?', message: `${record.name} · Revision ${record.revision}`, detail: 'Workspace ปัจจุบันที่ยังไม่ Commit จะไม่ถูกรวมในการกู้คืน', confirmText: 'Yes - กู้คืน' });
+  const accepted = await requestAppConfirm({ title: 'Recover autosave?', message: `${record.name} · Revision ${record.revision}`, detail: 'Uncommitted workspace changes will not be included in recovery', confirmText: 'Yes - Recover' });
   if (accepted) await restoreStoredProject(await loadProjectRecord(record.id));
 });
-els.storageManagerButton.addEventListener('click', () => openStorageManager().catch((error) => showGlobalError(error, { title: 'เปิด Project Storage ไม่สำเร็จ', operation: 'storage-open' })));
+els.storageManagerButton.addEventListener('click', () => openStorageManager().catch((error) => showGlobalError(error, { title: 'Failed to open Project Storage', operation: 'storage-open' })));
 els.storageCloseButton.addEventListener('click', closeStorageManager);
 els.storageCloseFooterButton.addEventListener('click', closeStorageManager);
 els.storageOverlay.addEventListener('click', (event) => { if (event.target === els.storageOverlay) closeStorageManager(); });
 els.storageProjectList.addEventListener('click', handleStorageAction);
-els.storageRefreshButton.addEventListener('click', () => renderStorageManager().catch((error) => showGlobalError(error, { title: 'รีเฟรช Project Storage ไม่สำเร็จ', operation: 'storage-refresh' })));
+els.storageRefreshButton.addEventListener('click', () => renderStorageManager().catch((error) => showGlobalError(error, { title: 'Failed to refresh Project Storage', operation: 'storage-refresh' })));
 els.storageClearTempButton.addEventListener('click', async () => {
-  const accepted = await requestAppConfirm({ title: 'ล้าง Temporary Cache?', message: 'Project Autosave และ Immutable Source จะไม่ถูกลบ', confirmText: 'Yes - ล้าง Cache' });
+  const accepted = await requestAppConfirm({ title: 'Clear temporary cache?', message: 'Project autosaves and immutable source files will not be deleted', confirmText: 'Yes - Clear Cache' });
   if (!accepted) return;
-  try { await clearTemporaryCache(); await renderStorageManager(); toast('ล้าง Temporary Cache แล้ว'); }
-  catch (error) { showGlobalError(error, { title: 'ล้าง Temporary Cache ไม่สำเร็จ', operation: 'storage-clear-temporary' }); }
+  try { await clearTemporaryCache(); await renderStorageManager(); toast('Temporary cache cleared'); }
+  catch (error) { showGlobalError(error, { title: 'Failed to clear temporary cache', operation: 'storage-clear-temporary' }); }
 });
 els.resetButton.addEventListener('click', resetProject); els.remapButton.addEventListener('click', runMapping);
 els.cadEditorButton.addEventListener('click', openCadEditor);
@@ -6022,12 +6035,12 @@ els.cadEditorGridMapFooterButton?.addEventListener('click', openLandGridMapper);
 els.cadEditorDockDuplicateButton?.addEventListener('click', () => runCadEditorAction('duplicate'));
 els.cadEditorDockRotateButton?.addEventListener('click', () => runCadEditorAction('rotate-right'));
 els.cadEditorDockFlipButton?.addEventListener('click', () => runCadEditorAction('flip-side'));
-els.cadEditorAlignLeftButton?.addEventListener('click', () => runCadEditorOperation('จัดชิดซ้าย', () => alignCadEditorSelection('left')));
-els.cadEditorAlignCenterXButton?.addEventListener('click', () => runCadEditorOperation('จัดกึ่งกลางแนวตั้ง', () => alignCadEditorSelection('center-x')));
-els.cadEditorAlignRightButton?.addEventListener('click', () => runCadEditorOperation('จัดชิดขวา', () => alignCadEditorSelection('right')));
-els.cadEditorAlignTopButton?.addEventListener('click', () => runCadEditorOperation('จัดชิดบน', () => alignCadEditorSelection('top')));
-els.cadEditorAlignCenterYButton?.addEventListener('click', () => runCadEditorOperation('จัดกึ่งกลางแนวนอน', () => alignCadEditorSelection('center-y')));
-els.cadEditorAlignBottomButton?.addEventListener('click', () => runCadEditorOperation('จัดชิดล่าง', () => alignCadEditorSelection('bottom')));
+els.cadEditorAlignLeftButton?.addEventListener('click', () => runCadEditorOperation('Align Left', () => alignCadEditorSelection('left')));
+els.cadEditorAlignCenterXButton?.addEventListener('click', () => runCadEditorOperation('Center Horizontally', () => alignCadEditorSelection('center-x')));
+els.cadEditorAlignRightButton?.addEventListener('click', () => runCadEditorOperation('Align Right', () => alignCadEditorSelection('right')));
+els.cadEditorAlignTopButton?.addEventListener('click', () => runCadEditorOperation('Align Top', () => alignCadEditorSelection('top')));
+els.cadEditorAlignCenterYButton?.addEventListener('click', () => runCadEditorOperation('Center Vertically', () => alignCadEditorSelection('center-y')));
+els.cadEditorAlignBottomButton?.addEventListener('click', () => runCadEditorOperation('Align Bottom', () => alignCadEditorSelection('bottom')));
 els.cadEditorSelectionBar?.addEventListener('click', (event) => { const button = event.target.closest('[data-cad-action]'); if (button) runCadEditorAction(button.dataset.cadAction); });
 els.cadEditorContextMenu?.addEventListener('click', (event) => { const button = event.target.closest('[data-cad-action]'); if (button) runCadEditorAction(button.dataset.cadAction); });
 document.querySelectorAll('[data-cad-dock]').forEach((button) => button.addEventListener('click', () => {
@@ -6063,9 +6076,9 @@ els.cadEditorDeleteComponentButton.addEventListener('click', () => runCadEditorA
 els.cadEditorSaveComponentButton.addEventListener('click', saveCadEditorComponent);
 els.cadEditorAddLandButton.addEventListener('click', addCadEditorLand);
 els.cadEditorDuplicateLandButton.addEventListener('click', duplicateCadEditorLand);
-els.cadEditorCutLandButton?.addEventListener('click', () => runCadEditorOperation('ตัด Land ครึ่งหนึ่ง', cutSelectedCadEditorLand));
-els.cadEditorMergeLandButton?.addEventListener('click', () => runCadEditorOperation('รวม Land', mergeSelectedCadEditorLands));
-els.cadEditorSplitLandButton?.addEventListener('click', () => runCadEditorOperation('แยก Land เป็น Component ใหม่', splitSelectedCadEditorLands));
+els.cadEditorCutLandButton?.addEventListener('click', () => runCadEditorOperation('Cut Land in Half', cutSelectedCadEditorLand));
+els.cadEditorMergeLandButton?.addEventListener('click', () => runCadEditorOperation('Merge Lands', mergeSelectedCadEditorLands));
+els.cadEditorSplitLandButton?.addEventListener('click', () => runCadEditorOperation('Split Lands into New Component', splitSelectedCadEditorLands));
 els.cadEditorDeleteLandButton.addEventListener('click', removeCadEditorLand);
 els.cadEditorRenumberComponentButton.addEventListener('click', requestCadNameInspectorFromEditor);
 els.cadEditorApplyButton.addEventListener('click', applyCadEditorToViewer);
@@ -6086,7 +6099,7 @@ for (const control of [
   els.landGridRowDirection, els.landGridColumnDirection,
 ]) control?.addEventListener('change', renderLandGridMapper);
 for (const control of [
-  els.landGridPrefix, els.landGridSeparator, els.landGridSuffix, els.landGridRowStart,
+  els.landGridPrefix, els.landGridSeparator, els.landGridSuffix, els.landGridRowStart, els.landGridAlphabet, els.landGridSkipLetters, els.landGridStartRow, els.landGridStartColumn,
   els.landGridColumnStart, els.landGridColumnStep, els.landGridStart, els.landGridStep, els.landGridPadding,
 ]) control?.addEventListener('input', renderLandGridMapper);
 els.landGridResetButton?.addEventListener('click', () => {
@@ -6103,7 +6116,7 @@ els.landGridApplyManualButton?.addEventListener('click', () => {
   const item = selectedGridMapItem(mapper, plan);
   if (!mapper || !item) return;
   const value = String(els.landGridManualName.value || '').trim();
-  if (!value) return toast('กรุณากรอกชื่อใหม่ หรือกดล้างชื่อกำหนดเอง');
+  if (!value) return toast('Enter a new name or clear the custom override');
   mapper.manualOverrides.set(item.landKey, value);
   renderLandGridMapper();
 });
@@ -6126,7 +6139,7 @@ els.nameGridCancelButton?.addEventListener('click', closeNameGridRenamer);
 els.nameGridOverlay?.addEventListener('click', (event) => { if (event.target === els.nameGridOverlay) closeNameGridRenamer(); });
 els.nameGridComponentSelect?.addEventListener('change', () => {
   try { resetNameGridModel(); renderNameGridRenamer(); }
-  catch (error) { showGlobalError(error, { title: 'เปลี่ยน Component สำหรับ Grid Rename ไม่สำเร็จ', operation: 'name-grid-component', fileName: activeCadFile()?.name }); }
+  catch (error) { showGlobalError(error, { title: 'Failed to change Grid Rename component', operation: 'name-grid-component', fileName: activeCadFile()?.name }); }
 });
 for (const control of [els.nameGridMode, els.nameGridOrder, els.nameGridRowDirection, els.nameGridColumnDirection]) {
   control?.addEventListener('change', renderNameGridRenamer);
@@ -6153,7 +6166,7 @@ els.cadEditorSelectTool.addEventListener('click', () => setCadEditorTool('select
 els.cadEditorPanTool.addEventListener('click', () => setCadEditorTool('pan'));
 els.cadEditorComponentMode.addEventListener('click', () => setCadEditorMode('component'));
 els.cadEditorLandMode.addEventListener('click', () => {
-  if (cadEditorSelectedComponents().length !== 1) return toast('เลือก Component เพียง 1 ชิ้นก่อนเข้าโหมด Land');
+  if (cadEditorSelectedComponents().length !== 1) return toast('Select exactly one component before entering Land mode');
   setCadEditorMode('land');
 });
 els.cadEditorVisualSearch.addEventListener('input', () => { state.cadEditor.visual.search = els.cadEditorVisualSearch.value; drawCadEditorCanvas(); });
@@ -6169,7 +6182,7 @@ els.cadEditorSelectAllButton.addEventListener('click', () => { if (state.cadEdit
 els.cadEditorClearSelectionButton.addEventListener('click', () => { if (state.cadEditor.visual.mode === 'land') { clearCadEditorLandSelection(); renderCadEditor(); } else clearCadEditorSelection(); });
 els.cadEditorMoveButton.addEventListener('click', () => {
   const dx = Number(els.cadEditorMoveDx.value), dy = Number(els.cadEditorMoveDy.value);
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return toast('ระยะย้าย X/Y ไม่ถูกต้อง');
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return toast('Invalid X/Y move distance');
   if (moveSelectedCadEditorComponents(dx, dy)) { els.cadEditorMoveDx.value = '0'; els.cadEditorMoveDy.value = '0'; }
 });
 els.cadEditorSaveLandButton.addEventListener('click', saveCadEditorLand);
@@ -6252,8 +6265,8 @@ els.editNextButton.addEventListener('click', () => advanceSelected(1));
 els.editAutoNext.addEventListener('change', () => { state.edit.autoNext = els.editAutoNext.checked; updateEditPanel(); });
 els.editLockConfirmed.addEventListener('change', () => { state.edit.lockConfirmed = els.editLockConfirmed.checked; updateEditPanel(); });
 els.teachButton.addEventListener('click', openTeachPanel); els.undoButton.addEventListener('click', undo); els.redoButton.addEventListener('click', redo); els.anchorButton.addEventListener('click', toggleAnchor); els.unmapButton.addEventListener('click', unmapSelected); els.nudgePrevButton.addEventListener('click', () => nudgeSelected(-1)); els.nudgeNextButton.addEventListener('click', () => nudgeSelected(1));
-els.saveAliasButton.addEventListener('click', () => { if (!state.selected) return; const before = snapshotMapping(state.selected); const after = { ...before, alias: els.aliasInput.value.trim() }; applyTransaction('Edit note', [{ mapping: state.selected, before, after }]); toast('บันทึกหมายเหตุแล้ว'); });
-els.copyRawButton.addEventListener('click', async () => { await navigator.clipboard.writeText(els.rawData.textContent); toast('คัดลอกข้อมูลต้นทางแล้ว'); });
+els.saveAliasButton.addEventListener('click', () => { if (!state.selected) return; const before = snapshotMapping(state.selected); const after = { ...before, alias: els.aliasInput.value.trim() }; applyTransaction('Edit note', [{ mapping: state.selected, before, after }]); toast('Note saved'); });
+els.copyRawButton.addEventListener('click', async () => { await navigator.clipboard.writeText(els.rawData.textContent); toast('Source data copied'); });
 els.closeTeachButton.addEventListener('click', closeTeachPanel); els.teachOverlay.addEventListener('click', (event) => { if (event.target === els.teachOverlay) closeTeachPanel(); }); els.clearAnchorsButton.addEventListener('click', clearAllAnchors); els.previewPatternButton.addEventListener('click', () => createPatternPreview()); els.fillBetweenButton.addEventListener('click', previewBetweenAnchors); els.clearPreviewButton.addEventListener('click', clearPreview); els.applyPatternButton.addEventListener('click', () => applyPattern(false)); els.applyHighButton.addEventListener('click', () => applyPattern(true));
 els.previewForwardButton.addEventListener('click', () => { els.patternStart.value = ''; els.patternEnd.value = ''; createPatternPreview({ direction: 'forward' }); });
 els.previewReverseButton.addEventListener('click', () => { els.patternStart.value = ''; els.patternEnd.value = ''; createPatternPreview({ direction: 'reverse' }); });
@@ -6276,12 +6289,12 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('error', (event) => {
   if (!event.error) return;
   console.error('Global error', event.error);
-  showGlobalError(event.error, { title: 'เกิดข้อผิดพลาดที่ไม่คาดคิด', operation: 'global-error' });
+  showGlobalError(event.error, { title: 'An unexpected error occurred', operation: 'global-error' });
 });
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason || 'Unhandled promise rejection'));
   console.error('Unhandled rejection', error);
-  showGlobalError(error, { title: 'งานเบื้องหลังล้มเหลว', operation: 'unhandled-promise' });
+  showGlobalError(error, { title: 'Background task failed', operation: 'unhandled-promise' });
 });
 window.addEventListener('keydown', (event) => { if (event.key === 'Escape' && appConfirmPending) { event.preventDefault(); closeAppConfirm(false); return; } if (handleCadEditorKeyboard(event)) return; const tag = document.activeElement?.tagName; if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); } if (state.edit.enabled && event.key === 'ArrowLeft') { event.preventDefault(); advanceSelected(-1); } if (state.edit.enabled && event.key === 'ArrowRight') { event.preventDefault(); advanceSelected(1); } if (event.key === 'Escape') { setEditMode(false); closeTeachPanel(); closeDetailedHistogram(); closeCadInspector(); closeComponentReport(); closeStorageManager(); } });
 window.addEventListener('keyup', (event) => { if (event.code === 'Space') { state.cadEditor.visual.spaceDown = false; if (state.cadEditor.visual.tool !== 'pan') els.cadEditorCanvas.classList.remove('pan-tool'); } });
@@ -6331,6 +6344,134 @@ resizeObserver.observe(els.canvas);
 resizeObserver.observe(els.measurementHistogram);
 resizeObserver.observe(els.detailedHistogramCanvas);
 resizeObserver.observe(els.cadEditorCanvas);
+
+async function commitNpiModelChange({ label = 'NPI model update', model, changes = [] } = {}) {
+  const file = activeCadFile();
+  if (!file) throw new CadTransactionError('No active CAD project is available.', { stage: 'npi-commit', code: 'NPI_NO_PROJECT' });
+  const session = ensureProjectSession(file);
+  const checkpoint = projectSessionCheckpoint(session);
+  const rollback = {
+    data: file.data,
+    editedText: file.editedText,
+    editorModel: file.editorModel,
+    appliedEditorSnapshot: file.appliedEditorSnapshot,
+    editRevision: file.editRevision,
+    lastValidation: file.lastValidation,
+    mappingDirty: file.mappingDirty,
+    viewerDirty: file.viewerDirty,
+    stateXmlData: state.xmlData,
+    stateXmlText: state.xmlText,
+    stateMapping: state.mappingData,
+    stateSchema: state.schema,
+  };
+  try {
+    const candidate = cloneCadValue(model);
+    const validation = validateUniversalCad(candidate, { unsupportedRecords: file.archive?.candidate?.adapterInfo?.unsupportedRecords || [] });
+    if (validation.blockingCount) {
+      const detail = validation.issues.filter((item) => item.level === 'blocking-error').slice(0, 4).map((item) => `${item.code}: ${item.message}`).join(' · ');
+      throw new CadTransactionError(`The NPI update was blocked by ${validation.blockingCount} validation issue(s). ${detail}`, { stage: 'npi-validation', code: 'NPI_BLOCKING_VALIDATION', fileName: file.name });
+    }
+    const legacy = universalCadToLegacy(candidate);
+    const nextEditor = createCadEditorModel(legacy);
+    nextEditor.changed = false;
+    const workingXml = serializeCadEditorModelStandalone(nextEditor, { side: 'all' });
+    candidate.metadata = { ...(candidate.metadata || {}), workingXml };
+    const validationStatus = validation.counts.error ? 'errors' : (validation.counts.warning ? 'warnings' : 'passed');
+    commitUniversalModelRevision(session, {
+      model: candidate,
+      changes: [{ type: 'npi-operation', label, timestamp: new Date().toISOString(), ...changes[0] }, ...changes.slice(1)],
+      validationStatus,
+      validationIssues: validation.issues,
+    });
+    const revision = Number(session.project.appliedRevision || 0);
+    const nextLegacy = currentProjectLegacyCad(session);
+    const preparedMapping = prepareMappingForCadData(nextLegacy, { previousMappingData: state.mappingData, revision });
+    file.data = nextLegacy;
+    file.editorModel = nextEditor;
+    file.appliedEditorSnapshot = cloneCadEditorModel(nextEditor);
+    file.editedText = workingXml;
+    file.editRevision = revision;
+    file.lastValidation = validation;
+    file.mappingDirty = false;
+    file.viewerDirty = true;
+    if (state.activeCadRole === file.role) {
+      state.xmlData = nextLegacy;
+      state.xmlText = workingXml;
+      state.schema = preparedMapping.schema;
+      state.mappingData = preparedMapping.mappingData;
+      state.cadEditor.model = file.editorModel;
+      normalizeMappings();
+      state.selected = null;
+      state.preview = null;
+      state.page = 1;
+      populateComponents(BOARD_VIEW);
+      renderTable();
+      draw();
+      updateStats();
+      if (!els.cadEditorOverlay.classList.contains('hidden')) renderCadEditor();
+    }
+    scheduleProjectAutosave(file);
+    return { revision, validation };
+  } catch (error) {
+    restoreProjectSessionCheckpoint(session, checkpoint);
+    file.data = rollback.data;
+    file.editedText = rollback.editedText;
+    file.editorModel = rollback.editorModel;
+    file.appliedEditorSnapshot = rollback.appliedEditorSnapshot;
+    file.editRevision = rollback.editRevision;
+    file.lastValidation = rollback.lastValidation;
+    file.mappingDirty = rollback.mappingDirty;
+    file.viewerDirty = rollback.viewerDirty;
+    state.xmlData = rollback.stateXmlData;
+    state.xmlText = rollback.stateXmlText;
+    state.mappingData = rollback.stateMapping;
+    state.schema = rollback.stateSchema;
+    throw error;
+  }
+}
+
+async function restoreProjectRevisionAsNewRevision(revisionNumber) {
+  const project = activeCadFile()?.projectSession?.project;
+  const revision = project?.revisions?.find((item) => Number(item.number) === Number(revisionNumber));
+  if (!revision?.model) throw new Error(`Revision ${revisionNumber} is not available.`);
+  return commitNpiModelChange({
+    label: `Restore revision ${revisionNumber}`,
+    model: revision.model,
+    changes: [{ type: 'restore-revision', sourceRevision: Number(revisionNumber) }],
+  });
+}
+
+const npiWorkspace = initNpiWorkspace({
+  getProject: () => activeCadFile()?.projectSession?.project || null,
+  getModel: () => activeCadFile()?.projectSession?.project?.currentModel || null,
+  getRawData: () => state.xlsxData || null,
+  download: (blob, filename) => downloadBlob(blob, filename),
+  toast: (message) => toast(message, 4200),
+  confirm: (options) => requestAppConfirm(options),
+  openProjectStorage: () => openStorageManager().catch((error) => showGlobalError(error, { title: 'Unable to open Project Storage', operation: 'storage-open' })),
+  commitModelChange: (payload) => commitNpiModelChange(payload),
+  restoreRevision: (revisionNumber) => restoreProjectRevisionAsNewRevision(revisionNumber),
+  carryMappings: async () => {
+    const before = (state.mappingData?.mappings || []).filter((item) => item.manual || String(item.mappingMethod || '').startsWith('manual')).length;
+    rebuildMappingForActiveCad();
+    const preserved = (state.mappingData?.mappings || []).filter((item) => item.manual || String(item.mappingMethod || '').startsWith('manual')).length;
+    return { before, preserved };
+  },
+  getInspectionXml: async () => {
+    const file = activeCadFile();
+    if (!file?.editorModel) return file?.text || state.xmlText || '';
+    return exportInspectionXml(file.editorModel, { side: 'all' });
+  },
+  locateIssue: (issue) => {
+    if (!issue?.componentId) return false;
+    openCadEditor();
+    const component = state.cadEditor.model?.components?.find((item) => String(item.originalId ?? item.id) === String(issue.componentId));
+    if (!component) return false;
+    setCadEditorSelection([component], { primary: component });
+    fitCadEditorView();
+    return true;
+  },
+});
 loadBuildInformation();
 resetProject();
 refreshRecoveryNotice().catch((error) => console.warn('Recovery initialization failed', error));

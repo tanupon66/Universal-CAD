@@ -23,7 +23,7 @@ export function createDiagnosticReport(error, context = {}) {
   const typed = error?.toDiagnostic?.({ includeStack: true }) || {
     errorType: error?.name || 'Error', code: error?.code || 'UNEXPECTED_ERROR', stage: error?.stage || context.stage || 'unknown',
     fileName: error?.fileName || context.fileName || '', message: error?.message || String(error),
-    technicalDetail: error?.technicalDetail || '', remediation: error?.remediation || 'ตรวจรายละเอียดแล้วลองใหม่', stack: error?.stack || '',
+    technicalDetail: error?.technicalDetail || '', remediation: error?.remediation || 'Review the details and retry.', stack: error?.stack || '',
     context: error?.context || {},
   };
   return {

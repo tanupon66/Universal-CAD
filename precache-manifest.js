@@ -4,6 +4,7 @@ self.__PRECACHE_ASSETS = [
   "./archive-package.js",
   "./archive-reader.js",
   "./board-transform.js",
+  "./bom-export.js",
   "./build-info.json",
   "./cad-compare.js",
   "./cad-editor.js",
@@ -22,9 +23,12 @@ self.__PRECACHE_ASSETS = [
   "./icons/icon.svg",
   "./import-adapters.js",
   "./index.html",
+  "./inspection-xml-profile.js",
   "./land-grid-mapper.js",
   "./manifest.webmanifest",
   "./manual-pattern.js",
+  "./npi-platform.js",
+  "./npi-workspace-ui.js",
   "./odb-parser.js",
   "./parsers.js",
   "./pcb-ascii-formats.js",
@@ -38,7 +42,6 @@ self.__PRECACHE_ASSETS = [
   "./universal-cad-model.js",
   "./unix-compress.js",
   "./validation-center.js",
-  "./vtx-inspection-xml.js",
   "./xlsx-report.js",
   "./zip-reader.js"
 ];

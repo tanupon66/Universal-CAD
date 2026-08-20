@@ -67,8 +67,8 @@ function sourceUnitFromGencad(header) {
   const tokens = tokenizeWhitespace(line).map((item) => item.toUpperCase());
   if (tokens.includes('INCH') || tokens.includes('INCHES')) return { name: 'inch', toMm: MM_PER_INCH, warning: '' };
   if (tokens.includes('MM') || tokens.includes('MILLIMETERS') || tokens.includes('MILLIMETRES')) return { name: 'mm', toMm: 1, warning: '' };
-  if (tokens[1] === 'USER' && finite(tokens[2], null) === 1000) return { name: 'user-1000', toMm: MM_PER_INCH / 1000, warning: 'GenCAD UNITS USER 1000 ถูกตีความเป็น 0.001 inch ตามตัวอย่างอุตสาหกรรมทั่วไป' };
-  return { name: 'unknown', toMm: MM_PER_INCH / 1000, warning: `ไม่รู้จัก GenCAD unit '${line || 'missing'}'; ใช้ 0.001 inch เป็น fallback` };
+  if (tokens[1] === 'USER' && finite(tokens[2], null) === 1000) return { name: 'user-1000', toMm: MM_PER_INCH / 1000, warning: 'CAD ASCII USER 1000 units were interpreted as 0.001 inch using the common exchange convention.' };
+  return { name: 'unknown', toMm: MM_PER_INCH / 1000, warning: `Unknown CAD ASCII unit '${line || 'missing'}'; using 0.001 inch as the fallback.` };
 }
 function boardBoundsFromLines(lines, scale) {
   const points = [];
@@ -108,11 +108,11 @@ export function looksLikeFabmasterLegacy(text) {
 
 export function convertGenCadToInspectionXml(text, options = {}) {
   const source = String(text || '').replace(/^\uFEFF/, '');
-  if (!looksLikeGenCad(source)) throw new ParseError('ไฟล์ไม่ใช่ GenCAD 1.x ที่ตรวจพบได้', { stage: 'gencad-detect', fileName: options.fileName, code: 'GENCAD_SIGNATURE_MISSING' });
+  if (!looksLikeGenCad(source)) throw new ParseError('The file is not a recognized CAD ASCII 1.x file.', { stage: 'gencad-detect', fileName: options.fileName, code: 'GENCAD_SIGNATURE_MISSING' });
   const warnings = []; const unsupportedRecords = [];
   const header = sectionText(source, 'HEADER'); const unit = sourceUnitFromGencad(header); if (unit.warning) warnings.push(unit.warning);
   const headerLines = lineList(header); const drawing = headerLines.find((line) => /^DRAWING\b/i.test(line));
-  const boardName = tokenizeWhitespace(drawing || '').slice(1).join(' ') || options.fileName || 'GenCAD Board';
+  const boardName = tokenizeWhitespace(drawing || '').slice(1).join(' ') || options.fileName || 'CAD ASCII Board';
   const boardLines = lineList(sectionText(source, 'BOARD')); const boardBounds = boardBoundsFromLines(boardLines, unit.toMm);
   const thicknessLine = boardLines.find((line) => /^THICKNESS\b/i.test(line)); const thickness = (finite(tokenizeWhitespace(thicknessLine || '')[1], 0) || 0) * unit.toMm;
 
@@ -143,7 +143,7 @@ export function convertGenCadToInspectionXml(text, options = {}) {
       const x = (finite(t[3], 0) || 0) * unit.toMm; const y = (finite(t[4], 0) || 0) * unit.toMm;
       const rotation = finite(t[6], 0) || 0; const mirror = String(t[7] || '');
       const padName = padstacks.get(stack); const size = pads.get(padName) || { width: DEFAULT_LAND_MM, height: DEFAULT_LAND_MM };
-      if (!padName) warnings.push(`Shape ${activeShape} pin ${pinName}: ไม่พบ Padstack ${stack}; ใช้ ${DEFAULT_LAND_MM} mm`);
+      if (!padName) warnings.push(`Shape ${activeShape} pin ${pinName}: padstack ${stack} was not found; using ${DEFAULT_LAND_MM} mm.`);
       shapes.get(activeShape).push({ name: pinName, stack, x, y, rotation, mirror, width: size.width, height: size.height });
     }
   }
@@ -169,7 +169,7 @@ export function convertGenCadToInspectionXml(text, options = {}) {
     else if (keyword === 'SHAPE') { current.shape = t[1] || ''; current.mirror = String(t[2] || ''); current.flip = String(t[3] || ''); }
   }
   flush();
-  if (!components.length) throw new ParseError('GenCAD ไม่มี $COMPONENTS record ที่อ่านได้', { stage: 'gencad-components', fileName: options.fileName, code: 'GENCAD_COMPONENTS_EMPTY' });
+  if (!components.length) throw new ParseError('CAD ASCII contains no readable $COMPONENTS records.', { stage: 'gencad-components', fileName: options.fileName, code: 'GENCAD_COMPONENTS_EMPTY' });
 
   const outputComponents = []; const lands = []; let landId = 1; let componentId = 1;
   for (const component of components) {
@@ -177,7 +177,7 @@ export function convertGenCadToInspectionXml(text, options = {}) {
     const device = devices.get(component.packageName);
     const resolvedPackage = device?.part || device?.packageName || component.packageName || component.shape || 'UNASSIGNED';
     outputComponents.push({ id, ref: component.ref, packageName: resolvedPackage, revision: '', x: component.x, y: component.y, rotation: component.rotation });
-    if (!pins.length) { warnings.push(`${component.ref}: Shape '${component.shape || 'missing'}' ไม่มี Pin geometry`); continue; }
+    if (!pins.length) { warnings.push(`${component.ref}: shape '${component.shape || 'missing'}' has no pin geometry.`); continue; }
     for (const pin of pins) {
       let localX = pin.x; let localY = pin.y;
       const mirrorText = `${component.mirror} ${pin.mirror}`.toUpperCase();
@@ -188,16 +188,16 @@ export function convertGenCadToInspectionXml(text, options = {}) {
       const totalRotation = normalizeRotation(component.rotation + pin.rotation);
       let width = pin.width; let height = pin.height;
       if (Math.abs(totalRotation % 180 - 90) < 1e-6) [width, height] = [height, width];
-      else if (Math.abs(totalRotation % 90) > 1e-6) warnings.push(`${component.ref}.${pin.name}: Land rotation ${totalRotation}° ถูกเก็บเป็น axis-aligned rectangle ใน Working Model`);
+      else if (Math.abs(totalRotation % 90) > 1e-6) warnings.push(`${component.ref}.${pin.name}: land rotation ${totalRotation}° is represented as an axis-aligned rectangle in the Working Model.`);
       lands.push({ id: landId++, componentId: id, name: pin.name, side: component.side, left: centerX - width / 2, top: centerY + height / 2, width, height });
     }
   }
-  if (!lands.length) throw new ParseError('GenCAD ไม่มี Pin/Land geometry ที่อ่านได้', { stage: 'gencad-pins', fileName: options.fileName, code: 'GENCAD_LANDS_EMPTY' });
-  if (sectionText(source, 'SIGNALS').trim()) unsupportedRecords.push({ type: 'SIGNALS', reason: 'Inspection XML compatibility view ยังไม่เก็บ netlist' });
-  if (sectionText(source, 'ROUTES').trim()) unsupportedRecords.push({ type: 'ROUTES', reason: 'Inspection XML compatibility view ยังไม่เก็บ copper routes' });
+  if (!lands.length) throw new ParseError('CAD ASCII contains no readable pin/land geometry.', { stage: 'gencad-pins', fileName: options.fileName, code: 'GENCAD_LANDS_EMPTY' });
+  if (sectionText(source, 'SIGNALS').trim()) unsupportedRecords.push({ type: 'SIGNALS', reason: 'The normalized placement model does not currently store the full electrical netlist.' });
+  if (sectionText(source, 'ROUTES').trim()) unsupportedRecords.push({ type: 'ROUTES', reason: 'The normalized placement model does not currently store copper routes.' });
   const landXs = lands.flatMap((land) => [land.left, land.left + land.width]); const landYs = lands.flatMap((land) => [land.top - land.height, land.top]);
   const minX = boardBounds?.minX ?? Math.min(...landXs); const maxX = boardBounds?.maxX ?? Math.max(...landXs); const minY = boardBounds?.minY ?? Math.min(...landYs); const maxY = boardBounds?.maxY ?? Math.max(...landYs);
-  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, boardThickness: thickness, components: outputComponents, lands, sourceFormat: 'GenCAD 1.4' });
+  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, boardThickness: thickness, components: outputComponents, lands, sourceFormat: 'CAD ASCII 1.4' });
   return { xmlText, warnings: [...new Set(warnings)], unsupportedRecords, components: outputComponents.length, packages: new Set(outputComponents.map((c) => c.packageName)).size, lands: lands.length, sourceFormat: 'gencad-1.4', partial: warnings.length > 0 || unsupportedRecords.length > 0, unit: unit.name };
 }
 
@@ -252,8 +252,8 @@ function finalizeFabmasterStreamingState(state, options = {}) {
   const unit = state.unit || { name: 'mils-default', toMm: MM_PER_INCH / 1000 };
   const warnings = [...state.warnings];
   const unsupportedRecords = [...state.unsupportedRecords];
-  if (!state.unit) warnings.push('FABmaster ไม่ระบุ unit ที่รู้จัก; ใช้ MILS เป็น fallback ตามรูปแบบทั่วไป');
-  if (!componentMap.size) throw new ParseError('FABmaster ไม่มี Component placement ที่อ่านได้', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
+  if (!state.unit) warnings.push('Manufacturing ASCII does not specify a recognized unit; using MILS as the fallback.');
+  if (!componentMap.size) throw new ParseError('Manufacturing ASCII contains no readable component placements.', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
 
   const components = []; const componentIdByRef = new Map(); let componentId = 1;
   for (const component of componentMap.values()) {
@@ -280,20 +280,20 @@ function finalizeFabmasterStreamingState(state, options = {}) {
     minLandX = Math.min(minLandX, left); maxLandX = Math.max(maxLandX, left + size.width);
     minLandY = Math.min(minLandY, top - size.height); maxLandY = Math.max(maxLandY, top);
   }
-  if (!lands.length) throw new ParseError('FABmaster ไม่มี Pin/Land placement ที่อ่านได้', { stage: 'fabmaster-pins', fileName: options.fileName, code: 'FABMASTER_LANDS_EMPTY' });
+  if (!lands.length) throw new ParseError('Manufacturing ASCII contains no readable pin/land placements.', { stage: 'fabmaster-pins', fileName: options.fileName, code: 'FABMASTER_LANDS_EMPTY' });
   if (missingPadstacks.size) {
-    const examples = [...missingPadstacks.entries()].slice(0, 8).map(([name, info]) => `${name} (${info.count} pins; เช่น ${info.example})`).join(', ');
+    const examples = [...missingPadstacks.entries()].slice(0, 8).map(([name, info]) => `${name} (${info.count} pins; example ${info.example})`).join(', ');
     const missingPins = [...missingPadstacks.values()].reduce((sum, info) => sum + info.count, 0);
-    warnings.push(`ไม่พบ Padstack ${missingPadstacks.size} ชื่อสำหรับ ${missingPins} pins; ใช้ ${DEFAULT_LAND_MM} mm fallback. ตัวอย่าง: ${examples}`);
+    warnings.push(`Missing ${missingPadstacks.size} padstack name(s) for ${missingPins} pins; using ${DEFAULT_LAND_MM} mm fallback. Examples: ${examples}`);
   }
 
   const bounds = state.outlineBounds || state.bounds;
-  if (state.outlineBounds) warnings.push('ใช้ BOARD GEOMETRY / OUTLINE เป็นขอบเขตบอร์ดแทน J-record extents เพื่อไม่ให้ Drawing/Panel geometry ทำให้ Board View กว้างเกินจริง');
+  if (state.outlineBounds) warnings.push('Using BOARD GEOMETRY / OUTLINE for board bounds instead of drawing extents to prevent panel graphics from inflating the board view.');
   const minX = bounds?.minX ?? minLandX; const maxX = bounds?.maxX ?? maxLandX;
   const minY = bounds?.minY ?? minLandY; const maxY = bounds?.maxY ?? maxLandY;
-  const boardName = options.fileName || 'FABmaster Board';
-  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, components, lands, sourceFormat: 'FABmaster ASCII' });
-  if (state.ignoredRows > 0) warnings.push(`Large-file streaming parser ข้าม ${state.ignoredRows} records ที่ไม่จำเป็นต่อ Component/Land Working Model โดยไม่โหลดเข้าหน่วยความจำ`);
+  const boardName = options.fileName || 'Manufacturing ASCII Board';
+  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, components, lands, sourceFormat: 'Manufacturing ASCII' });
+  if (state.ignoredRows > 0) warnings.push(`Large-file streaming parser skipped ${state.ignoredRows} records not required by the component/land Working Model without loading them into memory.`);
   return {
     xmlText,
     warnings: [...new Set(warnings)],
@@ -310,13 +310,13 @@ function finalizeFabmasterStreamingState(state, options = {}) {
 }
 
 /**
- * Memory-bounded FABmaster/Cadence A!/J!/S! reader for very large .cad/.fab files.
+ * Memory-bounded manufacturing ASCII A!/J!/S! reader for very large .cad/.fab files.
  * It consumes the decompressed ReadableStream chunk-by-chunk and only retains
  * Component, Pad and Pin records required by the Universal CAD Working Model.
  * Multi-million trace/graphic/net rows are counted/flagged but never materialized.
  */
 export async function convertFabmasterStreamToInspectionXml(readable, options = {}) {
-  if (!readable?.getReader) throw new TypeError('FABmaster streaming import requires a ReadableStream');
+  if (!readable?.getReader) throw new TypeError('Large manufacturing ASCII import requires a ReadableStream');
   const state = {
     componentMap: new Map(), pinRows: [], padSizes: new Map(), bounds: null, outlineBounds: null, unit: null,
     warnings: [], unsupportedRecords: [], unsupportedKinds: new Set(), ignoredRows: 0, scannedLines: 0,
@@ -336,10 +336,10 @@ export async function convertFabmasterStreamToInspectionXml(readable, options = 
       const fields = splitBang(line); headers = normalizedHeader(fields.slice(1)); sectionKind = fabmasterSectionKind(headers);
       if (sectionKind === 'components' || sectionKind === 'pins' || sectionKind === 'pads') sawSignature = true;
       if (sectionKind === 'nets' && !state.unsupportedKinds.has('NETS')) {
-        state.unsupportedKinds.add('NETS'); state.unsupportedRecords.push({ type: 'NETS', reason: 'Inspection XML compatibility view ยังไม่เก็บ netlist' });
+        state.unsupportedKinds.add('NETS'); state.unsupportedRecords.push({ type: 'NETS', reason: 'The normalized placement model does not currently store the full electrical netlist.' });
       }
       if (sectionKind === 'traces' && !state.unsupportedKinds.has('TRACES')) {
-        state.unsupportedKinds.add('TRACES'); state.unsupportedRecords.push({ type: 'TRACES', reason: 'Inspection XML compatibility view ยังไม่เก็บ traces/zones' });
+        state.unsupportedKinds.add('TRACES'); state.unsupportedRecords.push({ type: 'TRACES', reason: 'The normalized placement model does not currently store traces or zones.' });
       }
       return;
     }
@@ -358,7 +358,7 @@ export async function convertFabmasterStreamToInspectionXml(readable, options = 
     }
     if (type !== 'S!') return;
     if (sectionKind === 'traces') {
-      // FABmaster often stores the actual PCB profile in the huge graphic section.
+      // This manufacturing ASCII family often stores the actual PCB profile in the huge graphic section.
       // Parse only BOARD GEOMETRY / OUTLINE rows; skip the millions of copper and
       // drawing rows without tokenizing them.
       if (/^S!BOARD GEOMETRY!OUTLINE!/i.test(line)) {
@@ -411,7 +411,7 @@ export async function convertFabmasterStreamToInspectionXml(readable, options = 
 
   try {
     while (true) {
-      if (options.signal?.aborted) throw new ParseError('ยกเลิกการอ่าน FABmaster แล้ว', { stage: 'fabmaster-stream', fileName: options.fileName, code: 'IMPORT_ABORTED' });
+      if (options.signal?.aborted) throw new ParseError('Manufacturing-ASCII import was cancelled.', { stage: 'fabmaster-stream', fileName: options.fileName, code: 'IMPORT_ABORTED' });
       const { done, value } = await reader.read(); if (done) break;
       const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
       processedBytes += bytes.byteLength;
@@ -428,15 +428,15 @@ export async function convertFabmasterStreamToInspectionXml(readable, options = 
     try { if (options.signal?.aborted) await reader.cancel(); } catch { /* abort cleanup is best-effort */ }
     reader.releaseLock();
   }
-  if (!sawSignature) throw new ParseError('ไฟล์ไม่ใช่ FABmaster/Cadence A!/J!/S! ที่ตรวจพบได้', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });
+  if (!sawSignature) throw new ParseError('The file is not a recognized A!/J!/S! manufacturing-ASCII file.', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });
   return finalizeFabmasterStreamingState(state, options);
 }
 
 export function convertFabmasterExtractToInspectionXml(text, options = {}) {
   const source = String(text || '').replace(/^\uFEFF/, '');
-  if (!looksLikeFabmasterExtract(source)) throw new ParseError('ไฟล์ไม่ใช่ FABmaster/Cadence A!/J!/S! ที่ตรวจพบได้', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });
+  if (!looksLikeFabmasterExtract(source)) throw new ParseError('The file is not a recognized A!/J!/S! manufacturing-ASCII file.', { stage: 'fabmaster-detect', fileName: options.fileName, code: 'FABMASTER_SIGNATURE_MISSING' });
   const sections = parseFabSections(source); const unit = unitFromFabmasterSections(sections); const warnings = []; const unsupportedRecords = [];
-  if (unit.name === 'mils-default') warnings.push('FABmaster ไม่ระบุ unit ที่รู้จัก; ใช้ MILS เป็น fallback ตามรูปแบบทั่วไป');
+  if (unit.name === 'mils-default') warnings.push('Manufacturing ASCII does not specify a recognized unit; using MILS as the fallback.');
   const componentMap = new Map(); const pinRows = []; const padSizes = new Map(); let bounds = null;
   for (const section of sections) {
     const h = section.headers; const h0 = h[0] || '';
@@ -472,10 +472,10 @@ export function convertFabmasterExtractToInspectionXml(text, options = {}) {
     }
     const isPins = h0 === 'SYMNAME' && h.includes('PINNUMBER') && h.includes('PINX') && h.includes('PINY');
     if (isPins) pinRows.push(...section.rows);
-    if (h0 === 'NETNAME') unsupportedRecords.push({ type: 'NETS', reason: 'Inspection XML compatibility view ยังไม่เก็บ netlist' });
-    if (h0 === 'CLASS' && h.includes('GRAPHICDATANAME')) unsupportedRecords.push({ type: 'TRACES', reason: 'Inspection XML compatibility view ยังไม่เก็บ traces/zones' });
+    if (h0 === 'NETNAME') unsupportedRecords.push({ type: 'NETS', reason: 'The normalized placement model does not currently store the full electrical netlist.' });
+    if (h0 === 'CLASS' && h.includes('GRAPHICDATANAME')) unsupportedRecords.push({ type: 'TRACES', reason: 'The normalized placement model does not currently store traces or zones.' });
   }
-  if (!componentMap.size) throw new ParseError('FABmaster ไม่มี Component placement ที่อ่านได้', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
+  if (!componentMap.size) throw new ParseError('Manufacturing ASCII contains no readable component placements.', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
   const components = []; const componentIdByRef = new Map(); let componentId = 1;
   for (const component of componentMap.values()) { const id = String(componentId++); componentIdByRef.set(component.ref, id); components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '' }); }
   const lands = []; let landId = 1;
@@ -483,16 +483,16 @@ export function convertFabmasterExtractToInspectionXml(text, options = {}) {
     const ref = String(row.REFDES || row.SYMNAME || '').trim(); const componentIdValue = componentIdByRef.get(ref); if (!componentIdValue) continue;
     const x = finite(row.PINX, null); const y = finite(row.PINY, null); if (x == null || y == null) continue;
     const stack = String(row.PADSTACKNAME || row.PADNAME || '').trim(); const size = padSizes.get(stack) || { width: DEFAULT_LAND_MM, height: DEFAULT_LAND_MM };
-    if (stack && !padSizes.has(stack)) warnings.push(`${ref}.${row.PINNUMBER || row.PINNAME || landId}: ไม่พบ Padstack ${stack}; ใช้ ${DEFAULT_LAND_MM} mm`);
+    if (stack && !padSizes.has(stack)) warnings.push(`${ref}.${row.PINNUMBER || row.PINNAME || landId}: padstack ${stack} was not found; using ${DEFAULT_LAND_MM} mm.`);
     const centerX = x * unit.toMm; const centerY = y * unit.toMm;
     const comp = componentMap.get(ref); const side = comp?.side || normalizeSide(row.SYMMIRROR || 'NO');
     lands.push({ id: landId++, componentId: componentIdValue, name: String(row.PINNUMBER || row.PINNAME || landId - 1), side, left: centerX - size.width / 2, top: centerY + size.height / 2, width: size.width, height: size.height });
   }
-  if (!lands.length) throw new ParseError('FABmaster ไม่มี Pin/Land placement ที่อ่านได้', { stage: 'fabmaster-pins', fileName: options.fileName, code: 'FABMASTER_LANDS_EMPTY' });
+  if (!lands.length) throw new ParseError('Manufacturing ASCII contains no readable pin/land placements.', { stage: 'fabmaster-pins', fileName: options.fileName, code: 'FABMASTER_LANDS_EMPTY' });
   const landXs = lands.flatMap((land) => [land.left, land.left + land.width]); const landYs = lands.flatMap((land) => [land.top - land.height, land.top]);
   const minX = bounds?.minX ?? Math.min(...landXs); const maxX = bounds?.maxX ?? Math.max(...landXs); const minY = bounds?.minY ?? Math.min(...landYs); const maxY = bounds?.maxY ?? Math.max(...landYs);
-  const boardName = options.fileName || 'FABmaster Board';
-  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, components, lands, sourceFormat: 'FABmaster ASCII' });
+  const boardName = options.fileName || 'Manufacturing ASCII Board';
+  const xmlText = makeInspectionXml({ boardName, boardWidth: maxX - minX, boardHeight: maxY - minY, components, lands, sourceFormat: 'Manufacturing ASCII' });
   return { xmlText, warnings: [...new Set(warnings)], unsupportedRecords, components: components.length, packages: new Set(components.map((c) => c.packageName)).size, lands: lands.length, sourceFormat: 'fabmaster-ascii', partial: warnings.length > 0 || unsupportedRecords.length > 0, unit: unit.name };
 }
 
@@ -512,10 +512,10 @@ function fmt(value) { const n = Number(value || 0); return Number.isFinite(n) ? 
 function orthogonalRotation(angle) { const n = normalizeRotation(angle); return Math.abs(n % 90) < 1e-6; }
 
 export function exportGenCad14(model, options = {}) {
-  if (!model?.components?.length) throw new ValidationError('ไม่มี Component สำหรับ Export GenCAD', { stage: 'gencad-export', code: 'GENCAD_EXPORT_EMPTY' });
+  if (!model?.components?.length) throw new ValidationError('There are no components to export as CAD ASCII.', { stage: 'gencad-export', code: 'GENCAD_EXPORT_EMPTY' });
   const side = options.side || 'all'; const warnings = [];
   const components = (model.components || []).map((component) => ({ ...component, lands: (component.lands || []).filter((land) => keepBySide(land, side)) })).filter((component) => component.lands.length);
-  if (!components.length) throw new ValidationError(`ไม่มี Land ในขอบเขต ${side}`, { stage: 'gencad-export', code: 'GENCAD_EXPORT_SIDE_EMPTY' });
+  if (!components.length) throw new ValidationError(`There are no lands in the ${side} scope.`, { stage: 'gencad-export', code: 'GENCAD_EXPORT_SIDE_EMPTY' });
   const padDefs = new Map(); let padCounter = 1;
   const shapeRecords = []; const componentRecords = []; const deviceRecords = []; const usedShapes = new Set();
   const padNameFor = (widthMm, heightMm) => {
@@ -525,7 +525,7 @@ export function exportGenCad14(model, options = {}) {
   };
   for (const component of components) {
     const shapeName = uniqueName(`UCAD_${component.packageName || component.name || component.id}`, usedShapes);
-    const rotation = normalizeRotation(component.angle || 0); if (!orthogonalRotation(rotation)) warnings.push(`${component.name}: rotation ${rotation}° — GenCAD export preserves placement but Working Model has axis-aligned Land geometry`);
+    const rotation = normalizeRotation(component.angle || 0); if (!orthogonalRotation(rotation)) warnings.push(`${component.name}: rotation ${rotation}° — CAD ASCII export preserves placement but the working model has axis-aligned land geometry`);
     const shape = [`SHAPE ${quote(shapeName)}`];
     for (const land of component.lands) {
       const cx = Number(land.left || 0) + Number(land.width || 0) / 2; const cy = Number(land.top || 0) - Number(land.length || 0) / 2;
@@ -551,16 +551,16 @@ export function exportGenCad14(model, options = {}) {
   lines.push('$ENDPADS', '', '$PADSTACKS');
   for (const pad of padDefs.values()) lines.push(`PADSTACK ${pad.name} 0`, `PAD ${pad.name} TOP 0 0`, `PAD ${pad.name} BOTTOM 0 0`);
   lines.push('$ENDPADSTACKS', '', '$ARTWORKS', '$ENDARTWORKS', '', '$SHAPES', ...shapeRecords, '$ENDSHAPES', '', '$COMPONENTS', ...componentRecords, '$ENDCOMPONENTS', '', '$DEVICES', ...deviceRecords, '$ENDDEVICES', '', '$SIGNALS', '$ENDSIGNALS', '', '$TRACKS', '$ENDTRACKS', '', '$LAYERS', 'LAYER TOP SIGNAL', 'LAYER BOTTOM SIGNAL', '$ENDLAYERS', '', '$ROUTES', '$ENDROUTES', '', '$MECH', '$ENDMECH', '', '$TESTPINS', '$ENDTESTPINS', '', '$POWERPINS', '$ENDPOWERPINS', '');
-  warnings.push('GenCAD Writer v0.25 ส่งออก Board/Components/rectangular Lands; netlist, routes, vias และ arbitrary polygon pads จะไม่ถูกสร้างถ้าไม่มีข้อมูลใน Working Model');
+  warnings.push('The CAD ASCII writer exports board, component, and rectangular-land data. Electrical nets, routes, vias, and arbitrary polygon pads are emitted only when the Working Model contains the required data.');
   return { text: lines.join('\n'), warnings: [...new Set(warnings)], partial: true, format: 'gencad-1.4', extension: '.cad', mime: 'text/plain;charset=us-ascii' };
 }
 
 function bangField(value) { const text = String(value ?? ''); return /[!"\r\n]/.test(text) ? `"${text.replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"` : text; }
 function bangRow(type, values) { return `${type}!${values.map(bangField).join('!')}!`; }
 export function exportFabmasterAscii(model, options = {}) {
-  if (!model?.components?.length) throw new ValidationError('ไม่มี Component สำหรับ Export FABmaster', { stage: 'fabmaster-export', code: 'FABMASTER_EXPORT_EMPTY' });
+  if (!model?.components?.length) throw new ValidationError('There are no components to export as manufacturing ASCII.', { stage: 'fabmaster-export', code: 'FABMASTER_EXPORT_EMPTY' });
   const side = options.side || 'all'; const components = (model.components || []).map((component) => ({ ...component, lands: (component.lands || []).filter((land) => keepBySide(land, side)) })).filter((component) => component.lands.length);
-  if (!components.length) throw new ValidationError(`ไม่มี Land ในขอบเขต ${side}`, { stage: 'fabmaster-export', code: 'FABMASTER_EXPORT_SIDE_EMPTY' });
+  if (!components.length) throw new ValidationError(`There are no lands in the ${side} scope.`, { stage: 'fabmaster-export', code: 'FABMASTER_EXPORT_SIDE_EMPTY' });
   const board = model?.board || {}; const bounds = modelBounds(model, side); const width = Number(board.Width ?? board.width ?? (bounds.maxX - bounds.minX) ?? 0); const height = Number(board.Height ?? board.height ?? (bounds.maxY - bounds.minY) ?? 0);
   const meta = options.metadata || {}; const jMeta = [options.fileName || board.Name || board.name || 'UniversalCAD', meta.exportTime || new Date().toISOString(), '0', '0', fmt(width), fmt(height), '1', 'MILLIMETERS', `UCAD-${meta.appVersion || ''}`];
   const lines = [];
@@ -586,7 +586,7 @@ export function exportFabmasterAscii(model, options = {}) {
   const segments = [[0,0,width,0],[width,0,width,height],[width,height,0,height],[0,height,0,0]];
   segments.forEach((segment, index) => lines.push(bangRow('S', ['LINE', String(index + 1), `BOARD ${index + 1}`, ...segment.map(fmt), '0', '', '', '', '', 'OUTLINE', '', ''])));
   lines.push('');
-  return { text: lines.join('\n'), warnings: ['FABmaster Writer v0.25 ส่งออก Component placement, rectangular Land/Padstack และ Board outline; netlist/traces/vias ที่ไม่มีใน Working Model จะไม่ถูกสร้าง'], partial: true, format: 'fabmaster-ascii', extension: '.fab', mime: 'text/plain;charset=us-ascii' };
+  return { text: lines.join('\n'), warnings: ['The manufacturing-ASCII writer exports component placement, rectangular lands/padstacks, and board outline data. Nets, traces, and vias are emitted only when represented in the Working Model.'], partial: true, format: 'fabmaster-ascii', extension: '.fab', mime: 'text/plain;charset=us-ascii' };
 }
 
 export const __test = { splitBang, tokenizeWhitespace, sourceUnitFromGencad, parseFabSections, rotatePoint, inverseRotatePoint };

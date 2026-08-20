@@ -247,14 +247,14 @@ export function createUniversalProject({ name = 'Untitled CAD Project', sourceFi
 }
 
 export function migrateProject(input) {
-  if (!input) throw new Error('ไม่มีข้อมูล Project สำหรับ Migration');
+  if (!input) throw new Error('No project data is available for migration.');
   if (Number(input.schemaVersion) === UNIVERSAL_CAD_SCHEMA_VERSION && input.currentModel) return cloneCadValue(input);
   if (input.xmlData || input.components || input.board) {
     const legacyCad = input.xmlData || input;
     const model = normalizeLegacyCad(legacyCad, { projectId: input.projectId, revision: Number(input.revision || 0), sourceFormat: input.sourceFormat });
     return createUniversalProject({ name: input.name || 'Migrated CAD Project', parsedModel: model, projectId: model.projectId });
   }
-  throw new Error(`ไม่รองรับ Project schema ${String(input.schemaVersion ?? 'unknown')}`);
+  throw new Error(`Unsupported project schema ${String(input.schemaVersion ?? 'unknown')}.`);
 }
 
 export function createExportSnapshot(project, { exportFormat, sourceFormat = null, validationStatus = 'not-run', acceptedWarnings = [], payload = null } = {}) {

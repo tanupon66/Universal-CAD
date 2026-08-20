@@ -77,15 +77,15 @@ function classifyDelimited(text) {
 }
 export function validateArchivePath(path) {
   const original = String(path || '').replace(/\\/g, '/');
-  if (!original || original.includes('\u0000')) return { safe: false, normalized: '', reason: 'ชื่อไฟล์ว่างหรือมี NUL' };
-  if (/^[A-Za-z]:\//.test(original) || original.startsWith('/')) return { safe: false, normalized: '', reason: 'Absolute path ไม่อนุญาต' };
+  if (!original || original.includes('\u0000')) return { safe: false, normalized: '', reason: 'Filename is empty or contains NUL.' };
+  if (/^[A-Za-z]:\//.test(original) || original.startsWith('/')) return { safe: false, normalized: '', reason: 'Absolute paths are not allowed.' };
   const parts = [];
   for (const part of original.split('/')) {
     if (!part || part === '.') continue;
-    if (part === '..') return { safe: false, normalized: '', reason: 'ตรวจพบ path traversal (..)' };
+    if (part === '..') return { safe: false, normalized: '', reason: 'Path traversal (..) was detected.' };
     parts.push(part);
   }
-  if (!parts.length) return { safe: false, normalized: '', reason: 'Path ไม่มีชื่อไฟล์' };
+  if (!parts.length) return { safe: false, normalized: '', reason: 'Path does not contain a filename.' };
   return { safe: true, normalized: parts.join('/'), reason: '' };
 }
 export function sanitizeFilename(name, fallback = 'export') {

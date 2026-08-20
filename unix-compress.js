@@ -49,15 +49,15 @@ function alignCodeBlock(posBits, width) {
 export function unlzw(input) {
   const bytes = asBytes(input);
   if (bytes.length < 4 || bytes[0] !== 0x1f || bytes[1] !== 0x9d) {
-    throw new Error('ไฟล์ไม่ใช่ Unix compress (.Z): ไม่พบ magic 1F 9D');
+    throw new Error('The file is not Unix compress (.Z): magic bytes 1F 9D were not found.');
   }
 
   const flags = bytes[2];
   const maxBits = flags & 0x1f;
   const blockMode = Boolean(flags & 0x80);
   const reserved = flags & 0x60;
-  if (reserved) throw new Error(`ไฟล์ .Z ใช้ flag ที่ยังไม่รองรับ: 0x${reserved.toString(16)}`);
-  if (maxBits < 9 || maxBits > 16) throw new Error(`ไฟล์ .Z ใช้ code width ${maxBits} บิต ซึ่งไม่รองรับ`);
+  if (reserved) throw new Error(`The .Z file uses unsupported flags: 0x${reserved.toString(16)}`);
+  if (maxBits < 9 || maxBits > 16) throw new Error(`The .Z file uses unsupported ${maxBits}-bit codes.`);
 
   const maxMaxCode = 1 << maxBits;
   const prefix = new Uint32Array(maxMaxCode);
@@ -104,7 +104,7 @@ export function unlzw(input) {
     let code = readCode();
 
     if (oldCode === -1) {
-      if (code >= 256) throw new Error('ข้อมูล .Z เสียหาย: รหัสแรกไม่ใช่ literal');
+      if (code >= 256) throw new Error('The .Z stream is corrupted: the first code is not a literal.');
       finChar = code;
       oldCode = code;
       writer.writeByte(code);
@@ -125,14 +125,14 @@ export function unlzw(input) {
     const inCode = code;
     let stackPos = stack.length;
     if (code >= freeEnt) {
-      if (code > freeEnt) throw new Error(`ข้อมูล .Z เสียหาย: code ${code} มากกว่า free entry ${freeEnt}`);
+      if (code > freeEnt) throw new Error(`The .Z stream is corrupted: code ${code} exceeds free entry ${freeEnt}.`);
       stack[--stackPos] = finChar;
       code = oldCode;
     }
 
     let guard = 0;
     while (code >= 256) {
-      if (code >= maxMaxCode || guard++ > maxMaxCode) throw new Error('ข้อมูล .Z เสียหาย: dictionary chain ผิดปกติ');
+      if (code >= maxMaxCode || guard++ > maxMaxCode) throw new Error('The .Z stream is corrupted: invalid dictionary chain.');
       stack[--stackPos] = suffix[code];
       code = prefix[code];
     }

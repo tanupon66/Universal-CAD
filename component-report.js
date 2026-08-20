@@ -113,7 +113,7 @@ export function renderOverviewImage({ component, rows, bounds, zones, width = 22
     ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.fillRect(x - 6, y - 5, 64, 39); ctx.fillStyle = '#0f766e'; ctx.fillText(zone.label, x, y);
   }
   ctx.restore();
-  ctx.fillStyle = '#64748b'; ctx.font = '14px Arial, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('วงสีเขียว = Confirmed · วงสีแดง = ชื่อ CAD ซ้ำ · สีจุด = Measurement ต่ำไปสูง', 30, height - 18);
+  ctx.fillStyle = '#64748b'; ctx.font = '14px Arial, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Green ring = confirmed · red ring = duplicate CAD name · point color = low-to-high measurement.', 30, height - 18);
   return el;
 }
 
@@ -148,7 +148,7 @@ export function renderZoneImage({ component, zone, width = 2200, height = 1450, 
       lines.forEach((line, index) => ctx.fillText(line, point.x, point.y + radius + 3 + index * (fontSize + 1)));
     }
   }
-  ctx.fillStyle = '#64748b'; ctx.font = '14px Arial, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('ชื่อ/หมายเลขอยู่ใต้ Land · ดูรายละเอียดครบทุกจุดในตารางด้านล่างของชีต', 30, height - 18);
+  ctx.fillStyle = '#64748b'; ctx.font = '14px Arial, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Names/numbers are shown below lands. Full details are available in the table below.', 30, height - 18);
   return el;
 }
 
@@ -187,6 +187,6 @@ export function renderHistogramImage(componentName, model, width = 1600, height 
 }
 
 export async function canvasToPngBytes(el) {
-  const blob = await new Promise((resolve, reject) => el.toBlob((value) => value ? resolve(value) : reject(new Error('ไม่สามารถสร้างภาพ PNG ได้')), 'image/png'));
+  const blob = await new Promise((resolve, reject) => el.toBlob((value) => value ? resolve(value) : reject(new Error('Unable to create PNG image.')), 'image/png'));
   return new Uint8Array(await blob.arrayBuffer());
 }

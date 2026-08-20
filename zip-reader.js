@@ -21,7 +21,7 @@ function decodeFilename(bytes, utf8 = true) {
 
 async function inflateRaw(bytes) {
   if (typeof DecompressionStream === 'undefined') {
-    throw new Error('เบราว์เซอร์นี้ไม่รองรับ DecompressionStream กรุณาใช้ Chrome หรือ Edge รุ่นใหม่');
+    throw new Error('This browser does not support DecompressionStream. Use a current browser version.');
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -47,7 +47,7 @@ export class ZipArchive {
     for (let offset = this.bytes.length - 22; offset >= minimum; offset -= 1) {
       if (this.#u32(offset) === SIG_EOCD) return offset;
     }
-    throw new Error('ไม่พบ End of Central Directory: ไฟล์อาจไม่ใช่ ZIP หรือเสียหาย');
+    throw new Error('End of Central Directory was not found; the file may not be a valid ZIP or may be corrupted.');
   }
 
   #readCentralDirectory() {
@@ -59,7 +59,7 @@ export class ZipArchive {
 
     for (let i = 0; i < totalEntries; i += 1) {
       if (this.#u32(cursor) !== SIG_CENTRAL) {
-        throw new Error(`โครงสร้าง ZIP ผิดปกติที่รายการ ${i + 1}`);
+        throw new Error(`Invalid ZIP structure at entry ${i + 1}.`);
       }
       const flags = this.#u16(cursor + 8);
       const method = this.#u16(cursor + 10);
@@ -95,12 +95,12 @@ export class ZipArchive {
 
   #entryCompressedSlice(name) {
     const entry = this.entries.get(name);
-    if (!entry) throw new Error(`ไม่พบไฟล์ ${name} ใน ZIP`);
+    if (!entry) throw new Error(`File ${name} was not found in the ZIP archive.`);
     if (entry.isDirectory) return { entry, compressed: new Uint8Array() };
-    if (entry.flags & 0x0001) throw new Error(`ไฟล์ ${name} ถูกเข้ารหัสและยังไม่รองรับ`);
+    if (entry.flags & 0x0001) throw new Error(`File ${name} is encrypted and is not supported.`);
 
     const offset = entry.localOffset;
-    if (this.#u32(offset) !== SIG_LOCAL) throw new Error(`Local header ของ ${name} ไม่ถูกต้อง`);
+    if (this.#u32(offset) !== SIG_LOCAL) throw new Error(`The local header for ${name} is invalid.`);
     const nameLength = this.#u16(offset + 26);
     const extraLength = this.#u16(offset + 28);
     const dataOffset = offset + 30 + nameLength + extraLength;
@@ -115,10 +115,10 @@ export class ZipArchive {
     if (entry.isDirectory) return new Blob([]).stream();
     let stream = new Blob([compressed]).stream();
     if (entry.method === 8) {
-      if (typeof DecompressionStream === 'undefined') throw new Error('เบราว์เซอร์นี้ไม่รองรับ DecompressionStream กรุณาใช้ Chrome หรือ Edge รุ่นใหม่');
+      if (typeof DecompressionStream === 'undefined') throw new Error('This browser does not support DecompressionStream. Use a current browser version.');
       stream = stream.pipeThrough(new DecompressionStream('deflate-raw'));
     } else if (entry.method !== 0) {
-      throw new Error(`ZIP compression method ${entry.method} ยังไม่รองรับ (${name})`);
+      throw new Error(`ZIP compression method ${entry.method} is not supported (${name}).`);
     }
     return stream;
   }
@@ -156,7 +156,7 @@ export class ZipArchive {
     let data;
     if (entry.method === 0) data = compressed.slice();
     else if (entry.method === 8) data = await inflateRaw(compressed);
-    else throw new Error(`ZIP compression method ${entry.method} ยังไม่รองรับ (${name})`);
+    else throw new Error(`ZIP compression method ${entry.method} is not supported (${name}).`);
 
     if (output === 'text') return new TextDecoder('utf-8').decode(data);
     if (output === 'arraybuffer') return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);

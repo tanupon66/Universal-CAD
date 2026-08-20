@@ -9,11 +9,11 @@ function number(value, fallback = 0) { const normalized = String(value ?? '').tr
 function xmlEscape(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'); }
 export function assertWellFormedXml(text, options = {}) {
   const source = String(text || '').replace(/^\uFEFF/, '');
-  if (!source.trim().startsWith('<')) throw new ParseError('ข้อมูลไม่ใช่ XML', { stage: 'xml-structure', fileName: options.fileName, code: 'XML_NO_ROOT' });
+  if (!source.trim().startsWith('<')) throw new ParseError('The input is not XML.', { stage: 'xml-structure', fileName: options.fileName, code: 'XML_NO_ROOT' });
   if (typeof DOMParser !== 'undefined') {
     const document = new DOMParser().parseFromString(source, 'application/xml');
     const parserError = document.querySelector('parsererror');
-    if (parserError) throw new ParseError(`XML ไม่สมบูรณ์: ${parserError.textContent?.trim().slice(0, 240) || 'parse error'}`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_MALFORMED' });
+    if (parserError) throw new ParseError(`Malformed XML: ${parserError.textContent?.trim().slice(0, 240) || 'parse error'}`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_MALFORMED' });
     return source;
   }
   const cleaned = source
@@ -27,20 +27,20 @@ export function assertWellFormedXml(text, options = {}) {
     const closing = Boolean(match[1]); const name = match[2]; const selfClosing = Boolean(match[3]);
     if (closing) {
       const expected = stack.pop();
-      if (expected !== name) throw new ParseError(`XML tag ไม่ตรงกัน: คาด </${expected || 'none'}> แต่พบ </${name}>`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_MISMATCHED_TAG' });
+      if (expected !== name) throw new ParseError(`XML tag mismatch: expected </${expected || 'none'}> but found </${name}>.`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_MISMATCHED_TAG' });
     } else if (!selfClosing) {
       if (!stack.length) rootCount += 1;
       stack.push(name);
     } else if (!stack.length) rootCount += 1;
   }
-  if (stack.length) throw new ParseError(`XML ปิด tag ไม่ครบ: ${stack.slice(-5).join(' > ')}`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_UNCLOSED_TAG' });
-  if (rootCount !== 1) throw new ParseError(`XML ต้องมี Root element เดียว แต่ตรวจพบ ${rootCount}`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_ROOT_COUNT' });
+  if (stack.length) throw new ParseError(`XML contains unclosed tags: ${stack.slice(-5).join(' > ')}`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_UNCLOSED_TAG' });
+  if (rootCount !== 1) throw new ParseError(`XML must contain exactly one root element; found ${rootCount}.`, { stage: 'xml-structure', fileName: options.fileName, code: 'XML_ROOT_COUNT' });
   return source;
 }
 export function assertSafeXml(text, options = {}) {
   const source = String(text || '');
-  if (/<!DOCTYPE\b/i.test(source) || /<!ENTITY\b/i.test(source)) throw new ParseError('XML ที่มี DOCTYPE/ENTITY ไม่ได้รับอนุญาตเพื่อป้องกัน Entity Expansion', { stage: 'xml-security', fileName: options.fileName, code: 'XML_ENTITY_DECLARATION' });
-  if (/<script\b|javascript\s*:|on(?:load|error|click)\s*=/i.test(source)) throw new ParseError('ตรวจพบ Script หรือ Event Handler ใน XML Metadata', { stage: 'xml-security', fileName: options.fileName, code: 'XML_ACTIVE_CONTENT' });
+  if (/<!DOCTYPE\b/i.test(source) || /<!ENTITY\b/i.test(source)) throw new ParseError('DOCTYPE and ENTITY declarations are not allowed because they can enable entity expansion attacks.', { stage: 'xml-security', fileName: options.fileName, code: 'XML_ENTITY_DECLARATION' });
+  if (/<script\b|javascript\s*:|on(?:load|error|click)\s*=/i.test(source)) throw new ParseError('Script or event-handler content was detected in XML metadata.', { stage: 'xml-security', fileName: options.fileName, code: 'XML_ACTIVE_CONTENT' });
   return assertWellFormedXml(source.replace(/^\uFEFF/, ''), options);
 }
 function elementRecords(text, localName) {
@@ -81,12 +81,12 @@ export function convertIpc2581ToInspectionXml(xmlText, options = {}) {
     const transform = xformFromBody(record.body, a);
     components.push({ id: String(nextId++), ref, packageName, revision: String(pick(a, ['revision', 'Revision'], '')), ...transform });
   }
-  if (!components.length) throw new ParseError('IPC-2581 นี้ไม่มี Component Placement ที่ Adapter อ่านได้', { stage: 'ipc-2581-components', fileName: options.fileName, context: { rootDetected: true } });
+  if (!components.length) throw new ParseError('This IPC-2581 file does not contain component placements supported by the current adapter.', { stage: 'ipc-2581-components', fileName: options.fileName, context: { rootDetected: true } });
   let landId = 1; const componentXml = []; const landXml = [];
   for (const component of components) {
     componentXml.push(`<ComponentInformation Id="${xmlEscape(component.id)}" Name="${xmlEscape(component.ref)}"><ComponentInformationItem ComponentNumberId="${xmlEscape(component.packageName)}" ComponentNumberRevision="${xmlEscape(component.revision)}"/><PositionAngle CenterPosX="${component.x}" CenterPosY="${component.y}" Angle="${component.rotation}"/></ComponentInformation>`);
     const pkg = packageMap.get(component.packageName);
-    if (!pkg?.pins?.length) { warnings.push(`Package ${component.packageName} ของ ${component.ref} ไม่มี Pin geometry ที่อ่านได้`); continue; }
+    if (!pkg?.pins?.length) { warnings.push(`Package ${component.packageName} for ${component.ref} has no readable pin geometry.`); continue; }
     for (const pin of pkg.pins) {
       const left = component.x + pin.x - pin.width / 2; const top = component.y + pin.y + pin.height / 2;
       landXml.push(`<LandNumber LandId="${landId++}" Component="${xmlEscape(component.id)}" Name="${xmlEscape(pin.name)}" Side="${/bottom|bot|mirror|true/i.test(component.side) ? 'Bottom' : 'Top'}"><Land Left="${left}" Top="${top}" Width="${pin.width}" Length="${pin.height}"/></LandNumber>`);
@@ -108,24 +108,24 @@ export function adaptCadText(inputText, options = {}) {
   if (detection.format === 'gencad-1.4') return { ...convertGenCadToInspectionXml(rawSource, options), detection };
   if (detection.format === 'fabmaster-ascii') return { ...convertFabmasterExtractToInspectionXml(rawSource, options), detection };
   if (detection.format === 'fabmaster-legacy') {
-    throw new ValidationError('ตรวจพบ FABmaster legacy/FATF แต่ Adapter รุ่นนี้ยังไม่รองรับ variant นี้', {
+    throw new ValidationError('A legacy manufacturing-ASCII variant was detected, but this adapter does not support that variant.', {
       stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_FABMASTER_LEGACY',
-      remediation: 'ใช้ FABmaster ASCII A!/J!/S! หรือ GenCAD 1.4; หากต้องการ variant นี้ให้แนบไฟล์ตัวอย่างที่ไม่มีข้อมูลลับเพื่อเพิ่ม Adapter ให้ตรงรูปแบบ',
+      remediation: 'Use a supported A!/J!/S! manufacturing-ASCII or CAD ASCII 1.4 file. To add this variant, provide a non-confidential sample.',
     });
   }
-  const label = detection.rootElement ? `XML root ${detection.rootElement}` : `รูปแบบ ${detection.format || 'unknown'}`;
-  throw new ValidationError(`${label} ยังไม่มี Import Adapter`, { stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_CAD_FORMAT' });
+  const label = detection.rootElement ? `XML root ${detection.rootElement}` : `format ${detection.format || 'unknown'}`;
+  throw new ValidationError(`${label} does not have an import adapter yet.`, { stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_CAD_FORMAT' });
 }
 
 
 export async function adaptCadStream(readable, options = {}) {
   const detection = options.detection;
-  if (!detection?.format) throw new ValidationError('Streaming import ต้องมีผล Format Detector ก่อนเริ่มอ่าน', { stage: 'format-adapter', fileName: options.fileName, code: 'STREAM_FORMAT_REQUIRED' });
+  if (!detection?.format) throw new ValidationError('Streaming import requires a format-detection result before parsing.', { stage: 'format-adapter', fileName: options.fileName, code: 'STREAM_FORMAT_REQUIRED' });
   if (detection.format === 'fabmaster-ascii') {
     return { ...(await convertFabmasterStreamToInspectionXml(readable, options)), detection };
   }
-  throw new ValidationError(`รูปแบบ ${detection.format} ยังไม่มี Streaming Import Adapter`, {
+  throw new ValidationError(`Format ${detection.format} does not have a streaming import adapter.`, {
     stage: 'format-adapter', fileName: options.fileName, context: detection, code: 'UNSUPPORTED_STREAMING_CAD_FORMAT',
-    remediation: 'ไฟล์ขนาดใหญ่รองรับ streaming สำหรับ FABmaster A!/J!/S! ก่อน; ฟอร์แมตอื่นให้ใช้ไฟล์ขนาดเล็กกว่าหรือเพิ่ม Adapter เฉพาะรูปแบบ',
+    remediation: 'Large-file streaming currently supports the A!/J!/S! manufacturing-ASCII variant. Other formats require a smaller file or a dedicated streaming adapter.',
   });
 }

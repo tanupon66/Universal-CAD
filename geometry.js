@@ -4,7 +4,7 @@ import { cloneCadValue, normalizeRotation } from './universal-cad-model.js';
 export const GEOMETRY_EPSILON = 1e-9;
 function finite(value, name) {
   const number = Number(value);
-  if (!Number.isFinite(number)) throw new GeometryError(`${name} เป็น NaN หรือ Infinity`, { stage: 'geometry-validation', context: { value } });
+  if (!Number.isFinite(number)) throw new GeometryError(`${name} is NaN or Infinity.`, { stage: 'geometry-validation', context: { value } });
   return number;
 }
 function samePoint(a, b, epsilon = GEOMETRY_EPSILON) { return Math.abs(a.x - b.x) <= epsilon && Math.abs(a.y - b.y) <= epsilon; }
@@ -46,31 +46,31 @@ export function pointInPolygon(point, points) {
 export function validatePolygon(points, { holes = [], requireClosed = true } = {}) {
   const input = (points || []).map(normalizePoint);
   const issues = [];
-  if (input.length < 4) issues.push({ code: 'POLYGON_TOO_FEW_POINTS', message: 'Polygon ต้องมีอย่างน้อย 3 จุดและจุดปิด' });
-  if (input.length && requireClosed && !samePoint(input[0], input.at(-1))) issues.push({ code: 'POLYGON_NOT_CLOSED', message: 'Polygon ปิดไม่สมบูรณ์' });
+  if (input.length < 4) issues.push({ code: 'POLYGON_TOO_FEW_POINTS', message: 'A polygon must contain at least three points plus a closing point.' });
+  if (input.length && requireClosed && !samePoint(input[0], input.at(-1))) issues.push({ code: 'POLYGON_NOT_CLOSED', message: 'The polygon is not closed.' });
   const closed = closePolygon(input);
   for (let i = 0; i < closed.length - 1; i += 1) {
-    if (samePoint(closed[i], closed[i + 1])) issues.push({ code: 'ZERO_LENGTH_SEGMENT', message: `Segment ${i + 1} มีความยาวศูนย์` });
+    if (samePoint(closed[i], closed[i + 1])) issues.push({ code: 'ZERO_LENGTH_SEGMENT', message: `Segment ${i + 1} has zero length.` });
   }
-  if (Math.abs(polygonSignedArea(closed)) <= GEOMETRY_EPSILON) issues.push({ code: 'ZERO_AREA', message: 'Polygon มีพื้นที่เป็นศูนย์' });
+  if (Math.abs(polygonSignedArea(closed)) <= GEOMETRY_EPSILON) issues.push({ code: 'ZERO_AREA', message: 'The polygon has zero area.' });
   for (let i = 0; i < closed.length - 1; i += 1) {
     for (let j = i + 1; j < closed.length - 1; j += 1) {
       if (Math.abs(i - j) <= 1 || (i === 0 && j === closed.length - 2)) continue;
-      if (segmentsIntersect(closed[i], closed[i + 1], closed[j], closed[j + 1])) issues.push({ code: 'SELF_INTERSECTION', message: `Segment ${i + 1} ตัดกับ Segment ${j + 1}` });
+      if (segmentsIntersect(closed[i], closed[i + 1], closed[j], closed[j + 1])) issues.push({ code: 'SELF_INTERSECTION', message: `Segment ${i + 1} intersects segment ${j + 1}.` });
     }
   }
   for (const [holeIndex, hole] of holes.entries()) {
     const holeIssues = validatePolygon(hole, { holes: [], requireClosed });
     issues.push(...holeIssues.map((issue) => ({ ...issue, code: `HOLE_${issue.code}`, message: `Hole ${holeIndex + 1}: ${issue.message}` })));
     const first = closePolygon(hole)[0];
-    if (first && !pointInPolygon(first, closed)) issues.push({ code: 'HOLE_OUTSIDE_SHAPE', message: `Hole ${holeIndex + 1} อยู่นอก Shape` });
+    if (first && !pointInPolygon(first, closed)) issues.push({ code: 'HOLE_OUTSIDE_SHAPE', message: `Hole ${holeIndex + 1} is outside the shape.` });
   }
   return { valid: issues.length === 0, issues, area: Math.abs(polygonSignedArea(closed)), orientation: polygonOrientation(closed), points: closed };
 }
 export function rectangleGeometry(input = {}) {
   const left = finite(input.left, 'Rectangle left'); const top = finite(input.top, 'Rectangle top');
   const width = finite(input.width, 'Rectangle width'); const height = finite(input.height ?? input.length, 'Rectangle height');
-  if (width <= GEOMETRY_EPSILON || height <= GEOMETRY_EPSILON) throw new GeometryError('Rectangle ต้องมีขนาดมากกว่า 0', { stage: 'geometry-validation', context: { width, height } });
+  if (width <= GEOMETRY_EPSILON || height <= GEOMETRY_EPSILON) throw new GeometryError('Rectangle dimensions must be greater than 0.', { stage: 'geometry-validation', context: { width, height } });
   return { type: 'rectangle', left, top, width, height, rotation: normalizeRotation(input.rotation || 0), points: [], holes: [] };
 }
 export function rectangleToPolygon(rectangle) {
@@ -84,7 +84,7 @@ export function validateGeometry(geometry) {
 }
 export function splitRectangle(rectangle, { axis = 'auto', ratio = 0.5 } = {}) {
   const rect = rectangleGeometry(rectangle); const splitRatio = finite(ratio, 'Split ratio');
-  if (splitRatio <= GEOMETRY_EPSILON || splitRatio >= 1 - GEOMETRY_EPSILON) throw new GeometryError('Split ratio ต้องอยู่ระหว่าง 0 และ 1', { stage: 'split-land' });
+  if (splitRatio <= GEOMETRY_EPSILON || splitRatio >= 1 - GEOMETRY_EPSILON) throw new GeometryError('Split ratio must be between 0 and 1.', { stage: 'split-land' });
   const resolvedAxis = axis === 'auto' ? (rect.width >= rect.height ? 'x' : 'y') : axis;
   if (resolvedAxis === 'x') {
     const firstWidth = rect.width * splitRatio;
@@ -94,7 +94,7 @@ export function splitRectangle(rectangle, { axis = 'auto', ratio = 0.5 } = {}) {
     const firstHeight = rect.height * splitRatio;
     return [{ ...rect, height: firstHeight }, { ...rect, top: rect.top - firstHeight, height: rect.height - firstHeight }];
   }
-  throw new GeometryError(`ไม่รองรับ Split axis ${resolvedAxis}`, { stage: 'split-land' });
+  throw new GeometryError(`Unsupported split axis: ${resolvedAxis}.`, { stage: 'split-land' });
 }
 function rectEdges(rectangle) { const r = rectangleGeometry(rectangle); return { ...r, right: r.left + r.width, bottom: r.top - r.height }; }
 export function rectangleIntersection(a, b) {
@@ -124,12 +124,12 @@ export function rectangleUnionArea(rectangles) {
   return area;
 }
 export function mergeRectangles(rectangles) {
-  if (!Array.isArray(rectangles) || rectangles.length < 2) throw new GeometryError('Merge ต้องเลือกอย่างน้อย 2 Land', { stage: 'merge-lands' });
+  if (!Array.isArray(rectangles) || rectangles.length < 2) throw new GeometryError('Merge requires at least two lands.', { stage: 'merge-lands' });
   const rects = rectangles.map(rectEdges);
-  if (rects.some((rect) => Math.abs(rect.rotation) > GEOMETRY_EPSILON)) throw new GeometryError('Merge รองรับ Rectangle ที่ไม่หมุนเท่านั้นในเวอร์ชันนี้', { stage: 'merge-lands' });
+  if (rects.some((rect) => Math.abs(rect.rotation) > GEOMETRY_EPSILON)) throw new GeometryError('This merge operation currently supports non-rotated rectangles only.', { stage: 'merge-lands' });
   const left = Math.min(...rects.map((r) => r.left)), right = Math.max(...rects.map((r) => r.right)), top = Math.max(...rects.map((r) => r.top)), bottom = Math.min(...rects.map((r) => r.bottom));
   const bounding = rectangleGeometry({ left, top, width: right - left, height: top - bottom });
-  if (Math.abs(rectangleUnionArea(rects) - bounding.width * bounding.height) > GEOMETRY_EPSILON * Math.max(1, bounding.width * bounding.height)) throw new GeometryError('Land ที่เลือกมีช่องว่างหรือผล Union ไม่เป็น Rectangle เดียว', { stage: 'merge-lands' });
+  if (Math.abs(rectangleUnionArea(rects) - bounding.width * bounding.height) > GEOMETRY_EPSILON * Math.max(1, bounding.width * bounding.height)) throw new GeometryError('The selected lands contain gaps or their union is not a single rectangle.', { stage: 'merge-lands' });
   return bounding;
 }
 export function cloneGeometry(geometry) { return cloneCadValue(geometry); }

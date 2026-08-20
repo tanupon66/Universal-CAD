@@ -34,16 +34,16 @@ function mappingStatus(item, savedAssignment) {
  * is accepted for API compatibility but is not used as a naming source.
  */
 export function createGridMapExcelModel(component, mappingsOrOptions = [], maybeOptions = {}) {
-  if (!component) throw new TypeError('กรุณาเลือก Component สำหรับ Grid / Land Map');
+  if (!component) throw new TypeError('Select a component for Grid / Land Map.');
   const options = Array.isArray(mappingsOrOptions) ? maybeOptions : mappingsOrOptions;
   const grid = options.grid || detectLandGrid(component, options.gridOptions || {});
-  if (grid.collisions.length) throw new RangeError(`พบ Land ซ้อน Grid ${grid.collisions.length} ตำแหน่ง`);
+  if (grid.collisions.length) throw new RangeError(`Found ${grid.collisions.length} grid-cell land collision(s).`);
   const physicalCells = grid.rowCount * grid.columnCount;
-  if (grid.columnCount + 1 > 16384 || grid.rowCount * 2 + 10 > 1048576) throw new RangeError('Grid มีขนาดเกินข้อจำกัดของ Excel');
-  if (physicalCells > Number(options.maxPhysicalCells || 250000)) throw new RangeError(`Grid ${physicalCells.toLocaleString()} ช่องใหญ่เกินงบ Export Excel`);
+  if (grid.columnCount + 1 > 16384 || grid.rowCount * 2 + 10 > 1048576) throw new RangeError('The grid exceeds Excel worksheet limits.');
+  if (physicalCells > Number(options.maxPhysicalCells || 250000)) throw new RangeError(`Grid size ${physicalCells.toLocaleString()} cells exceeds the Excel export budget.`);
 
   const plan = options.plan || buildGeneratedLandMapPlan(grid, planOptions(options));
-  if (plan.duplicates.length) throw new RangeError(`ชื่อใหม่ซ้ำหรือว่าง ${plan.duplicates.length} กลุ่ม`);
+  if (plan.duplicates.length) throw new RangeError(`Generated names contain ${plan.duplicates.length} duplicate or blank group(s).`);
   const savedByKey = new Map((options.existingAssignments || []).map((item) => [String(item.landKey || `${item.componentId}:${item.globalId}`), item]));
   const cells = plan.plan.map((item, index) => {
     const land = item.land;

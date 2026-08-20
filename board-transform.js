@@ -40,7 +40,7 @@ export function boardTransformBounds(model) {
     return { minX, minY, maxX: minX + width, maxY: minY + height, width, height, source: 'board' };
   }
   const extent = componentExtent(model);
-  if (!extent || extent.width <= 0 || extent.height <= 0) throw new RangeError('ไม่พบขนาด Board หรือขอบเขต Land ที่ใช้กลับทิศทางได้');
+  if (!extent || extent.width <= 0 || extent.height <= 0) throw new RangeError('No valid board size or land extent is available for board transformation.');
   return { ...extent, source: 'lands' };
 }
 
@@ -83,7 +83,7 @@ export function boardOrientationTransform(bounds, operation) {
 
 function transformLand(land, matrix) {
   const rect = landRect(land);
-  if (!rect) throw new RangeError(`Land ${land?.cadName || land?.globalId || ''} มี Geometry ไม่สมบูรณ์`);
+  if (!rect) throw new RangeError(`Land ${land?.cadName || land?.globalId || ''} has incomplete geometry.`);
   const points = [
     applyMatrix(matrix, { x: rect.minX, y: rect.minY }),
     applyMatrix(matrix, { x: rect.maxX, y: rect.minY }),
@@ -114,11 +114,11 @@ function updateBoardSize(board, outputBounds) {
 }
 
 export function transformCadEditorBoard(model, operation) {
-  if (!model?.components) throw new TypeError('transformCadEditorBoard ต้องได้รับ CAD Editor model');
+  if (!model?.components) throw new TypeError('transformCadEditorBoard requires a CAD Editor model.');
   const bounds = boardTransformBounds(model);
   const transform = boardOrientationTransform(bounds, operation);
   for (const component of model.components) {
-    for (const land of component.lands || []) if (!landRect(land)) throw new RangeError(`Land ${land?.cadName || land?.globalId || ''} มี Geometry ไม่สมบูรณ์`);
+    for (const land of component.lands || []) if (!landRect(land)) throw new RangeError(`Land ${land?.cadName || land?.globalId || ''} has incomplete geometry.`);
   }
   let landCount = 0;
   for (const component of model.components) {

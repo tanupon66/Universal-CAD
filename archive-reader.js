@@ -77,7 +77,7 @@ export function parseTar(input) {
 
 async function transformStream(bytes, format, mode) {
   const StreamType = mode === 'compress' ? globalThis.CompressionStream : globalThis.DecompressionStream;
-  if (!StreamType) throw new Error(`เบราว์เซอร์นี้ไม่รองรับ ${mode === 'compress' ? 'CompressionStream' : 'DecompressionStream'} กรุณาใช้ Chrome หรือ Edge รุ่นใหม่`);
+  if (!StreamType) throw new Error(`This browser does not support ${mode === 'compress' ? 'CompressionStream' : 'DecompressionStream'}. Use a current browser version.`);
   const stream = new Blob([bytes]).stream().pipeThrough(new StreamType(format));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
@@ -111,7 +111,7 @@ function splitTarPath(path) {
     const name = normalized.slice(slashIndexes[i] + 1);
     if (new TextEncoder().encode(name).length <= 100 && new TextEncoder().encode(prefix).length <= 155) return { name, prefix };
   }
-  throw new Error(`ชื่อไฟล์ใน TGZ ยาวเกินมาตรฐาน TAR: ${normalized}`);
+  throw new Error(`The TGZ filename exceeds TAR limits: ${normalized}`);
 }
 
 function tarHeader(entry) {

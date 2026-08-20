@@ -1,7 +1,7 @@
 {
-  "name": "Universal CAD Studio v0.25.2",
-  "short_name": "CAD Editor",
-  "description": "CAD/EDA workspace สำหรับเปิด e-PM/ODB++ เลือก ลาก คลุม หมุน ทำสำเนา และแก้ Component/Land บนบอร์ดโดยตรง",
+  "name": "Universal CAD Studio v0.26.0",
+  "short_name": "Universal CAD",
+  "description": "Offline-first CAD and NPI preparation workspace for board data, mapping, validation, revision comparison, package analysis, BOM, and multi-format export.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -28,8 +28,8 @@
     }
   ],
   "id": "./",
-  "version": "0.25.2",
-  "lang": "th",
+  "version": "0.26.0",
+  "lang": "en",
   "dir": "ltr",
   "launch_handler": {
     "client_mode": "navigate-existing"

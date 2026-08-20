@@ -252,11 +252,11 @@ function makeSummarySheet(report, used) {
   const title = titleRow(report.title || 'Component CAD Report', width);
   const rows = [...title.rows,
     row([{ v: 'Board', style: 3 }, { v: report.boardName || '—', style: 4 }, { v: 'CAD file', style: 3 }, { v: report.cadFileName || '—', style: 4 }, { v: 'Generated', style: 3 }, { v: new Date(report.generatedAt).toLocaleString('th-TH'), style: 4 }]),
-    row([{ v: 'X-ray file', style: 3 }, { v: report.xlsxFileName || '—', style: 4 }, { v: 'Name source', style: 3 }, { v: report.nameSourceLabel || 'Active CAD', style: 4 }, { v: 'Zone grid', style: 3 }, { v: `${report.zoneGrid} × ${report.zoneGrid}`, style: 4 }]),
+    row([{ v: 'Source data file', style: 3 }, { v: report.xlsxFileName || '—', style: 4 }, { v: 'Name source', style: 3 }, { v: report.nameSourceLabel || 'Active CAD', style: 4 }, { v: 'Zone grid', style: 3 }, { v: `${report.zoneGrid} × ${report.zoneGrid}`, style: 4 }]),
     row([{ v: 'Project ID', style: 3 }, { v: report.projectMetadata?.projectId || '—', style: 4 }, { v: 'Revision', style: 3 }, { v: report.projectMetadata?.revisionNumber ?? 0, style: 6 }, { v: 'Validation', style: 3 }, { v: report.projectMetadata?.validationStatus || 'not-run', style: 4 }]),
     row([{ v: 'Source format', style: 3 }, { v: report.projectMetadata?.sourceFormat || 'unknown', style: 4 }, { v: 'Export format', style: 3 }, { v: report.projectMetadata?.exportFormat || 'xlsx-component-report', style: 4 }, { v: 'Accepted warnings', style: 3 }, { v: (report.projectMetadata?.acceptedWarnings || []).map((item) => typeof item === 'string' ? item : item?.code || item?.id || '').filter(Boolean).join(' | ') || '—', style: 4 }]),
     row([]),
-    row(['Component', 'Package', 'CAD lands', 'X-ray lands', 'Measurement values', 'Duplicate positions', 'Map sheet', 'Land data'].map((v) => ({ v, style: 2 })), 28),
+    row(['Component', 'Package', 'CAD lands', 'Source rows', 'Measurement values', 'Duplicate positions', 'Map sheet', 'Land data'].map((v) => ({ v, style: 2 })), 28),
   ];
   for (const component of report.components) {
     rows.push(row([
@@ -267,7 +267,7 @@ function makeSummarySheet(report, used) {
       { v: component.dataSheetName, style: 8, link: `'${component.dataSheetName.replace(/'/g, "''")}'!A1` },
     ]));
   }
-  rows.push(row([]), row([{ v: 'คำอธิบาย', style: 3 }]), row([{ v: 'ภาพรวมแบ่ง Component เป็นโซน ตัวอย่าง A1 หมายถึงแถวบนสุด คอลัมน์ซ้ายสุด การคลิกชื่อโซนหรือ Zone ในตารางจะพาไปยังภาพขยายของโซนนั้น', style: 9 }], 42));
+  rows.push(row([]), row([{ v: 'Description', style: 3 }]), row([{ v: 'The component overview is divided into zones. A1 represents the top-left zone. Click a zone name in the table to open its detailed view.', style: 9 }], 42));
   return { name, rows, merges: [title.merge], columns: [18, 28, 14, 14, 18, 18, 20, 20], freeze: { rows: 7, columns: 0 }, images: [] };
 }
 
@@ -276,10 +276,10 @@ function makeMapSheet(component, used) {
   const width = 10;
   const title = titleRow(`${component.name} · Component Map`, width);
   const rows = [...title.rows,
-    row([{ v: 'Package', style: 3 }, { v: component.packageName || '—', style: 4 }, { v: 'CAD lands', style: 3 }, { v: component.rows.length, style: 6 }, { v: 'X-ray mapped', style: 3 }, { v: component.rows.filter((item) => item.xrayLand != null).length, style: 6 }]),
+    row([{ v: 'Package', style: 3 }, { v: component.packageName || '—', style: 4 }, { v: 'CAD lands', style: 3 }, { v: component.rows.length, style: 6 }, { v: 'Mapped source rows', style: 3 }, { v: component.rows.filter((item) => item.xrayLand != null).length, style: 6 }]),
     row([{ v: 'Measurement', style: 3 }, { v: component.measurementCount, style: 6 }, { v: 'Bounds X', style: 3 }, { v: `${component.bounds.minX.toFixed(4)} – ${component.bounds.maxX.toFixed(4)}`, style: 4 }, { v: 'Bounds Y', style: 3 }, { v: `${component.bounds.minY.toFixed(4)} – ${component.bounds.maxY.toFixed(4)}`, style: 4 }]),
     ...Array(45).fill(0).map(() => row([])),
-    row([{ v: 'Zone', style: 2 }, { v: 'Land count', style: 2 }, { v: 'Measurement count', style: 2 }, { v: 'Min X', style: 2 }, { v: 'Max X', style: 2 }, { v: 'Min Y', style: 2 }, { v: 'Max Y', style: 2 }, { v: 'เปิดภาพขยาย', style: 2 }]),
+    row([{ v: 'Zone', style: 2 }, { v: 'Land count', style: 2 }, { v: 'Measurement count', style: 2 }, { v: 'Min X', style: 2 }, { v: 'Max X', style: 2 }, { v: 'Min Y', style: 2 }, { v: 'Max Y', style: 2 }, { v: 'Open detail view', style: 2 }]),
   ];
   for (const zone of component.zones) {
     rows.push(row([
@@ -294,7 +294,7 @@ function makeMapSheet(component, used) {
   };
 }
 
-const DATA_HEADERS = ['Part', 'Package', 'Zone', 'Local', 'X-ray Land', 'XML ID', 'CAD Name', 'Original Name', 'Generated Name', 'X', 'Y', 'Width', 'Length', 'Measurement', 'Confirmed', 'Mapping status', 'Duplicate count'];
+const DATA_HEADERS = ['Part', 'Package', 'Zone', 'Local', 'Source Land', 'XML ID', 'CAD Name', 'Original Name', 'Generated Name', 'X', 'Y', 'Width', 'Length', 'Measurement', 'Confirmed', 'Mapping status', 'Duplicate count'];
 function dataRow(item, zoneLink = null) {
   return [
     { v: item.componentName, style: 4 }, { v: item.packageName, style: 4 }, zoneLink ? { v: item.zone, style: 8, link: zoneLink } : { v: item.zone, style: 4 },
@@ -308,7 +308,7 @@ function dataRow(item, zoneLink = null) {
 function makeDataSheet(component) {
   const title = titleRow(`${component.name} · Land Data`, DATA_HEADERS.length);
   const rows = [...title.rows,
-    row([{ v: `ข้อมูลตำแหน่งทั้งหมดของ ${component.name} · คลิก Zone เพื่อเปิดภาพขยาย`, style: 9 }], 28),
+    row([{ v: `All placement data for ${component.name} · click a Zone to open the detailed view`, style: 9 }], 28),
     row(DATA_HEADERS.map((v) => ({ v, style: 2 })), 30),
   ];
   const zoneByLabel = new Map(component.zones.map((zone) => [zone.label, zone]));
@@ -326,7 +326,7 @@ function makeZoneSheet(component, zone, compact = true) {
   if (compact) {
     const rows = [...title.rows,
       row([{ v: `X ${zone.bounds.minX.toFixed(4)} – ${zone.bounds.maxX.toFixed(4)} · Y ${zone.bounds.minY.toFixed(4)} – ${zone.bounds.maxY.toFixed(4)} · ${zone.rows.length} lands`, style: 9 }], 28),
-      row([{ v: 'เปิดชีต Land Data เพื่อดูข้อมูลครบทุก Land', style: 8, link: `'${component.dataSheetName.replace(/'/g, "''")}'!A1` }], 24),
+      row([{ v: 'Open the Land Data sheet to view every land record.', style: 8, link: `'${component.dataSheetName.replace(/'/g, "''")}'!A1` }], 24),
       ...Array(44).fill(0).map(() => row([])),
     ];
     return { name: zone.sheetName, rows, merges: [title.merge, `A2:${columnName(width - 1)}2`, `A3:${columnName(width - 1)}3`], columns: [12, 26, 10, 10, 12, 12, 14, 16, 16, 12, 12, 11, 11, 14, 12, 18, 14], images: [{ bytes: zone.imagePng, row: 4, col: 0, width: 1450, height: 800, name: `${component.name} zone ${zone.label}` }] };
@@ -365,7 +365,7 @@ function makeDuplicatesSheet(report, used) {
   for (const component of report.components) for (const item of component.rows) if (item.duplicateCount > 1) duplicates.push(item);
   if (!duplicates.length) return null;
   const name = safeSheetName('Duplicate Names', used);
-  const headers = ['Part', 'CAD Name', 'Duplicate count', 'Local', 'X-ray Land', 'XML ID', 'X', 'Y', 'Zone'];
+  const headers = ['Part', 'CAD Name', 'Duplicate count', 'Local', 'Source Land', 'XML ID', 'X', 'Y', 'Zone'];
   const title = titleRow('Duplicate CAD Names', headers.length);
   const rows = [...title.rows, row(headers.map((v) => ({ v, style: 2 })), 30)];
   for (const item of duplicates) rows.push(row([{ v: item.componentName, style: 4 }, { v: item.cadName, style: 10 }, { v: item.duplicateCount, style: 6 }, { v: item.localIndex, style: 6 }, { v: item.xrayLand, style: 6 }, { v: item.globalId, style: 6 }, { v: item.centerX, style: 5 }, { v: item.centerY, style: 5 }, { v: item.zone, style: 4 }]));
@@ -449,7 +449,7 @@ function makeGridMapWorkbookSheets(report) {
     { v: 'Mappings', style: 3 }, { v: report.mappingCount, style: 6 },
     { v: 'Preview changes', style: 3 }, { v: report.proposedCount, style: 6 },
   ]));
-  mapRows.push(row([{ v: 'ช่องบนคือชื่อใหม่ที่ผู้ใช้กำหนด ช่องล่างคือชื่อ Land เดิมใน CAD การ Export ไม่เปลี่ยนชื่อ CAD', style: 9 }, ...Array(sheetWidth - 1).fill(null)], 30));
+  mapRows.push(row([{ v: 'The upper cell is the configured new name; the lower cell is the original CAD land name. Export does not rename CAD data.', style: 9 }, ...Array(sheetWidth - 1).fill(null)], 30));
   merges.push(`A5:${lastColumn}5`);
   mapRows.push(row([{ v: 'Physical Row \\ Col', style: 2 }, ...Array.from({ length: grid.columnCount }, (_, index) => ({ v: index + 1, style: 2 }))], 24));
 
@@ -531,6 +531,28 @@ async function buildWorkbookBlob(sheets, title, generatedAt) {
 }
 
 export async function buildGridMapXlsx(report) {
-  if (!report?.grid || !Array.isArray(report.cells)) throw new TypeError('Grid Map Excel model ไม่สมบูรณ์');
+  if (!report?.grid || !Array.isArray(report.cells)) throw new TypeError('Grid Map Excel model is incomplete.');
   return buildWorkbookBlob(makeGridMapWorkbookSheets(report), report.title || 'Grid Map', report.generatedAt);
+}
+
+export async function buildTableWorkbookXlsx({ sheets = [], title = 'Workbook', generatedAt = new Date().toISOString() } = {}) {
+  if (!Array.isArray(sheets) || !sheets.length) throw new TypeError('At least one worksheet is required.');
+  const used = new Set();
+  const normalized = sheets.map((sheet, sheetIndex) => {
+    const values = Array.isArray(sheet.rows) ? sheet.rows : [];
+    const rows = values.map((valuesRow) => row((Array.isArray(valuesRow) ? valuesRow : []).map((value, cellIndex) => {
+      const style = sheetIndex === 0 && values.indexOf(valuesRow) === 0 ? 2 : 4;
+      return normalizeCell(value, style);
+    })));
+    const maxCols = Math.max(1, ...rows.map((item) => item.cells.length));
+    return {
+      name: safeSheetName(sheet.name || `Sheet ${sheetIndex + 1}`, used),
+      rows, merges: Array.isArray(sheet.merges) ? sheet.merges : [],
+      columns: Array.isArray(sheet.columns) ? sheet.columns : Array(maxCols).fill(18),
+      freeze: sheet.freeze || (rows.length > 1 ? { rows: 1, columns: 0 } : null),
+      autoFilter: sheet.autoFilter || (rows.length > 1 ? `A1:${columnName(maxCols - 1)}${rows.length}` : null),
+      images: [],
+    };
+  });
+  return buildWorkbookBlob(normalized, title, generatedAt);
 }

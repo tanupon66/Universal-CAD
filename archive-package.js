@@ -52,7 +52,7 @@ function joinPath(parent, name) { return parent ? `${parent} → ${name}` : name
 async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
   const data = asBytes(bytes);
   if (depth > MAX_DEPTH) {
-    diagnostics.push(`ข้าม archive ซ้อนเกิน ${MAX_DEPTH} ชั้น: ${displayPath}`);
+    diagnostics.push(`Skipped archive nesting deeper than ${MAX_DEPTH} levels: ${displayPath}`);
     return { root: { kind: 'file', name, bytes: data }, candidates: [] };
   }
 
@@ -65,10 +65,10 @@ async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
     try {
       const unpacked = unlzw(data);
       const innerName = String(name || 'cad.Z').replace(/\.z$/i, '') || 'cad.xml';
-      diagnostics.push(`แตก Unix compress (.Z) สำเร็จ: ${displayPath}`);
+      diagnostics.push(`Decompressed Unix compress (.Z): ${displayPath}`);
       return parseFileNode(innerName, unpacked, `${displayPath} → ${innerName}`, depth + 1, diagnostics);
     } catch (error) {
-      diagnostics.push(`แตก Unix compress (.Z) ไม่สำเร็จ ${displayPath}: ${error.message}`);
+      diagnostics.push(`Unable to decompress Unix compress (.Z) ${displayPath}: ${error.message}`);
     }
   }
   if (hasGzipMagic(data) || isTgzName(name)) {
@@ -80,7 +80,7 @@ async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
         return parseFileNode(innerName, unpacked, `${displayPath} → ${innerName}`, depth + 1, diagnostics);
       }
     } catch (error) {
-      diagnostics.push(`แตก GZIP ไม่สำเร็จ ${displayPath}: ${error.message}`);
+      diagnostics.push(`Unable to decompress GZIP ${displayPath}: ${error.message}`);
     }
   }
   if (hasTarMagic(data) || isTarName(name)) return parseTarNode(name, data, displayPath, depth, diagnostics, false);
@@ -95,16 +95,16 @@ async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
     try {
       const adapted = adaptCadText(text, { fileName: displayPath, detection });
       diagnostics.push(...(adapted.warnings || []).map((warning) => `${displayPath}: ${warning}`));
-      if (adapted.unsupportedRecords?.length) diagnostics.push(`${displayPath}: ไม่ได้นำเข้า ${adapted.unsupportedRecords.length} record (ดู Diagnostic Report)`);
+      if (adapted.unsupportedRecords?.length) diagnostics.push(`${displayPath}: ${adapted.unsupportedRecords.length} source record(s) were not imported; see the Diagnostic Report.`);
       score = Math.max(score, detection.format === 'ipc-2581' ? 900 : detection.format === 'gencad-1.4' ? 880 : detection.format === 'fabmaster-ascii' ? 860 : 100);
       return { root: fileNode, candidates: [{ node: fileNode, text: adapted.xmlText, originalText: text, score, displayPath, format: adapted.sourceFormat, converted: adapted.sourceFormat !== 'inspection-xml', adapterInfo: adapted, detection }] };
     } catch (error) {
-      diagnostics.push(`อ่าน ${displayPath} ไม่สำเร็จ: ${error.message}`);
+      diagnostics.push(`Unable to read ${displayPath}: ${error.message}`);
       return { root: fileNode, candidates: [] };
     }
   }
   if (detection.format === 'fabmaster-legacy') {
-    diagnostics.push(`${displayPath}: ตรวจพบ FABmaster legacy/FATF แต่ยังไม่มี Adapter สำหรับ variant นี้`);
+    diagnostics.push(`${displayPath}: a legacy manufacturing-ASCII variant was detected, but no adapter is available for it.`);
     return { root: fileNode, candidates: [] };
   }
   return { root: fileNode, candidates: score > 1 ? [{ node: fileNode, text, score, displayPath, format: 'inspection-xml', detection }] : [] };
@@ -113,16 +113,16 @@ async function parseFileNode(name, bytes, displayPath, depth, diagnostics) {
 async function parseZipNode(name, bytes, displayPath, depth, diagnostics) {
   const archive = new ZipArchive(bytes);
   const entries = archive.list();
-  if (entries.length > MAX_ARCHIVE_FILES) throw new ArchiveError(`ZIP มีไฟล์ ${entries.length} รายการ เกินขีดจำกัด ${MAX_ARCHIVE_FILES}`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_FILE_COUNT_LIMIT' });
+  if (entries.length > MAX_ARCHIVE_FILES) throw new ArchiveError(`ZIP contains ${entries.length} entries, exceeding the limit of ${MAX_ARCHIVE_FILES}.`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_FILE_COUNT_LIMIT' });
   let expandedTotal = 0;
   for (const meta of entries) {
     const pathCheck = validateArchivePath(meta.name);
-    if (!pathCheck.safe) throw new ArchiveError(`Path ไม่ปลอดภัยใน ZIP: ${meta.name} (${pathCheck.reason})`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_PATH_TRAVERSAL' });
+    if (!pathCheck.safe) throw new ArchiveError(`Unsafe path in ZIP: ${meta.name} (${pathCheck.reason})`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_PATH_TRAVERSAL' });
     expandedTotal += Number(meta.uncompressedSize || 0);
     const compressed = Math.max(1, Number(meta.compressedSize || 0));
-    if (Number(meta.uncompressedSize || 0) / compressed > MAX_COMPRESSION_RATIO && Number(meta.uncompressedSize || 0) > 1024 * 1024) throw new ArchiveError(`ตรวจพบ Compression ratio ผิดปกติที่ ${meta.name}`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_BOMB_RATIO' });
+    if (Number(meta.uncompressedSize || 0) / compressed > MAX_COMPRESSION_RATIO && Number(meta.uncompressedSize || 0) > 1024 * 1024) throw new ArchiveError(`Suspicious compression ratio detected for ${meta.name}.`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_BOMB_RATIO' });
   }
-  if (expandedTotal > MAX_EXPANDED_BYTES) throw new ArchiveError(`ขนาดแตก ZIP รวม ${expandedTotal} bytes เกินขีดจำกัด`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_EXPANDED_SIZE_LIMIT' });
+  if (expandedTotal > MAX_EXPANDED_BYTES) throw new ArchiveError(`Expanded ZIP size ${expandedTotal} bytes exceeds the configured limit.`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_EXPANDED_SIZE_LIMIT' });
   const node = { kind: 'zip', name, archive, entries: [], sourceBytes: bytes };
   const candidates = [];
 
@@ -135,7 +135,7 @@ async function parseZipNode(name, bytes, displayPath, depth, diagnostics) {
     const likelyOdb = isOdbRelevantName(meta.name);
     const limit = likelyArchive || likelyText || likelyOdb ? MAX_SCAN_BYTES : MAX_UNKNOWN_SCAN_BYTES;
     if (Number(meta.uncompressedSize || 0) > limit) {
-      // Large FABmaster extracts frequently contain millions of trace/graphic rows.
+      // Large manufacturing ASCII extracts frequently contain millions of trace/graphic rows.
       // v0.25 used to silently skip them at MAX_SCAN_BYTES. Sniff only a small
       // decompressed prefix, then stream the member if its content signature is
       // a supported A!/J!/S! extract. This keeps memory bounded while preserving
@@ -148,29 +148,29 @@ async function parseZipNode(name, bytes, displayPath, depth, diagnostics) {
           if (detection.format === 'fabmaster-ascii') {
             const fileNode = { kind: 'file', name: meta.name, bytes: null, streamed: true, sourceSize: Number(meta.uncompressedSize || 0) };
             entry.child = fileNode;
-            diagnostics.push(`พบ FABmaster ขนาดใหญ่ ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes) · ใช้ streaming parser แทนการโหลดทั้งไฟล์`);
+            diagnostics.push(`Detected a large manufacturing-ASCII file ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes); using the streaming parser instead of loading the entire file.`);
             const adapted = await adaptCadStream(archive.openStream(meta.name), {
               fileName: joinPath(displayPath, meta.name), detection, totalBytes: Number(meta.uncompressedSize || 0),
             });
             diagnostics.push(...(adapted.warnings || []).map((warning) => `${joinPath(displayPath, meta.name)}: ${warning}`));
-            if (adapted.unsupportedRecords?.length) diagnostics.push(`${joinPath(displayPath, meta.name)}: ไม่ได้นำเข้า ${adapted.unsupportedRecords.length} record type (ดู Diagnostic Report)`);
+            if (adapted.unsupportedRecords?.length) diagnostics.push(`${joinPath(displayPath, meta.name)}: ${adapted.unsupportedRecords.length} source record type(s) were not imported; see the Diagnostic Report.`);
             diagnostics.push(`${joinPath(displayPath, meta.name)}: streaming scan ${adapted.scannedLines || 0} lines → ${adapted.components || 0} Components / ${adapted.lands || 0} Lands`);
             candidates.push({
               node: fileNode, text: adapted.xmlText, score: 860, displayPath: joinPath(displayPath, meta.name), format: adapted.sourceFormat,
               converted: true, adapterInfo: adapted, detection,
             });
           } else {
-            diagnostics.push(`ข้ามไฟล์ขนาดใหญ่ ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes): ตรวจพบ ${detection.format || 'unknown'} และยังไม่มี streaming adapter`);
+            diagnostics.push(`Skipped large file ${joinPath(displayPath, meta.name)} (${Number(meta.uncompressedSize || 0)} bytes): detected ${detection.format || 'unknown'} and no streaming adapter is available.`);
           }
         } catch (error) {
-          diagnostics.push(`อ่านไฟล์ขนาดใหญ่ ${joinPath(displayPath, meta.name)} ไม่สำเร็จ: ${error.message}`);
+          diagnostics.push(`Unable to read large file ${joinPath(displayPath, meta.name)}: ${error.message}`);
         }
       }
       continue;
     }
     let entryBytes;
     try { entryBytes = await archive.read(meta.name, 'uint8array'); }
-    catch (error) { diagnostics.push(`อ่าน ${joinPath(displayPath, meta.name)} ไม่สำเร็จ: ${error.message}`); continue; }
+    catch (error) { diagnostics.push(`Unable to read ${joinPath(displayPath, meta.name)}: ${error.message}`); continue; }
     const shouldInspect = likelyArchive || likelyText || likelyOdb || hasZipMagic(entryBytes) || hasGzipMagic(entryBytes) || hasTarMagic(entryBytes) || looksLikeXml(entryBytes);
     if (!shouldInspect) continue;
     const parsed = await parseFileNode(meta.name, entryBytes, joinPath(displayPath, meta.name), depth + 1, diagnostics);
@@ -182,14 +182,14 @@ async function parseZipNode(name, bytes, displayPath, depth, diagnostics) {
 
 async function parseTarNode(name, tarBytes, displayPath, depth, diagnostics, gzipped) {
   const entries = parseTar(tarBytes);
-  if (entries.length > MAX_ARCHIVE_FILES) throw new ArchiveError(`TAR มีไฟล์ ${entries.length} รายการ เกินขีดจำกัด ${MAX_ARCHIVE_FILES}`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_FILE_COUNT_LIMIT' });
+  if (entries.length > MAX_ARCHIVE_FILES) throw new ArchiveError(`TAR contains ${entries.length} entries, exceeding the limit of ${MAX_ARCHIVE_FILES}.`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_FILE_COUNT_LIMIT' });
   let expandedTotal = 0;
   for (const entry of entries) {
     const pathCheck = validateArchivePath(entry.path || entry.name);
-    if (!pathCheck.safe) throw new ArchiveError(`Path ไม่ปลอดภัยใน TAR: ${entry.path || entry.name} (${pathCheck.reason})`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_PATH_TRAVERSAL' });
+    if (!pathCheck.safe) throw new ArchiveError(`Unsafe path in TAR: ${entry.path || entry.name} (${pathCheck.reason})`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_PATH_TRAVERSAL' });
     expandedTotal += Number(entry.bytes?.length || entry.size || 0);
   }
-  if (expandedTotal > MAX_EXPANDED_BYTES) throw new ArchiveError(`ขนาดแตก TAR รวม ${expandedTotal} bytes เกินขีดจำกัด`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_EXPANDED_SIZE_LIMIT' });
+  if (expandedTotal > MAX_EXPANDED_BYTES) throw new ArchiveError(`Expanded TAR size ${expandedTotal} bytes exceeds the configured limit.`, { stage: 'archive-preflight', fileName: displayPath, code: 'ARCHIVE_EXPANDED_SIZE_LIMIT' });
   const node = { kind: gzipped ? 'tgz' : 'tar', name, entries: [], sourceBytes: tarBytes };
   const candidates = [];
   for (const original of entries) {
@@ -213,7 +213,7 @@ async function parseTarNode(name, tarBytes, displayPath, depth, diagnostics, gzi
 
 export async function readCadPackageFile(file) {
   const diagnostics = [];
-  // Standalone very-large FABmaster .cad/.fab: sniff with File.slice(), then
+  // Standalone very-large manufacturing ASCII .cad/.fab: sniff with File.slice(), then
   // consume File.stream() directly so we never create both a 250+ MiB byte
   // array and a second full-size JavaScript string at the same time.
   if (Number(file?.size || 0) > MAX_SCAN_BYTES && isXmlName(file?.name || '') && typeof file?.stream === 'function') {
@@ -222,7 +222,7 @@ export async function readCadPackageFile(file) {
       const prefixText = textFromBytes(prefixBytes);
       const detection = detectCadFormat({ name: file.name, mimeType: file.type, bytes: prefixBytes, text: prefixText });
       if (detection.format === 'fabmaster-ascii') {
-        diagnostics.push(`พบ FABmaster ขนาดใหญ่ ${file.name} (${file.size} bytes) · ใช้ streaming parser`);
+        diagnostics.push(`Detected a large manufacturing-ASCII file ${file.name} (${file.size} bytes); using the streaming parser.`);
         const adapted = await adaptCadStream(file.stream(), { fileName: file.name, detection, totalBytes: file.size });
         diagnostics.push(...(adapted.warnings || []).map((warning) => `${file.name}: ${warning}`));
         diagnostics.push(`${file.name}: streaming scan ${adapted.scannedLines || 0} lines → ${adapted.components || 0} Components / ${adapted.lands || 0} Lands`);
@@ -230,10 +230,10 @@ export async function readCadPackageFile(file) {
         const candidate = { node: root, text: adapted.xmlText, score: 860, displayPath: file.name, format: adapted.sourceFormat, converted: true, adapterInfo: adapted, detection };
         return { name: file.name || 'package', root, candidates: [candidate], diagnostics };
       }
-      diagnostics.push(`ไฟล์ ${file.name} มีขนาด ${file.size} bytes และตรวจพบ ${detection.format || 'unknown'}; streaming adapter รุ่นนี้รองรับ FABmaster A!/J!/S! เท่านั้น`);
+      diagnostics.push(`File ${file.name} is ${file.size} bytes and was detected as ${detection.format || 'unknown'}; this streaming adapter supports only the A!/J!/S! manufacturing-ASCII variant.`);
       return { name: file.name || 'package', root: { kind: 'file', name: file.name, bytes: null, streamed: true, sourceSize: file.size }, candidates: [], diagnostics };
     } catch (error) {
-      diagnostics.push(`Streaming preflight ${file.name} ไม่สำเร็จ: ${error.message}`);
+      diagnostics.push(`Streaming preflight failed for ${file.name}: ${error.message}`);
       return { name: file.name || 'package', root: { kind: 'file', name: file.name, bytes: null, streamed: true, sourceSize: file.size }, candidates: [], diagnostics };
     }
   }
@@ -252,11 +252,11 @@ export async function readCadPackageFile(file) {
         converted: true,
         odbInfo: odb,
       });
-      diagnostics.push(`ตรวจพบ ODB++ ${odb.components} Components / ${odb.lands} Lands`);
+      diagnostics.push(`Detected ODB++ with ${odb.components} components / ${odb.lands} lands.`);
       diagnostics.push(...odb.warnings.slice(0, 5));
     }
   } catch (error) {
-    diagnostics.push(`แปลง ODB++ ไม่สำเร็จ: ${error.message}`);
+    diagnostics.push(`Unable to normalize ODB++: ${error.message}`);
   }
   candidates.sort((a, b) => b.score - a.score || a.displayPath.localeCompare(b.displayPath));
   return { name: file.name || 'package', root: parsed.root, candidates, diagnostics };
@@ -282,11 +282,11 @@ async function buildNode(node, replacementNode, replacementBytes) {
     const tar = createTar(entries);
     return node.kind === 'tgz' ? gzip(tar) : tar;
   }
-  throw new Error(`Archive kind ${node.kind} ยังไม่รองรับ`);
+  throw new Error(`Archive kind ${node.kind} is not supported.`);
 }
 
 export async function rebuildCadPackage(packageInfo, candidate, xmlText) {
-  if (!packageInfo?.root || !candidate?.node) throw new Error('ข้อมูล archive ไม่ครบ');
+  if (!packageInfo?.root || !candidate?.node) throw new Error('Archive information is incomplete.');
   return buildNode(packageInfo.root, candidate.node, bytesFromText(xmlText));
 }
 

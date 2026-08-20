@@ -163,7 +163,7 @@ export async function parseXlsx(arrayBuffer) {
 
   if (!sheets.length) {
     const fallback = zip.find((entry) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(entry.name));
-    if (!fallback) throw new Error('ไม่พบ Worksheet ในไฟล์ XLSX');
+    if (!fallback) throw new Error('No worksheet was found in the XLSX file.');
     sheets.push({ name: 'Sheet1', rows: parseSheetXml(await zip.read(fallback.name, 'text'), sharedStrings) });
   }
 
@@ -802,12 +802,12 @@ export async function extractProjectFiles(file) {
   const name = file.name.toLowerCase();
   if (name.endsWith('.xml')) return { xmlText: await file.text(), xlsxBuffer: null, names: { xml: file.name } };
   if (name.endsWith('.xlsx')) return { xmlText: null, xlsxBuffer: await file.arrayBuffer(), names: { xlsx: file.name } };
-  if (!name.endsWith('.zip')) throw new Error('รองรับ ZIP, XML และ XLSX เท่านั้น');
+  if (!name.endsWith('.zip')) throw new Error('Only ZIP, XML, and XLSX are supported by this legacy helper.');
 
   const zip = new ZipArchive(await file.arrayBuffer());
   const xmlEntry = zip.find((entry) => !entry.isDirectory && /\.xml$/i.test(entry.name) && !/^xl\//i.test(entry.name));
   const xlsxEntry = zip.find((entry) => !entry.isDirectory && /\.xlsx$/i.test(entry.name));
-  if (!xmlEntry && !xlsxEntry) throw new Error('ไม่พบไฟล์ XML หรือ XLSX ภายใน ZIP');
+  if (!xmlEntry && !xlsxEntry) throw new Error('No XML or XLSX file was found inside the ZIP archive.');
   return {
     xmlText: xmlEntry ? await zip.read(xmlEntry.name, 'text') : null,
     xlsxBuffer: xlsxEntry ? await zip.read(xlsxEntry.name, 'arraybuffer') : null,
