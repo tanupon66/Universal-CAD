@@ -74,6 +74,7 @@ import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
 import { buildGeneratedLandMapPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
 import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
+import { exportVtxInspectionXml, isVtxEpmXml } from './vtx-inspection-xml.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -180,11 +181,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.25.1'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.25.2'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.25.1 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.25.2 · Development · Schema 2';
   }
 }
 
@@ -625,7 +626,7 @@ function closeGlobalError() {
 function showGlobalError(error, context = {}) {
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.25.1', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.25.2', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -783,10 +784,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('ยังไม่มี Project สำหรับ Backup');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.25.1'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.25.2'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.25.1.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.25.2.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} สำเร็จ`);
   } catch (error) { showGlobalError(error, { title: 'Export Project Backup ไม่สำเร็จ', operation: 'project-backup-export' }); }
 }
@@ -2635,7 +2636,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.25.1.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.25.2.xlsx`));
     els.componentReportMessage.textContent = `สร้าง Excel สำเร็จ · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('สร้าง Component Report Excel สำเร็จ', 4200);
   } catch (error) {
@@ -2695,7 +2696,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.25.1.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.25.2.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
@@ -2721,7 +2722,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.25.1', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.25.2', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2730,7 +2731,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.25.1.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.25.2.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} สำเร็จ`, 4200);
   } catch (error) {
@@ -4014,7 +4015,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.25.1.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.25.2.xlsx`);
     toast(`Export Grid / Land Map Excel สำเร็จ · ${formatInt.format(model.cells.length)} ชื่อใหม่ ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -5637,24 +5638,22 @@ async function exportCadEditorXml(taskContext = null) {
   const side = els.cadEditorExportSide.value;
   const preflight = assertAppliedRevisionExportable(file, model);
   await assertCadEditorValidAsync(model, taskContext, 0, 25);
-  const output = await serializeCadEditorModelStandaloneAsync(model, {
-    side,
-    batchSize: 900,
-    isCancelled: () => taskContext?.isCancelled?.() || false,
-    onProgress: ({ ratio }) => taskContext?.progress?.(25 + ratio * 70, `สร้าง XML ${Math.round(ratio * 100)}%`),
-  });
+  taskContext?.progress?.(35, 'สร้าง XML โครงสร้าง VT-X / ePM');
+  await taskContext?.yield?.();
+  const output = exportVtxInspectionXml(model, { side });
   taskContext?.throwIfCancelled?.();
-  const metadata = projectExportMetadata(file, 'inspection-xml', preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
-  const exportedOutput = addXmlExportMetadata(output, metadata);
-  downloadBlob(new Blob([exportedOutput], { type: 'application/xml;charset=utf-8' }), `${cadExportStem(file, side)}.xml`);
+  // Machine-compatible XML intentionally has no custom comment/header before DataList.
+  // Export audit metadata remains in the project session/diagnostic state instead of altering the ePM schema.
+  projectExportMetadata(file, 'vtx-epm-inspection-xml', preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
+  downloadBlob(new Blob([output], { type: 'application/xml;charset=utf-8' }), `${cadExportStem(file, side)}.xml`);
   const summary = modelSummary(model);
   const omitted = side === 'all' ? 0 : summary.unknown;
-  taskContext?.progress?.(100, 'Export XML สำเร็จ');
-  els.cadEditorMessage.textContent = `Export XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} สำเร็จ${omitted ? ` · Land ไม่ระบุด้าน ${omitted} จุดไม่ถูกรวม` : ''}`;
+  taskContext?.progress?.(100, 'Export VT-X / ePM XML สำเร็จ');
+  els.cadEditorMessage.textContent = `Export VT-X / ePM XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} สำเร็จ · พิกัด Normalize แล้ว${omitted ? ` · Land ไม่ระบุด้าน ${omitted} จุดไม่ถูกรวม` : ''}`;
   return true;
 }
 function requestCadEditorXmlExport() {
-  return runCadEditorTask('กำลัง Export XML…', 'ตรวจสอบข้อมูลก่อนสร้างไฟล์', (taskContext) => exportCadEditorXml(taskContext));
+  return runCadEditorTask('กำลัง Export VT-X / ePM XML…', 'ตรวจสอบ Applied Revision และสร้าง XML ที่เข้ากับ ePM/VT-X', (taskContext) => exportCadEditorXml(taskContext));
 }
 async function exportCadEditorAsciiFormat(format, taskContext = null) {
   const file = cadEditorFile(); const model = state.cadEditor.model;
@@ -5689,7 +5688,7 @@ function selectedCadEditorExportFormat() {
 function updateCadEditorExportButtonLabel() {
   if (!els.cadEditorExportXmlButton) return;
   const format = selectedCadEditorExportFormat();
-  els.cadEditorExportXmlButton.textContent = format === 'gencad-1.4' ? 'Export .CAD' : format === 'fabmaster-ascii' ? 'Export .FAB' : 'Export XML';
+  els.cadEditorExportXmlButton.textContent = format === 'gencad-1.4' ? 'Export .CAD' : format === 'fabmaster-ascii' ? 'Export .FAB' : 'Export VT-X XML';
 }
 function requestCadEditorSelectedExport() {
   const format = selectedCadEditorExportFormat();
@@ -5729,7 +5728,7 @@ async function exportCadEditorTgz(taskContext = null) {
       output = result.text; writerWarnings = result.warnings || [];
     } else {
       const rawOutput = serializeCadEditorModel(file.text, model, { side });
-      output = addXmlExportMetadata(rawOutput, metadata);
+      output = isVtxEpmXml(rawOutput) ? rawOutput : addXmlExportMetadata(rawOutput, metadata);
     }
     taskContext?.throwIfCancelled?.();
     taskContext?.progress?.(65, 'กำลังประกอบ Archive กลับ');

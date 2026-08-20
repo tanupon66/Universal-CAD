@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
-  <title>Universal CAD Studio v0.25.1</title>
+  <title>Universal CAD Studio v0.25.2</title>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="top-actions">
-      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.25.1 · Schema 2</span>
+      <span id="buildInfoBadge" class="status-pill muted" title="App version · Build commit · Schema version">v0.25.2 · Schema 2</span>
       <span id="projectStatus" class="status-pill muted">ยังไม่ได้เปิดโปรเจกต์</span>
       <button id="appUpdateButton" class="ghost hidden" type="button">มีเวอร์ชันใหม่ · อัปเดต</button>
       <button id="installButton" class="ghost hidden" type="button">ติดตั้งแอป</button>
@@ -641,7 +641,7 @@
               <button type="button" data-cad-command="open">เปิดไฟล์ CAD… <kbd>Ctrl+O</kbd></button>
               <hr />
               <button type="button" data-cad-command="export-selected">Export ตาม Format ที่เลือก… <kbd>Ctrl+E</kbd></button>
-              <button type="button" data-cad-command="export-xml">Export Inspection XML…</button>
+              <button type="button" data-cad-command="export-xml">Export VT-X / ePM XML…</button>
               <button type="button" data-cad-command="export-gencad">Export GenCAD 1.4 (.cad)…</button>
               <button type="button" data-cad-command="export-fabmaster">Export FABmaster ASCII (.fab)…</button>
               <button type="button" data-cad-command="export-archive">Export Archive…</button>
@@ -898,7 +898,7 @@
         <div class="cad-editor-export-controls">
           <label>Format
             <select id="cadEditorExportFormat" aria-label="รูปแบบไฟล์ Export">
-              <option value="inspection-xml">Inspection XML (.xml)</option>
+              <option value="inspection-xml">VT-X / ePM Inspection XML (.xml)</option>
               <option value="gencad-1.4">GenCAD 1.4 (.cad)</option>
               <option value="fabmaster-ascii">FABmaster ASCII (.fab)</option>
             </select>
@@ -912,7 +912,7 @@
           </label>
           <button id="cadEditorGridMapFooterButton" type="button" disabled>Grid / Land Map</button>
           <button id="cadEditorApplyButton" type="button">Apply</button>
-          <button id="cadEditorExportXmlButton" class="primary" type="button">Export XML</button>
+          <button id="cadEditorExportXmlButton" class="primary" type="button">Export VT-X XML</button>
           <button id="cadEditorExportTgzButton" type="button" disabled>Export Archive</button>
         </div>
       </footer>

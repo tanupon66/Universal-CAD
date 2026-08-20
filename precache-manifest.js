@@ -38,6 +38,7 @@ self.__PRECACHE_ASSETS = [
   "./universal-cad-model.js",
   "./unix-compress.js",
   "./validation-center.js",
+  "./vtx-inspection-xml.js",
   "./xlsx-report.js",
   "./zip-reader.js"
 ];

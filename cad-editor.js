@@ -1,4 +1,5 @@
 import { parseInspectionXml } from './parsers.js';
+import { formatVtxNumber } from './vtx-inspection-xml.js';
 import { mergeRectangles, splitRectangle } from './geometry.js';
 
 function cloneLand(land) {
@@ -562,8 +563,9 @@ function findByTag(parent, tagName) {
 }
 
 function setNumberAttribute(node, name, value) {
-  if (value == null || value === '' || !Number.isFinite(Number(value))) node.removeAttribute(name);
-  else node.setAttribute(name, String(Number(value)));
+  if (value == null || value === '' || !Number.isFinite(Number(value))) { node.removeAttribute(name); return; }
+  const isAngle = String(name).toLowerCase() === 'angle';
+  node.setAttribute(name, formatVtxNumber(value, { precision: isAngle ? 5 : 3, minDecimals: 1 }));
 }
 
 function updateBoardNode(node, board = {}) {
