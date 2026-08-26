@@ -27,6 +27,14 @@ jobs:
           echo "8c93aeeb9934ff3ee408f2488bc787b06826322624a5c8f0143ffd8ccdfbfb8e  /tmp/v029.patch.gz" | sha256sum -c -
           gzip -dc /tmp/v029.patch.gz > /tmp/v029.patch
           echo "a58ca008d0e11acf2db0a9647ed2afbf97836540117af8310875a3a5db02541d  /tmp/v029.patch" | sha256sum -c -
+          cat > build-info.json <<'JSON'
+          {
+            "appVersion": "0.27.0",
+            "buildDate": "2026-08-26T10:24:49.251Z",
+            "commit": "unavailable",
+            "schemaVersion": 2
+          }
+          JSON
           git apply --check /tmp/v029.patch
           git apply /tmp/v029.patch
       - name: Static production sanity gate
