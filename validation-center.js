@@ -1,4 +1,5 @@
 import { validateGeometry } from './geometry.js';
+import { validatePcbFoundation } from './pcb-data-foundation.js';
 
 export const VALIDATION_LEVELS = Object.freeze(['info', 'warning', 'error', 'blocking-error']);
 function issue(code, level, message, context = {}, overridable = false) {
@@ -72,6 +73,10 @@ export function validateUniversalCad(model, options = {}) {
       if (row.side && component.side && normalized(row.side) !== normalized(component.side)) issues.push(issue('SIDE_CONFLICT', 'warning', `${ref}: side does not match.`, { reference: ref, cadSide: component.side, bomSide: row.side }, true));
       if (finite(row.rotation) && finite(component.rotation) && Math.abs((((Number(row.rotation) - Number(component.rotation)) % 360) + 540) % 360 - 180) > Number(options.rotationTolerance ?? 0.1)) issues.push(issue('ROTATION_CONFLICT', 'warning', `${ref}: rotation does not match.`, { reference: ref, cadRotation: component.rotation, bomRotation: row.rotation }, true));
     }
+  }
+  if ((model?.layers?.length || 0) + (model?.nets?.length || 0) + (model?.vias?.length || 0) + (model?.traces?.length || 0) > 0) {
+    const foundation = validatePcbFoundation(model);
+    for (const item of foundation.issues) issues.push(issue(item.code, item.level === 'error' ? 'error' : 'warning', item.message, { netId: item.netId || '', componentRef: item.componentRef || '', layerId: item.layerId || '', objectId: item.objectId || '' }, true));
   }
   if (options.expectedUnits && normalized(options.expectedUnits) !== normalized(model?.units)) issues.push(issue('UNIT_CONFLICT', 'blocking-error', `Project units (${model?.units}) do not match the expected data units (${options.expectedUnits}).`, { projectUnits: model?.units, expectedUnits: options.expectedUnits }, false));
   for (const record of options.unsupportedRecords || []) issues.push(issue('UNSUPPORTED_SOURCE_RECORD', 'warning', `Unable to import source record: ${record.reason || record.type || 'unknown'}.`, { type: record.type || '', reason: record.reason || '' }, true));

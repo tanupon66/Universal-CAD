@@ -1,12 +1,12 @@
 {
-  "name": "Universal CAD Studio v0.27.0",
+  "name": "Universal CAD Studio v0.29.0",
   "short_name": "Universal CAD",
   "description": "Offline-first CAD and NPI preparation workspace for board data, mapping, validation, revision comparison, package analysis, BOM, and multi-format export.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#080d17",
-  "theme_color": "#0b1220",
+  "background_color": "#0b1016",
+  "theme_color": "#071019",
   "icons": [
     {
       "src": "./icons/icon-192.png",
@@ -28,7 +28,7 @@
     }
   ],
   "id": "./",
-  "version": "0.27.0",
+  "version": "0.29.0",
   "lang": "en",
   "dir": "ltr",
   "launch_handler": {

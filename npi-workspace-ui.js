@@ -32,6 +32,8 @@ import { cloneCadValue } from './universal-cad-model.js';
 import { DEFAULT_TARGET_PROFILE, validateModelAgainstTargetProfile } from './target-profile-engine.js';
 import { runSmartNpiAutomation, proposeRotationNormalization } from './npi-automation.js';
 import { processInChunks } from './worker-pipeline.js';
+import { buildLayerSummary, buildNetSummary, queryCrossProbe, validatePcbFoundation } from './pcb-data-foundation.js';
+import { buildCoordinateSystemManager, createCoordinateSystem } from './coordinate-system-manager.js';
 
 const PACKAGE_LIBRARY_KEY = 'universal-cad-package-library-v1';
 const EXPORT_PROFILE_KEY = 'universal-cad-export-profiles-v1';
@@ -96,13 +98,22 @@ export function initNpiWorkspace(context = {}) {
   const overlay = $('npiWorkspaceOverlay');
   if (!overlay) return { refresh() {} };
 
-  // v0.27 is injected defensively so older cached/index shells remain compatible during PWA update.
+  // Newer feature tabs are injected defensively so older cached/index shells remain compatible during PWA update.
   const tabNav = overlay.querySelector?.('.npi-tabs');
+  if (tabNav && !overlay.querySelector?.('[data-npi-tab="pcb-data"]')) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.npiTab = 'pcb-data'; button.textContent = 'PCB Data';
+    const overview = tabNav.querySelector('[data-npi-tab="overview"]'); overview?.after(button) || tabNav.prepend(button);
+  }
   if (tabNav && !overlay.querySelector?.('[data-npi-tab="automation"]')) {
     const button = document.createElement('button'); button.type = 'button'; button.dataset.npiTab = 'automation'; button.textContent = 'Automation';
     const compatibility = tabNav.querySelector('[data-npi-tab="compatibility"]'); compatibility?.after(button) || tabNav.append(button);
   }
   const workspaceBody = overlay.querySelector?.('.npi-workspace-body');
+  if (workspaceBody && !overlay.querySelector?.('[data-npi-panel="pcb-data"]')) {
+    const section = document.createElement('section'); section.className = 'npi-panel'; section.dataset.npiPanel = 'pcb-data';
+    section.innerHTML = `<div class="npi-section-card pcb-data-foundation"><div class="npi-section-heading"><div><span class="eyebrow">PCB DATA FOUNDATION</span><h3>Layer & Net Explorer</h3><p id="npiPcbDataSummary">Electrical and layer records preserved from supported structured sources appear here.</p></div></div><div class="npi-score-grid compact"><article class="npi-metric-card"><span>Layers</span><strong id="npiPcbLayerCount">0</strong><small>Stack and manufacturing layers</small></article><article class="npi-metric-card"><span>Nets</span><strong id="npiPcbNetCount">0</strong><small>Electrical connectivity records</small></article><article class="npi-metric-card"><span>Vias / Traces</span><strong id="npiPcbRouteCount">0 / 0</strong><small>Normalized routing objects</small></article><article class="npi-metric-card"><span>Foundation Health</span><strong id="npiPcbHealth">—</strong><small id="npiPcbIssueCount">0 issue(s)</small></article></div><div class="npi-form-grid compact"><label>Cross-probe search<input id="npiPcbSearch" placeholder="U56, A1, GND, top..." type="search"/></label><div class="npi-readout"><span>Coordinate systems</span><strong id="npiCoordinateSystemCount">1</strong></div></div><div id="npiPcbSearchResults" class="npi-list"></div><div class="npi-split-grid"><div><h4>Layer Manager</h4><div class="npi-table-wrap"><table><thead><tr><th>Layer</th><th>Side</th><th>Type</th><th>Objects</th></tr></thead><tbody id="npiPcbLayerBody"></tbody></table></div></div><div><h4>Net Explorer</h4><div class="npi-table-wrap"><table><thead><tr><th>Net</th><th>Connections</th><th>Vias</th><th>Traces</th></tr></thead><tbody id="npiPcbNetBody"></tbody></table></div></div></div><p class="helper-text">Cross-probe uses the current project revision. Layer/net records are preserved across placement and land edits even when the active export format cannot serialize them.</p></div>`;
+    const overviewPanel = workspaceBody.querySelector('[data-npi-panel="overview"]'); overviewPanel?.after(section) || workspaceBody.prepend(section);
+  }
   if (workspaceBody && !overlay.querySelector?.('[data-npi-panel="automation"]')) {
     const section = document.createElement('section'); section.className = 'npi-panel'; section.dataset.npiPanel = 'automation';
     section.innerHTML = `<div class="npi-section-card"><div class="npi-section-heading"><div><span class="eyebrow">SMART NPI AUTOMATION</span><h3>Safe Automation Preview</h3><p id="npiAutomationSummary">Analyze the current revision before applying any automatic correction.</p></div></div><div class="npi-form-grid compact"><label>Rotation snap tolerance (degrees)<input id="npiAutomationRotationTolerance" min="0" max="10" step="0.1" type="number" value="2"/></label><div class="npi-readout"><span>Generic target readiness</span><strong id="npiTargetReadiness">—</strong></div></div><div class="npi-actions"><button id="npiAutomationAnalyze" type="button">Analyze Suggestions</button><button class="primary" id="npiAutomationApplyRotations" type="button">Apply Safe Rotation Fixes</button></div><p class="helper-text">Automation never mutates the immutable source. Applying suggestions creates a normal project revision and remains undo/rollback compatible.</p><div class="npi-table-wrap"><table><thead><tr><th>Type</th><th>Subject</th><th>Suggestion</th><th>Confidence / rule</th></tr></thead><tbody id="npiAutomationBody"></tbody></table></div></div>`;
@@ -188,6 +199,39 @@ export function initNpiWorkspace(context = {}) {
         ? `Source → Working: ${compare.sourceToWorking.added} added, ${compare.sourceToWorking.removed} removed, ${compare.sourceToWorking.moved} moved, ${compare.sourceToWorking.changed} metadata changes${compare.hasExport ? ' · Working → last export available' : ''}`
         : 'No revision comparison available.',
     );
+  }
+
+  function renderPcbData() {
+    const model = getModel();
+    const layerBody = $('npiPcbLayerBody'); const netBody = $('npiPcbNetBody'); const results = $('npiPcbSearchResults');
+    if (!model) {
+      setText('npiPcbDataSummary', 'Open a CAD project to inspect PCB data.'); setText('npiPcbLayerCount', 0); setText('npiPcbNetCount', 0); setText('npiPcbRouteCount', '0 / 0'); setText('npiPcbHealth', '—');
+      if (layerBody) layerBody.innerHTML = ''; if (netBody) netBody.innerHTML = ''; if (results) results.innerHTML = ''; return;
+    }
+    const validation = validatePcbFoundation(model); const layers = buildLayerSummary(model); const nets = buildNetSummary(model);
+    setText('npiPcbLayerCount', layers.length); setText('npiPcbNetCount', nets.length); setText('npiPcbRouteCount', `${model.vias?.length || 0} / ${model.traces?.length || 0}`);
+    setText('npiPcbHealth', validation.valid ? 'Ready' : 'Review'); setText('npiPcbIssueCount', `${validation.issues.length} issue(s)`);
+    const foundation = model.metadata?.pcbFoundation; setText('npiPcbDataSummary', `${foundation?.sourceFormat || model.sourceFormat || 'working model'} · ${layers.length} layers · ${nets.length} nets · ${model.vias?.length || 0} vias · ${model.traces?.length || 0} traces · ${model.holes?.length || 0} holes${foundation?.warnings?.length ? ` · ${foundation.warnings.length} import warning(s)` : ''}`);
+    const systems = model.coordinateSystems?.length ? model.coordinateSystems : [createCoordinateSystem({ id:'board', name:'Board Coordinate', units:model.units || 'mm', origin:model.coordinateSystem?.origin || {x:0,y:0} })];
+    try { const manager=buildCoordinateSystemManager(systems); setText('npiCoordinateSystemCount', manager.systems.length); } catch { setText('npiCoordinateSystemCount', 'Invalid'); }
+    if (layerBody) {
+      layerBody.innerHTML = '';
+      for (const layer of layers.slice(0, 300)) { const tr=document.createElement('tr'); const objectCount=Object.values(layer.counts || {}).reduce((sum,value)=>sum+Number(value||0),0); tr.innerHTML=`<td><button class="npi-link-button" type="button">${htmlEscape(layer.name)}</button></td><td>${htmlEscape(layer.side)}</td><td>${htmlEscape(layer.type)}</td><td>${objectCount}</td>`; tr.querySelector('button')?.addEventListener('click',()=>context.crossProbe?.({type:'layer',label:layer.name,layerId:layer.id})); layerBody.append(tr); }
+      if (!layers.length) layerBody.innerHTML='<tr><td colspan="4" class="npi-empty">No layer records are present in the current normalized model.</td></tr>';
+    }
+    if (netBody) {
+      netBody.innerHTML = '';
+      for (const net of nets.slice(0, 500)) { const tr=document.createElement('tr'); tr.innerHTML=`<td><button class="npi-link-button" type="button">${htmlEscape(net.name)}</button></td><td>${net.connectionCount}</td><td>${net.viaCount}</td><td>${net.traceCount}</td>`; tr.querySelector('button')?.addEventListener('click',()=>context.crossProbe?.({type:'net',label:net.name,netId:net.id,connections:net.connections})); netBody.append(tr); }
+      if (!nets.length) netBody.innerHTML='<tr><td colspan="4" class="npi-empty">No electrical net records are present in the current normalized model.</td></tr>';
+    }
+    const query=String($('npiPcbSearch')?.value || '').trim();
+    if (results) {
+      results.innerHTML='';
+      if (query) {
+        const matches=queryCrossProbe(model,query,{limit:40});
+        for(const item of matches){const button=document.createElement('button');button.type='button';button.className='npi-list-row';button.innerHTML=`<strong>${htmlEscape(item.type.toUpperCase())}</strong><span>${htmlEscape(item.label)}</span>`;button.addEventListener('click',()=>context.crossProbe?.(item));results.append(button);} if(!matches.length)results.innerHTML='<p class="npi-empty">No matching PCB object.</p>';
+      }
+    }
   }
 
   function renderCompatibility() {
@@ -419,6 +463,7 @@ export function initNpiWorkspace(context = {}) {
   function renderTab(tab) {
     ({
       overview: renderOverview,
+      'pcb-data': renderPcbData,
       compatibility: renderCompatibility,
       packages: renderPackages,
       reconcile: renderReconciliation,
@@ -439,6 +484,7 @@ export function initNpiWorkspace(context = {}) {
   $('npiCloseButton')?.addEventListener('click', close);
   overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
   if (typeof overlay.querySelectorAll === 'function') overlay.querySelectorAll('[data-npi-tab]').forEach((button) => button.addEventListener('click', () => setTab(button.dataset.npiTab)));
+  $('npiPcbSearch')?.addEventListener('input', renderPcbData);
   $('npiOpenProjectStorage')?.addEventListener('click', () => context.openProjectStorage?.());
 
 

@@ -22,7 +22,7 @@ export function getExportProfiles(custom = []) {
 function counts(model) {
   return {
     components: model?.components?.length || 0, packages: model?.packages?.length || 0, lands: model?.lands?.length || 0,
-    nets: model?.nets?.length || 0, layers: model?.layers?.length || 0, holes: model?.holes?.length || 0,
+    nets: model?.nets?.length || 0, layers: model?.layers?.length || 0, holes: model?.holes?.length || 0, vias: model?.vias?.length || 0, traces: model?.traces?.length || 0,
     fiducials: model?.fiducials?.length || 0, bom: model?.bom?.length || 0, panelInstances: model?.panelInstances?.length || 0,
   };
 }
@@ -49,10 +49,14 @@ export function buildConversionLossReport(model, targetFormat) {
     if (c.nets) omitted.push({ category: 'nets', count: c.nets, reason: 'The inspection XML writer does not serialize electrical nets.' });
     if (c.layers) reduced.push({ category: 'layers', count: c.layers, reason: 'Layer detail is reduced to placement side information.' });
     if (c.holes) omitted.push({ category: 'holes', count: c.holes, reason: 'Hole records are not represented by the current inspection XML writer.' });
+    if (c.vias) omitted.push({ category: 'vias', count: c.vias, reason: 'Via records are not represented by the current inspection XML writer.' });
+    if (c.traces) omitted.push({ category: 'traces', count: c.traces, reason: 'Trace records are not represented by the current inspection XML writer.' });
   } else if (['gencad-1.4','fabmaster-ascii'].includes(targetFormat)) {
     if (c.nets) reduced.push({ category: 'nets', count: c.nets, reason: 'Only records represented in the normalized model can be written.' });
     if (c.layers) reduced.push({ category: 'layers', count: c.layers, reason: 'Layer stack metadata may be simplified.' });
     if (c.holes) reduced.push({ category: 'holes', count: c.holes, reason: 'Drill/hole coverage depends on normalized source records.' });
+    if (c.vias) reduced.push({ category: 'vias', count: c.vias, reason: 'Via preservation depends on the source dialect and current writer coverage.' });
+    if (c.traces) reduced.push({ category: 'traces', count: c.traces, reason: 'Route preservation depends on the source dialect and current writer coverage.' });
   }
   const total = Object.values(c).reduce((a,b)=>a+b,0) || 1;
   const lost = omitted.reduce((s,i)=>s+i.count,0) + reduced.reduce((s,i)=>s+i.count*0.25,0);

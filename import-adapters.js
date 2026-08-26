@@ -1,6 +1,7 @@
 import { ParseError, ValidationError } from './cad-errors.js';
 import { detectCadFormat } from './format-detector.js';
 import { convertGenCadToInspectionXml, convertFabmasterExtractToInspectionXml, convertFabmasterStreamToInspectionXml } from './pcb-ascii-formats.js';
+import { extractIpc2581Foundation } from './pcb-data-foundation.js';
 
 function decodeXml(value = '') { return String(value).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); }
 function attrs(text = '') { const output = {}; const re = /([:\w.-]+)\s*=\s*(["'])([\s\S]*?)\2/g; let m; while ((m = re.exec(text))) output[m[1]] = decodeXml(m[3]); return output; }
@@ -59,6 +60,7 @@ function xformFromBody(body, direct = {}) {
 }
 export function convertIpc2581ToInspectionXml(xmlText, options = {}) {
   const source = assertSafeXml(xmlText, options); const warnings = []; const unsupportedRecords = [];
+  const foundation = extractIpc2581Foundation(source);
   const packageMap = new Map();
   for (const record of [...elementRecords(source, 'Package'), ...elementRecords(source, 'PackageDefinition')]) {
     const name = String(pick(record.attributes, ['name', 'Name', 'id', 'Id', 'packageRef', 'PackageRef'], '')).trim(); if (!name || packageMap.has(name)) continue;
@@ -95,7 +97,7 @@ export function convertIpc2581ToInspectionXml(xmlText, options = {}) {
   const boardRecord = elementRecords(source, 'Profile')[0] || elementRecords(source, 'Board')[0]; const boardAttrs = boardRecord?.attributes || {};
   const boardName = String(pick(boardAttrs, ['name', 'Name'], options.fileName || 'IPC-2581 Board'));
   const inspectionXml = `<?xml version="1.0" encoding="UTF-8"?>\n<Inspection SourceFormat="IPC-2581" Adapter="UniversalCAD">\n<BoardInformation Name="${xmlEscape(boardName)}" Width="${number(pick(boardAttrs, ['width', 'Width'], 0))}" Height="${number(pick(boardAttrs, ['height', 'Height'], 0))}" Thickness="${number(pick(boardAttrs, ['thickness', 'Thickness'], 0))}"/>\n<Components>${componentXml.join('')}</Components>\n<Lands>${landXml.join('')}</Lands>\n</Inspection>`;
-  return { xmlText: inspectionXml, warnings, unsupportedRecords, components: components.length, packages: packageMap.size, lands: landId - 1, sourceFormat: 'ipc-2581', partial: warnings.length > 0 || unsupportedRecords.length > 0 };
+  return { xmlText: inspectionXml, warnings, unsupportedRecords, components: components.length, packages: packageMap.size, lands: landId - 1, sourceFormat: 'ipc-2581', partial: warnings.length > 0 || unsupportedRecords.length > 0, foundation };
 }
 export function adaptCadText(inputText, options = {}) {
   const rawSource = String(inputText || '').replace(/^\uFEFF/, '');

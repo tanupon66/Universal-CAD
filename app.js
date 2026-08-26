@@ -70,6 +70,7 @@ import { ExportError, ImportError, TransactionError as CadTransactionError, asCa
 import { csvCell as escapeCsv, safeDownloadName } from './export-safety.js';
 import { createDiagnosticReport, diagnosticText } from './diagnostics.js';
 import { detectCadFormat } from './format-detector.js';
+import { adaptCadText } from './import-adapters.js';
 import { decodeTextBytes, parseDelimitedText } from './delimited-import.js';
 import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
@@ -78,7 +79,9 @@ import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
+import { initUiShell } from './ui-shell.js';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
+import { verifyExportedLegacyCad, summarizeExportVerification, exportVerificationSnapshot } from './export-verification.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
   duplicateProjectRecord, clearTemporaryCache, storageUsage, createAutosaveController,
@@ -88,6 +91,10 @@ const BOARD_VIEW = '__board__';
 const CAD_EDITOR_RENDER_LIMIT = 500;
 const CAD_EDITOR_LIGHT_SELECTION_LIMIT = 160;
 const $ = (id) => document.getElementById(id);
+const themeCanvasColor = (name, fallback) => {
+  if (typeof getComputedStyle !== 'function' || !document?.documentElement) return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+};
 const els = {
   projectFile: $('projectFile'), dropZone: $('dropZone'), resetButton: $('resetButton'),
   originalCadButton: $('originalCadButton'), originalCadFile: $('originalCadFile'), generatedCadButton: $('generatedCadButton'), generatedCadFile: $('generatedCadFile'),
@@ -184,11 +191,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.27.0'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.0'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.27.0 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.0 · Development · Schema 2';
   }
 }
 
@@ -251,6 +258,7 @@ function ensureProjectSession(file = activeCadFile()) {
       sourceFormat: file.sourceFormat || file.archive?.candidate?.format || 'inspection-xml',
       sourceText: file.text || '',
       legacyCad: file.data,
+      supplementalData: file.archive?.candidate?.adapterInfo?.foundation || file.archive?.candidate?.odbInfo?.foundation || null,
     });
     file.originalSource = file.projectSession.originalSource;
   }
@@ -398,7 +406,7 @@ function storeCadFile(role, xmlText, name, options = {}) {
   const previous = state.cadFiles[role];
   const archive = options.archive || previous?.archive || null;
   const sourceFormat = options.sourceFormat || archive?.candidate?.format || 'inspection-xml';
-  const projectSession = createProjectSession({ name, fileName: name, sourceFormat, sourceText: xmlText, legacyCad: data });
+  const projectSession = createProjectSession({ name, fileName: name, sourceFormat, sourceText: xmlText, legacyCad: data, supplementalData: options.supplementalData || archive?.candidate?.adapterInfo?.foundation || archive?.candidate?.odbInfo?.foundation || null });
   state.cadFiles[role] = {
     role, name, sourceFormat,
     text: xmlText,
@@ -617,6 +625,7 @@ function escapeHtml(value) {
 function toast(message, timeout = 2800) {
   els.toast.textContent = message;
   els.toast.classList.remove('hidden');
+  window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: String(message || ''), type: 'info' } }));
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => els.toast.classList.add('hidden'), timeout);
 }
@@ -627,9 +636,10 @@ function closeGlobalError() {
   currentDiagnosticReport = null;
 }
 function showGlobalError(error, context = {}) {
+  window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.27.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -787,10 +797,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.27.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.27.0.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.0.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -1571,7 +1581,7 @@ async function processFile(file, cadRole = 'auto') {
     if (project.xmlText) {
       importedRole = cadRole === 'generated' ? 'generated' : 'original';
       els.importMessage.textContent = `Reading ${cadRoleLabel(importedRole)}…`; await nextFrame();
-      storeCadFile(importedRole, project.xmlText, project.names.xml || file.name, { archive, sourceFormat: archive?.candidate?.format || 'inspection-xml' });
+      storeCadFile(importedRole, project.xmlText, project.names.xml || file.name, { archive, sourceFormat: archive?.candidate?.format || 'inspection-xml', supplementalData: archive?.candidate?.adapterInfo?.foundation || archive?.candidate?.odbInfo?.foundation || null });
     }
     if (project.xlsxBuffer) {
       state.xlsxBuffer = project.xlsxBuffer; state.fileNames.xlsx = project.names.xlsx || file.name;
@@ -1820,7 +1830,7 @@ function renderHistogram() {
   if (canvas.width !== targetW || canvas.height !== targetH) { canvas.width = targetW; canvas.height = targetH; }
   hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   hctx.clearRect(0, 0, width, height);
-  hctx.fillStyle = '#0b1320';
+  hctx.fillStyle = themeCanvasColor('--canvas-bg', '#0b1320');
   hctx.fillRect(0, 0, width, height);
 
   const values = currentMappings().map((mapping) => Number(mapping.measurement)).filter(Number.isFinite).sort((a, b) => a - b);
@@ -1829,7 +1839,7 @@ function renderHistogram() {
   if (!values.length) {
     for (const el of [els.histMin, els.histAverage, els.histMedian, els.histMax]) el.textContent = '—';
     els.histogramMessage.textContent = component ? `${component.name}: No numeric measurements were found in the source table` : 'Select a part present in the source table to display the histogram';
-    hctx.fillStyle = '#91a0b7'; hctx.font = '11px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
+    hctx.fillStyle = themeCanvasColor('--muted', '#91a0b7'); hctx.font = '11px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
     if (!els.histogramOverlay.classList.contains('hidden')) renderDetailedHistogram();
     return;
   }
@@ -1869,7 +1879,7 @@ function renderHistogram() {
     hctx.fillRect(margin.left + index * slot + gap / 2, margin.top + chartH - barH, Math.max(1, slot - gap), barH);
   });
 
-  hctx.fillStyle = '#91a0b7'; hctx.font = '9px system-ui'; hctx.textBaseline = 'top';
+  hctx.fillStyle = themeCanvasColor('--muted', '#91a0b7'); hctx.font = '9px system-ui'; hctx.textBaseline = 'top';
   hctx.textAlign = 'left'; hctx.fillText(display(min), margin.left, height - margin.bottom + 6);
   hctx.textAlign = 'right'; hctx.fillText(display(max), width - margin.right, height - margin.bottom + 6);
   hctx.textBaseline = 'middle'; hctx.fillText(formatInt.format(peak), margin.left - 5, margin.top + 2);
@@ -1986,7 +1996,7 @@ function renderDetailedHistogram() {
   if (canvas.width !== targetW || canvas.height !== targetH) { canvas.width = targetW; canvas.height = targetH; }
   hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   hctx.clearRect(0, 0, width, height);
-  hctx.fillStyle = '#0b1320';
+  hctx.fillStyle = themeCanvasColor('--canvas-bg', '#0b1320');
   hctx.fillRect(0, 0, width, height);
 
   const component = currentComponent();
@@ -1997,7 +2007,7 @@ function renderDetailedHistogram() {
   if (!model.values.length) {
     for (const el of [els.detailHistMin, els.detailHistQ1, els.detailHistAverage, els.detailHistMedian, els.detailHistQ3, els.detailHistMax, els.detailHistStdDev]) el.textContent = '—';
     els.detailedHistogramMessage.textContent = component ? `${component.name}: No numeric measurements found` : 'Select a part present in the source table';
-    hctx.fillStyle = '#91a0b7'; hctx.font = '14px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
+    hctx.fillStyle = themeCanvasColor('--muted', '#91a0b7'); hctx.font = '14px system-ui'; hctx.textAlign = 'center'; hctx.textBaseline = 'middle'; hctx.fillText('No numeric measurement data', width / 2, height / 2);
     state.histogram.layout = null; updateSelectedBinDetails(model); return;
   }
 
@@ -2017,7 +2027,7 @@ function renderDetailedHistogram() {
   const peak = Math.max(...barValues, yMode === 'percent' ? 0.01 : 1);
 
   hctx.strokeStyle = 'rgba(145,160,183,.18)'; hctx.lineWidth = 1;
-  hctx.fillStyle = '#91a0b7'; hctx.font = '10px system-ui';
+  hctx.fillStyle = themeCanvasColor('--muted', '#91a0b7'); hctx.font = '10px system-ui';
   for (let step = 0; step <= 5; step += 1) {
     const ratio = step / 5;
     const y = margin.top + chartH * ratio;
@@ -2159,7 +2169,7 @@ function measurementColor(mapping, minMeasurement, maxMeasurement) {
 }
 function drawGrid(width, height) {
   const spacingWorld = state.view.scale < 5 ? 20 : state.view.scale < 15 ? 10 : state.view.scale < 45 ? 5 : 1; const spacing = spacingWorld * state.view.scale; if (spacing < 12) return;
-  const startX = ((state.view.offsetX % spacing) + spacing) % spacing; const startY = ((state.view.offsetY % spacing) + spacing) % spacing; ctx.strokeStyle = 'rgba(80,101,129,.12)'; ctx.lineWidth = 1; ctx.beginPath();
+  const startX = ((state.view.offsetX % spacing) + spacing) % spacing; const startY = ((state.view.offsetY % spacing) + spacing) % spacing; ctx.strokeStyle = themeCanvasColor('--canvas-grid', 'rgba(80,101,129,.12)'); ctx.lineWidth = 1; ctx.beginPath();
   for (let x = startX; x < width; x += spacing) { ctx.moveTo(x, 0); ctx.lineTo(x, height); } for (let y = startY; y < height; y += spacing) { ctx.moveTo(0, y); ctx.lineTo(width, y); } ctx.stroke();
 }
 function previewStatusByGlobalId() { const map = new Map(); for (const [globalId, proposal] of state.preview?.lookup || []) map.set(globalId, proposal.status); return map; }
@@ -2202,7 +2212,7 @@ function draw() {
   const width = els.canvas.clientWidth || 1; const height = els.canvas.clientHeight || 1;
   const targetW = Math.round(width * dpr); const targetH = Math.round(height * dpr);
   if (els.canvas.width !== targetW || els.canvas.height !== targetH) { els.canvas.width = targetW; els.canvas.height = targetH; }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#090f19'; ctx.fillRect(0, 0, width, height); drawGrid(width, height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = themeCanvasColor('--canvas-bg', '#090f19'); ctx.fillRect(0, 0, width, height); drawGrid(width, height);
 
   const components = visibleComponents();
   if (!components.length) { els.viewerTitle.textContent = 'No data'; els.viewerSubtitle.textContent = 'Import a file to display land positions'; return; }
@@ -2281,7 +2291,7 @@ function draw() {
       }
       const selected = state.selected && String(state.selected.componentId) === String(component.id) && Number(state.selected.globalId) === Number(land.globalId);
       if (selected) { ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(5, radius + 4), 0, Math.PI * 2); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
-      if ((showLandLabels && radius > 1.5) || (duplicateEnabled && isSelectedDuplicate)) { ctx.fillStyle = isSelectedDuplicate ? '#ffe39a' : '#d9e5f5'; ctx.fillText(land.cadName, point.x, point.y - Math.max(radius, 3) - 2); }
+      if ((showLandLabels && radius > 1.5) || (duplicateEnabled && isSelectedDuplicate)) { ctx.fillStyle = isSelectedDuplicate ? themeCanvasColor('--warn', '#ffe39a') : themeCanvasColor('--canvas-label', '#d9e5f5'); ctx.fillText(land.cadName, point.x, point.y - Math.max(radius, 3) - 2); }
     }
   }
   if (!boardMode) drawCadComparisonOverlay(width, height);
@@ -2639,7 +2649,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.27.0.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.0.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2699,7 +2709,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.27.0.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.0.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2725,7 +2735,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.27.0', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.0', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2734,7 +2744,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.27.0.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.0.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -2995,7 +3005,7 @@ function drawCadEditorGrid(width, height) {
   const minX = Math.min(topLeft.x, bottomRight.x), maxX = Math.max(topLeft.x, bottomRight.x);
   const minY = Math.min(topLeft.y, bottomRight.y), maxY = Math.max(topLeft.y, bottomRight.y);
   cadEditorCtx.save();
-  cadEditorCtx.strokeStyle = 'rgba(92,126,160,.12)'; cadEditorCtx.lineWidth = 1;
+  cadEditorCtx.strokeStyle = themeCanvasColor('--canvas-grid', 'rgba(92,126,160,.12)'); cadEditorCtx.lineWidth = 1;
   cadEditorCtx.beginPath();
   for (let x = Math.floor(minX / step) * step; x <= maxX; x += step) { const p = cadEditorWorldToScreen(x, 0); cadEditorCtx.moveTo(Math.round(p.x) + .5, 0); cadEditorCtx.lineTo(Math.round(p.x) + .5, height); }
   for (let y = Math.floor(minY / step) * step; y <= maxY; y += step) { const p = cadEditorWorldToScreen(0, y); cadEditorCtx.moveTo(0, Math.round(p.y) + .5); cadEditorCtx.lineTo(width, Math.round(p.y) + .5); }
@@ -4028,7 +4038,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.27.0.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.0.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -4323,7 +4333,7 @@ function drawCadEditorLands(component, selectedComponent, width, height) {
     if (p2.x < -4 || p1.x > width + 4 || p2.y < -4 || p1.y > height + 4) continue;
     const w = Math.max(2, p2.x - p1.x), h = Math.max(2, p2.y - p1.y);
     const isSelected = selectedLands.has(land.uid);
-    cadEditorCtx.fillStyle = isSelected ? 'rgba(255,199,86,.88)' : normalizeSide(land.side) === 'bottom' ? 'rgba(211,104,255,.58)' : 'rgba(64,220,201,.58)';
+    cadEditorCtx.fillStyle = isSelected ? themeCanvasColor('--canvas-selection', '#ffd36e') : normalizeSide(land.side) === 'bottom' ? themeCanvasColor('--canvas-land-bottom', 'rgba(211,104,255,.58)') : themeCanvasColor('--canvas-land-top', 'rgba(64,220,201,.58)');
     cadEditorCtx.strokeStyle = isSelected ? '#fff2c2' : 'rgba(220,242,255,.48)';
     cadEditorCtx.lineWidth = isSelected ? 2 : 1;
     cadEditorCtx.fillRect(p1.x, p1.y, w, h); cadEditorCtx.strokeRect(p1.x, p1.y, w, h);
@@ -4350,7 +4360,7 @@ function drawCadEditorCanvas() {
   const targetW = Math.max(1, Math.round(width * dpr)), targetH = Math.max(1, Math.round(height * dpr));
   if (els.cadEditorCanvas.width !== targetW || els.cadEditorCanvas.height !== targetH) { els.cadEditorCanvas.width = targetW; els.cadEditorCanvas.height = targetH; }
   cadEditorCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  cadEditorCtx.fillStyle = '#07101a'; cadEditorCtx.fillRect(0, 0, width, height);
+  cadEditorCtx.fillStyle = themeCanvasColor('--canvas-bg', '#07101a'); cadEditorCtx.fillRect(0, 0, width, height);
   drawCadEditorGrid(width, height);
   const boardBounds = cadEditorBoardBounds();
   if (boardBounds) {
@@ -5640,6 +5650,26 @@ function addXmlExportMetadata(xmlText, metadata) {
   return String(xmlText).replace(/^(<\?xml[^>]*>)/i, `$1\n${comment}`);
 }
 
+function attachExportVerification(file, report) {
+  const project = ensureProjectSession(file)?.project;
+  const snapshot = project?.exportSnapshots?.[project.exportSnapshots.length - 1];
+  if (snapshot) snapshot.payload = { ...(snapshot.payload || {}), verification: exportVerificationSnapshot(report) };
+  file.lastExportVerification = report;
+  return report;
+}
+function verifyCadExportOutput(file, format, output, side = 'all') {
+  if (side !== 'all') return { status: 'subset-skipped', passed: true, issues: [], matchedComponents: 0, matchedLands: 0, sourceCounts: {}, verifiedAt: new Date().toISOString() };
+  try {
+    const sourceModel = ensureProjectSession(file)?.project?.currentModel;
+    if (!sourceModel) throw new Error('Project model is unavailable.');
+    const adapted = format === 'inspection-xml' ? { xmlText: String(output || '') } : adaptCadText(String(output || ''), { fileName: `verification${format === 'gencad-1.4' ? '.cad' : '.fab'}` });
+    const legacy = parseInspectionXml(adapted.xmlText);
+    return attachExportVerification(file, verifyExportedLegacyCad(sourceModel, legacy, { sourceFormat: format, coordinateTolerance: 0.003 }));
+  } catch (error) {
+    return attachExportVerification(file, { status: 'verification-error', passed: false, issues: [{ level: 'error', code: 'EXPORT_REIMPORT_FAILED', message: error.message }], matchedComponents: 0, matchedLands: 0, sourceCounts: { components: ensureProjectSession(file)?.project?.currentModel?.components?.length || 0, lands: ensureProjectSession(file)?.project?.currentModel?.lands?.length || 0 }, verifiedAt: new Date().toISOString() });
+  }
+}
+
 function cadExportStem(file, side) {
   const base = String(file?.name || 'cad.xml').split('/').pop().replace(/\.(?:xml|cpo|cad|fab|gcd|dat|txt)$/i, '');
   return `${base}_${side === 'all' ? 'top_bottom' : side}`;
@@ -5658,11 +5688,13 @@ async function exportCadEditorXml(taskContext = null) {
   // Machine-compatible XML intentionally has no custom comment/header before DataList.
   // Export audit metadata remains in the project session/diagnostic state instead of altering the inspection schema.
   projectExportMetadata(file, 'inspection-xml', preflight.counts.error ? 'errors' : (preflight.counts.warning ? 'warnings' : 'passed'));
+  const verification = verifyCadExportOutput(file, 'inspection-xml', output, side);
+  if (side === 'all' && !verification.passed) throw new ExportError(`Export verification failed · ${verification.issues?.[0]?.message || 'semantic mismatch'}`, { stage: 'export-verification', fileName: file.name, code: 'EXPORT_VERIFICATION_FAILED', context: verification });
   downloadBlob(new Blob([output], { type: 'application/xml;charset=utf-8' }), `${cadExportStem(file, side)}.xml`);
   const summary = modelSummary(model);
   const omitted = side === 'all' ? 0 : summary.unknown;
   taskContext?.progress?.(100, 'Structured inspection XML exported successfully');
-  els.cadEditorMessage.textContent = `Export Inspection XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} successful · coordinates normalized${omitted ? ` · lands with unspecified side ${omitted} points omitted` : ''}`;
+  els.cadEditorMessage.textContent = `Export Inspection XML ${side === 'all' ? 'Top + Bottom' : side.toUpperCase()} successful · coordinates normalized${side === 'all' ? ` · ${summarizeExportVerification(verification)}` : ' · subset export verification skipped'}${omitted ? ` · lands with unspecified side ${omitted} points omitted` : ''}`;
   return true;
 }
 function requestCadEditorXmlExport() {
@@ -5682,10 +5714,12 @@ async function exportCadEditorAsciiFormat(format, taskContext = null) {
   const writerOptions = { side, metadata, fileName: cadExportStem(file, side) };
   const result = format === 'gencad-1.4' ? exportGenCad14(model, writerOptions) : exportFabmasterAscii(model, writerOptions);
   taskContext?.throwIfCancelled?.();
+  const verification = verifyCadExportOutput(file, format, result.text, side);
+  if (side === 'all' && !verification.passed) throw new ExportError(`Export verification failed · ${verification.issues?.[0]?.message || 'semantic mismatch'}`, { stage: 'export-verification', fileName: file.name, code: 'EXPORT_VERIFICATION_FAILED', context: verification });
   downloadBlob(new Blob([result.text], { type: result.mime }), `${cadExportStem(file, side)}${result.extension}`);
   taskContext?.progress?.(100, `Export ${format === 'gencad-1.4' ? 'CAD ASCII' : 'Manufacturing ASCII'} successful`);
   const warningText = result.warnings?.length ? ` · Partial writer · warnings ${result.warnings.length} items` : '';
-  els.cadEditorMessage.textContent = `Export ${format === 'gencad-1.4' ? 'CAD ASCII 1.4 (.cad)' : 'Manufacturing ASCII (.fab)'} successful${warningText}`;
+  els.cadEditorMessage.textContent = `Export ${format === 'gencad-1.4' ? 'CAD ASCII 1.4 (.cad)' : 'Manufacturing ASCII (.fab)'} successful${side === 'all' ? ` · ${summarizeExportVerification(verification)}` : ' · subset verification skipped'}${warningText}`;
   if (result.warnings?.length) toast(`${result.warnings[0]}${result.warnings.length > 1 ? ` · and ${result.warnings.length - 1} items` : ''}`, 9000);
   return true;
 }
@@ -6441,6 +6475,27 @@ async function restoreProjectRevisionAsNewRevision(revisionNumber) {
   });
 }
 
+function locatePcbCrossProbe(item) {
+  if (!item) return false;
+  const projectModel = activeCadFile()?.projectSession?.project?.currentModel;
+  let componentId = String(item.componentId || '');
+  let landName = '';
+  if (item.type === 'net' && item.connections?.length) {
+    const connection = item.connections.find((entry) => entry.componentRef) || item.connections[0];
+    const component = (projectModel?.components || []).find((entry) => String(entry.reference || '').toUpperCase() === String(connection?.componentRef || '').toUpperCase());
+    componentId = String(component?.id || componentId);
+    landName = String(connection?.pin || '');
+  }
+  if (item.type === 'layer') { toast(`Layer ${item.label || item.layerId} selected · layer visibility editing will be expanded in the next geometry milestone`, 5000); return true; }
+  const component = state.xmlData?.componentById?.get(componentId) || state.xmlData?.components?.find((entry) => String(entry.id) === componentId || String(entry.name || '').toUpperCase() === String(item.label || '').toUpperCase());
+  if (!component) return false;
+  state.selectedComponentId = String(component.id); els.componentSelect.value = String(component.id); state.duplicateView.selectedName = ''; refreshDuplicateControls(); fitView();
+  const universalLand = (projectModel?.lands || []).find((entry) => String(entry.id) === String(item.landId || ''));
+  const land = component.lands?.find((entry) => String(entry.cadName || '').toUpperCase() === String(universalLand?.name || landName).toUpperCase()) || null;
+  if (land) selectLand(land);
+  return true;
+}
+
 const npiWorkspace = initNpiWorkspace({
   getProject: () => activeCadFile()?.projectSession?.project || null,
   getModel: () => activeCadFile()?.projectSession?.project?.currentModel || null,
@@ -6462,6 +6517,7 @@ const npiWorkspace = initNpiWorkspace({
     if (!file?.editorModel) return file?.text || state.xmlText || '';
     return exportInspectionXml(file.editorModel, { side: 'all' });
   },
+  crossProbe: (item) => locatePcbCrossProbe(item),
   locateIssue: (issue) => {
     if (!issue?.componentId) return false;
     openCadEditor();
@@ -6471,6 +6527,13 @@ const npiWorkspace = initNpiWorkspace({
     fitCadEditorView();
     return true;
   },
+});
+const uiShell = initUiShell();
+window.addEventListener('universalcad:themechange', () => {
+  draw();
+  drawCadEditorCanvas();
+  renderHistogram();
+  if (!els.histogramOverlay?.classList.contains('hidden')) renderDetailedHistogram();
 });
 loadBuildInformation();
 resetProject();

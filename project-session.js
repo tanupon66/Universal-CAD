@@ -7,10 +7,12 @@ import {
   normalizeLegacyCad,
   universalCadToLegacy,
 } from './universal-cad-model.js';
+import { mergeFoundationIntoModel } from './pcb-data-foundation.js';
 
-export function createProjectSession({ name, fileName, sourceFormat = 'inspection-xml', mimeType = 'application/xml', sourceText = '', sourceBytes = null, legacyCad } = {}) {
+export function createProjectSession({ name, fileName, sourceFormat = 'inspection-xml', mimeType = 'application/xml', sourceText = '', sourceBytes = null, legacyCad, supplementalData = null } = {}) {
   const source = immutableSourceRecord({ name: fileName || name || 'cad.xml', format: sourceFormat, mimeType, text: sourceText || null, bytes: sourceBytes });
   const parsedModel = normalizeLegacyCad(legacyCad, { sourceFormat });
+  if (supplementalData) mergeFoundationIntoModel(parsedModel, supplementalData);
   parsedModel.metadata.sourceSize = source.size;
   const project = createUniversalProject({ name: name || fileName || 'CAD Project', sourceFiles: [source], parsedModel });
   return { project, originalSource: source };
@@ -26,6 +28,12 @@ export function prepareProjectRevision(session, { legacyCad, workingXml = '', ch
     sourceFormat: project.currentModel?.sourceFormat || project.sourceFiles?.[0]?.format,
     units: project.currentModel?.units,
   });
+  // Placement/Land editor revisions are rebuilt from the legacy editing model. Preserve
+  // normalized PCB foundation records that the editor does not modify.
+  for (const key of ['layers', 'nets', 'vias', 'traces', 'holes', 'fiducials', 'pins']) {
+    if (Array.isArray(project.currentModel?.[key])) model[key] = cloneCadValue(project.currentModel[key]);
+  }
+  if (project.currentModel?.metadata?.pcbFoundation) model.metadata.pcbFoundation = cloneCadValue(project.currentModel.metadata.pcbFoundation);
   model.validationIssues = cloneCadValue(validationIssues);
   model.metadata = { ...model.metadata, workingXml, sourceSize: project.sourceFiles?.[0]?.size || 0 };
   const changeSet = {

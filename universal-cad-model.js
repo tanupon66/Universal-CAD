@@ -144,6 +144,7 @@ export function normalizeLegacyCad(legacyCad, options = {}) {
       yDirection: 'up',
       rotationConvention: 'counter-clockwise',
     },
+    coordinateSystems: [{ id: 'board', name: 'Board Coordinate', units: String(options.units || DEFAULT_UNITS), origin: { x: Number(board.MinX ?? board.minX ?? 0) || 0, y: Number(board.MinY ?? board.minY ?? 0) || 0 }, rotation: 0, mirror: false, mirrorAxis: 'y', parentId: null, schemaVersion: 1, metadata: {} }],
     transformations: [],
     boardDefinition: {
       id: 'board:main',
@@ -162,6 +163,8 @@ export function normalizeLegacyCad(legacyCad, options = {}) {
     lands,
     pins: [],
     nets: [],
+    vias: [],
+    traces: [],
     holes: [],
     fiducials: [],
     bom: [],

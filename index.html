@@ -4,12 +4,23 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
-<meta content="#0b1220" name="theme-color"/>
+<meta content="#071019" id="themeColorMeta" name="theme-color"/>
 <meta content="Offline-first CAD and NPI preparation workspace for PCB manufacturing data, mapping, validation, editing, and export." name="description"/>
 <link href="./manifest.webmanifest" rel="manifest"/>
 <link href="./icons/icon.svg" rel="icon" type="image/svg+xml"/>
+<script>
+try {
+  const preference = localStorage.getItem('universal-cad-theme-v2') || 'system';
+  const resolved = preference === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : preference;
+  document.documentElement.dataset.themePreference = preference;
+  document.documentElement.dataset.theme = resolved;
+} catch (error) {
+  document.documentElement.dataset.themePreference = 'system';
+  document.documentElement.dataset.theme = 'dark';
+}
+</script>
 <link href="./styles.css" rel="stylesheet"/>
-<title>Universal CAD Studio v0.27.0</title>
+<title>Universal CAD Studio v0.29.0</title>
 </head>
 <body>
 <header class="topbar">
@@ -21,13 +32,39 @@
 </div>
 </div>
 <div class="top-actions">
-<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.27.0 · Schema 2</span>
+<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.29.0 · Schema 2</span>
 <span class="status-pill muted" id="projectStatus">No project open</span>
 <button class="ghost hidden" id="appUpdateButton" type="button">Update available · Update</button>
 <button class="npi-launch" id="npiWorkspaceButton" type="button">NPI Workspace</button>
+<button class="top-action-button" id="commandPaletteButton" title="Command Palette (Ctrl+K)" type="button"><span>⌘</span><span class="top-action-label">Commands</span></button>
+<div class="theme-control">
+<button aria-expanded="false" class="top-action-button" id="themeToggleButton" type="button"><span data-theme-icon>◐</span><span class="top-action-label" data-theme-label>System</span></button>
+<div class="theme-menu hidden" id="themeMenu" role="menu">
+<div class="theme-menu-title">Appearance</div>
+<button data-theme-choice="light" type="button"><span>☀</span><b>Light</b><small>Bright engineering workspace</small></button>
+<button data-theme-choice="dark" type="button"><span>☾</span><b>Dark</b><small>Low-glare engineering workspace</small></button>
+<button data-theme-choice="system" type="button"><span>◐</span><b>System</b><small>Follow the operating system</small></button>
+<label class="ui-level-control">Feature level<select id="uiLevelSelect"><option value="standard">Standard</option><option value="advanced">Advanced</option></select></label>
+</div>
+</div>
+<button aria-label="Notifications" class="top-action-button notification-button" id="notificationButton" title="Notifications" type="button"><span>◉</span><span class="notification-badge hidden" id="notificationBadge">0</span></button>
 <button class="ghost hidden" id="installButton" type="button">Install App</button>
 </div>
 </header>
+<nav aria-label="Primary workspace navigation" class="primary-nav">
+<button class="active" data-workspace-route="home" type="button"><span class="nav-icon">⌂</span><span>Home</span></button>
+<button data-workspace-route="import" type="button"><span class="nav-icon">⇩</span><span>Import</span></button>
+<button data-workspace-route="editor" type="button"><span class="nav-icon">◇</span><span>Editor</span></button>
+<button data-workspace-route="mapping" type="button"><span class="nav-icon">⇄</span><span>Mapping</span></button>
+<button data-workspace-route="npi" type="button"><span class="nav-icon">▦</span><span>NPI</span></button>
+<button data-workspace-route="validation" type="button"><span class="nav-icon">✓</span><span>Validate</span></button>
+<button data-workspace-route="export" type="button"><span class="nav-icon">⇧</span><span>Export</span></button>
+</nav>
+<section class="workspace-context-bar" aria-label="Current workspace">
+<div class="workspace-context-copy"><small id="workspaceBreadcrumb">Project / Home</small><div><strong id="workspaceContextTitle">Home</strong><span id="workspaceContextSubtitle">Project status, recent work, recovery, and quick actions.</span></div></div>
+<div class="global-search"><span>⌕</span><input id="globalSearchInput" placeholder="Find component, land, package, alias…" type="search"/><button id="globalSearchButton" type="button">Find</button><kbd>Ctrl F</kbd></div>
+<span class="ui-level-badge" id="uiLevelBadge">Standard tools</span>
+</section>
 <main class="app-shell">
 <aside class="left-panel panel">
 <section class="panel-section import-section">
@@ -112,6 +149,28 @@
 </section>
 </aside>
 <section class="workspace">
+<section class="home-dashboard" id="homeDashboard">
+<div class="home-hero panel">
+<div><span class="eyebrow">PROJECT HOME</span><h2>Universal CAD Studio</h2><p>Import, edit, map, validate, and export manufacturing data through a guided project workflow.</p></div>
+<div class="home-build"><span>Build</span><strong id="homeBuild">v0.29.0</strong></div>
+</div>
+<div class="home-card-grid">
+<article class="home-card panel home-project-card"><span class="eyebrow">CURRENT PROJECT</span><h3 id="homeProjectStatus">No project open</h3><p id="homeActiveCad">No CAD loaded</p><div class="home-card-actions"><button data-ui-route="import" type="button">Open / Import</button><button class="primary" data-ui-route="mapping" type="button">Continue Mapping</button></div></article>
+<article class="home-card panel"><span class="eyebrow">MAPPING STATUS</span><div class="home-stat-grid"><div><span>Mapped</span><strong id="homeMapped">0</strong></div><div><span>Confirmed</span><strong id="homeConfirmed">0</strong></div><div><span>Unmapped</span><strong id="homeUnmapped">0</strong></div><div><span>CAD lands</span><strong id="homeCadLands">0</strong></div></div></article>
+<article class="home-card panel"><span class="eyebrow">PROJECT DATA</span><div class="home-stat-grid"><div><span>Source parts</span><strong id="homeRawParts">0</strong></div><div><span>Workflow</span><strong>Local</strong></div></div><p>Project revisions, autosave, recovery, and exports remain local to this browser unless you export a file.</p></article>
+</div>
+<div class="home-workflow panel">
+<div class="home-workflow-heading"><span class="eyebrow">GUIDED WORKFLOW</span><h3>Where do you want to work?</h3></div>
+<div class="home-workflow-grid">
+<button data-ui-route="import" type="button"><b>01</b><strong>Import</strong><span>Open source CAD, BOM, placement, or archive data.</span></button>
+<button data-ui-route="editor" type="button"><b>02</b><strong>Board Editor</strong><span>Edit components, packages, lands, and geometry.</span></button>
+<button data-ui-route="mapping" type="button"><b>03</b><strong>Mapping</strong><span>Connect source records and CAD lands with visual confirmation.</span></button>
+<button data-ui-route="npi" type="button"><b>04</b><strong>NPI Preparation</strong><span>Prepare packages, alignment, panel arrays, and automation.</span></button>
+<button data-ui-route="validation" type="button"><b>05</b><strong>Validation</strong><span>Review health, compatibility, changes, and blocking issues.</span></button>
+<button data-ui-route="export" type="button"><b>06</b><strong>Export</strong><span>Preflight and export CAD data, BOM, reports, or backups.</span></button>
+</div>
+</div>
+</section>
 <div class="workspace-toolbar panel">
 <div class="search-wrap">
 <span>⌕</span>
@@ -119,17 +178,11 @@
 <button id="searchButton" type="button">Search</button>
 </div>
 <div class="toolbar-actions">
-<button class="primary" disabled="" id="cadEditorButton" type="button">Edit CAD</button>
-<button class="detail-panel-button" id="detailPanelButton" type="button">Land Details</button>
-<button disabled="" id="cadInspectorButton" type="button">Name Inspector</button>
-<button disabled="" id="cadCompareButton" type="button">Compare CAD</button>
-<button disabled="" id="manualButton" type="button">Edit Mode</button>
-<button disabled="" id="teachButton" type="button">Manual Teach</button>
-<button disabled="" id="undoButton" type="button">Undo</button>
-<button disabled="" id="redoButton" type="button">Redo</button>
-<button disabled="" id="exportCsvButton" type="button">Export CSV</button>
-<button class="primary" disabled="" id="exportExcelButton" type="button">Component Excel</button>
-<button disabled="" id="exportJsonButton" type="button">Backup JSON</button>
+<div class="toolbar-group" data-toolbar-group="board"><span>Board</span><button class="primary" disabled="" id="cadEditorButton" type="button">Edit CAD</button><button class="detail-panel-button" id="detailPanelButton" type="button">Land Details</button></div>
+<div class="toolbar-group" data-toolbar-group="mapping"><span>Mapping</span><button disabled="" id="manualButton" type="button">Edit Mode</button><button disabled="" id="teachButton" type="button">Manual Teach</button></div>
+<div class="toolbar-group" data-toolbar-group="validation"><span>Validate</span><button disabled="" id="cadInspectorButton" type="button">Name Inspector</button><button disabled="" id="cadCompareButton" type="button">Compare CAD</button></div>
+<div class="toolbar-group toolbar-history" data-toolbar-group="history"><span>History</span><button disabled="" id="undoButton" type="button">Undo</button><button disabled="" id="redoButton" type="button">Redo</button></div>
+<div class="toolbar-group toolbar-export" data-toolbar-group="export"><span>Quick export</span><button disabled="" id="exportCsvButton" type="button">CSV</button><button class="primary" disabled="" id="exportExcelButton" type="button">Excel</button><button disabled="" id="exportJsonButton" type="button">Backup</button></div>
 </div>
 </div>
 <div class="viewer panel">
@@ -1065,16 +1118,11 @@
 <button aria-label="Close" class="icon-button" id="npiCloseButton" type="button">✕</button>
 </header>
 <nav aria-label="NPI workspace sections" class="npi-tabs">
-<button class="active" data-npi-tab="overview" type="button">Overview</button>
-<button data-npi-tab="compatibility" type="button">Compatibility</button>
-<button data-npi-tab="automation" type="button">Automation</button>
-<button data-npi-tab="packages" type="button">Packages</button>
-<button data-npi-tab="reconcile" type="button">Reconcile</button>
-<button data-npi-tab="alignment" type="button">Alignment</button>
-<button data-npi-tab="panel" type="button">Panelization</button>
-<button data-npi-tab="revisions" type="button">Revisions</button>
-<button data-npi-tab="golden" type="button">Golden Template</button>
-<button data-npi-tab="bom" type="button">BOM Export</button>
+<span class="npi-tab-group">Overview</span><button class="active" data-npi-tab="overview" type="button">Project Health</button>
+<span class="npi-tab-group">Prepare</span><button data-npi-tab="packages" type="button">Packages</button><button data-advanced-ui="true" data-npi-tab="alignment" type="button">Alignment</button><button data-advanced-ui="true" data-npi-tab="panel" type="button">Panelization</button>
+<span class="npi-tab-group">Analyze</span><button data-npi-tab="pcb-data" type="button">PCB Data</button><button data-npi-tab="reconcile" type="button">Reconcile</button><button data-advanced-ui="true" data-npi-tab="compatibility" type="button">Compatibility</button><button data-npi-tab="revisions" type="button">Revisions</button><button data-advanced-ui="true" data-npi-tab="golden" type="button">Reference Template</button>
+<span class="npi-tab-group">Automate</span><button data-advanced-ui="true" data-npi-tab="automation" type="button">Automation</button>
+<span class="npi-tab-group">Output</span><button data-npi-tab="bom" type="button">BOM Export</button>
 </nav>
 <div class="npi-workspace-body">
 <section class="npi-panel active" data-npi-panel="overview">
@@ -1208,6 +1256,26 @@
 <button id="globalErrorDownload" type="button">Download diagnostic</button>
 <button class="primary" id="globalErrorClose" type="button">Close</button>
 </div>
+</div>
+</div>
+<div aria-hidden="true" class="notification-backdrop hidden" id="notificationBackdrop"></div>
+<aside aria-label="Notification Center" class="notification-drawer" id="notificationDrawer">
+<header><div><span class="eyebrow">ACTIVITY</span><h2>Notification Center</h2><p>Recent application messages and actions.</p></div><button aria-label="Close notifications" class="icon-button" id="notificationCloseButton" type="button">✕</button></header>
+<div class="notification-list" id="notificationList"></div>
+<footer><button id="notificationClearButton" type="button">Clear History</button></footer>
+</aside>
+<div aria-labelledby="commandPaletteTitle" aria-modal="true" class="modal-overlay command-palette-overlay hidden" id="commandPaletteOverlay" role="dialog">
+<div class="command-palette-dialog panel" role="document"><header><div><span class="eyebrow">COMMAND PALETTE</span><h2 id="commandPaletteTitle">Find a Command</h2></div><button aria-label="Close" class="icon-button" id="commandPaletteCloseButton" type="button">✕</button></header><div class="command-palette-search"><span>⌕</span><input autocomplete="off" id="commandPaletteInput" placeholder="Type a command, feature, or workflow…" type="search"/><kbd>Ctrl K</kbd></div><div class="command-palette-list" id="commandPaletteList"></div></div>
+</div>
+<div aria-labelledby="exportCenterTitle" aria-modal="true" class="modal-overlay export-center-overlay hidden" id="exportCenterOverlay" role="dialog">
+<div class="export-center-dialog panel" role="document">
+<header><div><span class="eyebrow">EXPORT CENTER</span><h2 id="exportCenterTitle">Choose an Output</h2><p>Use the existing project exporters through one organized output center.</p></div><button aria-label="Close" class="icon-button" id="exportCenterCloseButton" type="button">✕</button></header>
+<div class="export-center-body">
+<section><div class="export-group-heading"><span>Manufacturing CAD</span><small>Board and machine-data formats</small></div><button data-export-target="cad" type="button"><strong>Open Board Editor Export</strong><span>Inspection XML, CAD ASCII, manufacturing ASCII, and archive-aware export.</span></button></section>
+<section><div class="export-group-heading"><span>Data & Reports</span><small>Mapping and component data</small></div><button data-export-target="csv" type="button"><strong>Mapping CSV</strong><span>Export the active mapping table.</span></button><button data-export-target="excel" type="button"><strong>Component Excel</strong><span>Create the component workbook and visual report.</span></button><button data-export-target="bom" type="button"><strong>BOM Layout Designer</strong><span>Choose fields, reorder columns or rows, then export CSV or Excel.</span></button></section>
+<section><div class="export-group-heading"><span>Project</span><small>Portable project and recovery files</small></div><button data-export-target="json" type="button"><strong>Mapping Backup JSON</strong><span>Export the current mapping backup.</span></button><button data-export-target="project-backup" type="button"><strong>Project Backup</strong><span>Export project revisions and working state.</span></button><button data-export-target="project-manager" type="button"><strong>Project Manager</strong><span>Review autosave and local recovery records.</span></button></section>
+</div>
+<footer><button id="exportCenterCancelButton" type="button">Close</button></footer>
 </div>
 </div>
 <div class="toast hidden" id="toast"></div>

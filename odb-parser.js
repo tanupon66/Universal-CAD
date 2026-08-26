@@ -1,5 +1,6 @@
 import { textFromBytes } from './archive-reader.js';
 import { isUnixCompress, unlzw } from './unix-compress.js';
+import { extractOdbFoundation } from './pcb-data-foundation.js';
 
 function normalizePath(value = '') {
   return String(value).replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
@@ -441,6 +442,7 @@ export async function convertOdbPackageToInspectionXml(root) {
   const packageCount = [...edaCache.values()].reduce((sum, packages) => sum + packages.filter(Boolean).length, 0);
   warnings.push(`Read ${packageCount} EDA package(s) and converted coordinates to millimeters.`);
 
+  const foundation = extractOdbFoundation(files);
   return {
     xmlText,
     format: 'odb++',
@@ -455,5 +457,6 @@ export async function convertOdbPackageToInspectionXml(root) {
     units: 'MM',
     unixCompressedFiles: decompressedCount,
     packages: packageCount,
+    foundation,
   };
 }
