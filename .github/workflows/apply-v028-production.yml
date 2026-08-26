@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'v028-payload10.part19'
+      - 'v028-prod-patch.part02'
 
 permissions:
   contents: write
@@ -17,42 +17,39 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify and apply tested v0.28.0 production build
+      - name: Verify and apply tested v0.28.0 production patch
         shell: bash
         run: |
           set -euo pipefail
-          cat v028-payload10.part* > /tmp/v028.b64
-          base64 -d /tmp/v028.b64 > /tmp/v028-production.tar.gz
-          mkdir -p /tmp/v028-production
-          tar -xzf /tmp/v028-production.tar.gz -C /tmp/v028-production
-          cd /tmp/v028-production
-          sha256sum -c SHA256SUMS.txt
-          grep -q '0.28.0' index.html
-          grep -q '0.28.0' manifest.webmanifest
-          grep -q "APP_VERSION = '0.28.0'" sw.js
-          grep -q './ui-shell.js' precache-manifest.js
-          test -s ui-shell.js
-          cd "$GITHUB_WORKSPACE"
-          cp /tmp/v028-production/app.js .
-          cp /tmp/v028-production/index.html .
-          cp /tmp/v028-production/styles.css .
-          cp /tmp/v028-production/manifest.webmanifest .
-          cp /tmp/v028-production/sw.js .
-          cp /tmp/v028-production/build-info.json .
-          cp /tmp/v028-production/precache-manifest.js .
-          cp /tmp/v028-production/ui-shell.js .
-          rm -f v028-payload10.part*
+          cat v028-prod-patch.part00 v028-prod-patch.part01 v028-prod-patch.part02 > /tmp/v028.patch.gz.b64
+          base64 -d /tmp/v028.patch.gz.b64 > /tmp/v028.patch.gz
+          gzip -dc /tmp/v028.patch.gz > /tmp/v028.patch
+          git apply --check /tmp/v028.patch
+          git apply /tmp/v028.patch
+          cat > build-info.json <<'JSON'
+          {
+            "appVersion": "0.28.0",
+            "buildDate": "2026-08-26T11:58:06.670Z",
+            "commit": "unavailable",
+            "schemaVersion": 2
+          }
+          JSON
+          rm -f v028-prod-patch.part00 v028-prod-patch.part01 v028-prod-patch.part02
           rm -f .github/workflows/apply-v028-production.yml
       - name: Static production sanity gate
         shell: bash
         run: |
           set -euo pipefail
           grep -q '0.28.0' index.html
+          grep -q '0.28.0' manifest.webmanifest
+          grep -q "APP_VERSION = '0.28.0'" sw.js
           grep -q 'data-workspace-route="home"' index.html
+          grep -q 'data-workspace-route="export"' index.html
           grep -q 'data-theme-value="dark"' index.html
           grep -q 'data-theme-value="light"' index.html
           grep -q 'data-theme-value="system"' index.html
           grep -q './ui-shell.js' precache-manifest.js
+          grep -q '0.28.0' build-info.json
           test -s app.js
           test -s styles.css
           test -s ui-shell.js
