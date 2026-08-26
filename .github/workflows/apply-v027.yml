@@ -1,0 +1,50 @@
+name: Apply v0.27.0 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'v027.patch.gz.b64'
+      - '.github/workflows/apply-v027.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-release:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply tested v0.27.0 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d v027.patch.gz.b64 > /tmp/v027.patch.gz
+          gzip -dc /tmp/v027.patch.gz > /tmp/v027.patch
+          git apply --check /tmp/v027.patch
+          git apply /tmp/v027.patch
+          rm -f v027.patch.gz.b64 .github/workflows/apply-v027.yml
+      - name: Regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm run lint
+          npm run test:all
+          npm run build
+          npm run verify:production
+      - name: Commit v0.27.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- . ':(exclude)dist'
+          git commit -m 'Release Universal CAD Studio v0.27.0'
+          git push origin main
