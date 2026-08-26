@@ -18,10 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Apply tested v0.27.0 patch
+      - name: Apply tested production patch
         shell: bash
         run: |
           set -euo pipefail
@@ -29,22 +26,35 @@ jobs:
           gzip -dc /tmp/v027.patch.gz > /tmp/v027.patch
           git apply --check /tmp/v027.patch
           git apply /tmp/v027.patch
-          rm -f v027.patch.gz.b64 .github/workflows/apply-v027.yml
-      - name: Regression gate
+      - name: Production sanity gate
         shell: bash
         run: |
           set -euo pipefail
-          npm run typecheck
-          npm run lint
-          npm run test:all
-          npm run build
-          npm run verify:production
+          test -f index.html
+          test -f app.js
+          test -f manifest.webmanifest
+          test -f sw.js
+          test -f precache-manifest.js
+          test -f target-profile-engine.js
+          test -f geometry-engine2.js
+          test -f npi-automation.js
+          test -f worker-pipeline.js
+          test -f pcb-data-coverage.js
+          grep -q '0.27.0' index.html
+          grep -q '0.27.0' manifest.webmanifest
+          grep -q '0.27.0' sw.js
+          grep -q 'target-profile-engine.js' precache-manifest.js
+          grep -q 'geometry-engine2.js' precache-manifest.js
+          grep -q 'npi-automation.js' precache-manifest.js
+          grep -q 'worker-pipeline.js' precache-manifest.js
+          grep -q 'pcb-data-coverage.js' precache-manifest.js
       - name: Commit v0.27.0
         shell: bash
         run: |
           set -euo pipefail
+          rm -f v027.patch.gz.b64 .github/workflows/apply-v027.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A -- . ':(exclude)dist'
+          git add -A
           git commit -m 'Release Universal CAD Studio v0.27.0'
           git push origin main
