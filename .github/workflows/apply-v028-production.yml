@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'v028-payload.part03'
+      - 'v028-payload10.part19'
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat v028-payload.part00 v028-payload.part01 v028-payload.part02 v028-payload.part03 > /tmp/v028.b64
+          cat v028-payload10.part* > /tmp/v028.b64
           base64 -d /tmp/v028.b64 > /tmp/v028-production.tar.gz
           mkdir -p /tmp/v028-production
           tar -xzf /tmp/v028-production.tar.gz -C /tmp/v028-production
@@ -41,7 +41,7 @@ jobs:
           cp /tmp/v028-production/build-info.json .
           cp /tmp/v028-production/precache-manifest.js .
           cp /tmp/v028-production/ui-shell.js .
-          rm -f v028-payload.part00 v028-payload.part01 v028-payload.part02 v028-payload.part03
+          rm -f v028-payload10.part*
           rm -f .github/workflows/apply-v028-production.yml
       - name: Static production sanity gate
         shell: bash
