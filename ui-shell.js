@@ -109,10 +109,59 @@ function clickWhenEnabled(id) {
   return true;
 }
 
-function openNpiTab(tab = 'overview') {
-  if (!clickWhenEnabled('npiWorkspaceButton')) return false;
-  requestAnimationFrame(() => document.querySelector(`[data-npi-tab="${tab}"]`)?.click());
+function setEmbeddedModalState(overlay, embedded = true) {
+  if (!overlay) return;
+  overlay.classList.toggle('workspace-embedded', embedded);
+  overlay.setAttribute?.('aria-modal', embedded ? 'false' : 'true');
+}
+
+function dockWorkspaceSurfaces() {
+  const editor = $('cadEditorOverlay');
+  const editorHost = $('editorWorkspaceHost');
+  if (editor && editorHost) { editorHost.append(editor); setEmbeddedModalState(editor, true); }
+
+  const npi = $('npiWorkspaceOverlay');
+  const npiHost = $('npiWorkspaceHost');
+  if (npi && npiHost) { npiHost.append(npi); setEmbeddedModalState(npi, true); }
+
+  const exportCenter = $('exportCenterOverlay');
+  const exportHost = $('exportWorkspaceHost');
+  if (exportCenter && exportHost) { exportHost.append(exportCenter); setEmbeddedModalState(exportCenter, true); }
+}
+
+function npiTabsForWorkspace(workspace) {
+  const allowed = {
+    npi: new Set(['packages', 'alignment', 'panel', 'automation', 'reconcile']),
+    validation: new Set(['overview', 'pcb-data', 'compatibility', 'revisions', 'golden']),
+    export: new Set(['bom']),
+  }[workspace] || new Set(['overview']);
+  const overlay = $('npiWorkspaceOverlay');
+  overlay?.querySelectorAll?.('[data-npi-tab]').forEach((button) => { button.hidden = !allowed.has(button.dataset.npiTab); });
+  overlay?.querySelectorAll?.('.npi-tab-group').forEach((label) => { label.hidden = true; });
+  return allowed;
+}
+
+function dockNpiForWorkspace(workspace = 'npi', tab = null) {
+  const overlay = $('npiWorkspaceOverlay');
+  const host = workspace === 'validation' ? $('validationWorkspaceHost') : workspace === 'export' ? $('exportWorkspaceNpiHost') : $('npiWorkspaceHost');
+  if (!overlay || !host) return false;
+  host.append(overlay);
+  setEmbeddedModalState(overlay, true);
+  overlay.classList.remove('hidden');
+  const allowed = npiTabsForWorkspace(workspace);
+  const preferred = tab && allowed.has(tab) ? tab : [...allowed][0];
+  const title = $('npiWorkspaceTitle');
+  const summary = $('npiWorkspaceSummary');
+  if (title) title.textContent = workspace === 'validation' ? 'Validation Center' : workspace === 'export' ? 'BOM Export Designer' : 'NPI Preparation';
+  if (summary && !summary.textContent.trim()) summary.textContent = 'Open a project to use this workspace.';
+  requestAnimationFrame(() => overlay.querySelector?.(`[data-npi-tab="${preferred}"]`)?.click());
   return true;
+}
+
+function openNpiTab(tab = 'overview', workspace = null) {
+  const targetWorkspace = workspace || (tab === 'bom' ? 'export' : 'npi');
+  if (document.body.dataset.workspace !== targetWorkspace) setWorkspace(targetWorkspace, { action: false });
+  return dockNpiForWorkspace(targetWorkspace, tab);
 }
 
 function updateWorkspaceHome() {
@@ -123,7 +172,7 @@ function updateWorkspaceHome() {
   set('homeUnmapped', $('unmappedStat')?.textContent || '0');
   set('homeCadLands', $('xmlLandStat')?.textContent || '0');
   set('homeRawParts', $('componentStat')?.textContent || '0');
-  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.0');
+  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.1');
   set('homeActiveCad', $('activeCadSelect')?.selectedOptions?.[0]?.textContent || 'No CAD loaded');
 }
 
@@ -135,6 +184,7 @@ function setWorkspace(name, { action = true } = {}) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-current', active ? 'page' : 'false');
   });
+  document.querySelectorAll('[data-route-page]').forEach((page) => page.classList.toggle('active', page.dataset.routePage === next));
   const info = WORKSPACES[next];
   const breadcrumb = $('workspaceBreadcrumb');
   const title = $('workspaceContextTitle');
@@ -143,21 +193,33 @@ function setWorkspace(name, { action = true } = {}) {
   if (title) title.textContent = info.title;
   if (subtitle) subtitle.textContent = info.subtitle;
   updateWorkspaceHome();
-  if (!action) return;
 
+  const editorEmpty = $('editorWorkspaceEmpty');
+  const exportHost = $('exportWorkspaceHost');
+  const exportNpiHost = $('exportWorkspaceNpiHost');
+  const exportBack = $('exportWorkspaceBackButton');
+
+  if (next === 'npi') dockNpiForWorkspace('npi', 'packages');
+  if (next === 'validation') dockNpiForWorkspace('validation', 'overview');
+  if (next === 'export') {
+    const center = $('exportCenterOverlay');
+    if (center && exportHost && center.parentElement !== exportHost) exportHost.append(center);
+    setEmbeddedModalState(center, true);
+    center?.classList.remove('hidden');
+    exportHost?.classList.remove('hidden');
+    exportNpiHost?.classList.add('hidden');
+    exportBack?.classList.add('hidden');
+  }
+
+  if (!action) return;
   if (next === 'import') {
     document.querySelector('.left-panel')?.scrollTo?.({ top: 0, behavior: 'smooth' });
     setTimeout(() => $('dropZone')?.focus?.(), 0);
   } else if (next === 'editor') {
-    if (!clickWhenEnabled('cadEditorButton')) setWorkspace('import', { action: false });
+    const opened = clickWhenEnabled('cadEditorButton');
+    editorEmpty?.classList.toggle('hidden', opened);
   } else if (next === 'mapping') {
     $('searchInput')?.focus?.();
-  } else if (next === 'npi') {
-    openNpiTab('packages');
-  } else if (next === 'validation') {
-    openNpiTab('overview');
-  } else if (next === 'export') {
-    openExportCenter();
   }
 }
 
@@ -171,10 +233,15 @@ function runGlobalSearch() {
 }
 
 function openExportCenter() {
+  if ($('exportCenterOverlay')?.classList.contains('workspace-embedded')) { setWorkspace('export', { action: false }); return; }
   $('exportCenterOverlay')?.classList.remove('hidden');
   $('exportCenterCloseButton')?.focus?.();
 }
-function closeExportCenter() { $('exportCenterOverlay')?.classList.add('hidden'); }
+function closeExportCenter() {
+  const overlay = $('exportCenterOverlay');
+  if (overlay?.classList.contains('workspace-embedded')) { setWorkspace('home', { action: false }); return; }
+  overlay?.classList.add('hidden');
+}
 
 function openCommandPalette() {
   const overlay = $('commandPaletteOverlay');
@@ -315,8 +382,16 @@ function closeNotifications() {
 }
 
 function routeExportTarget(target) {
-  if (target === 'bom') { closeExportCenter(); openNpiTab('bom'); return; }
-  if (target === 'cad') { closeExportCenter(); setWorkspace('editor'); return; }
+  if (target === 'bom') {
+    const exportHost = $('exportWorkspaceHost');
+    const exportNpiHost = $('exportWorkspaceNpiHost');
+    exportHost?.classList.add('hidden');
+    exportNpiHost?.classList.remove('hidden');
+    $('exportWorkspaceBackButton')?.classList.remove('hidden');
+    dockNpiForWorkspace('export', 'bom');
+    return;
+  }
+  if (target === 'cad') { setWorkspace('editor'); return; }
   const map = {
     csv: 'exportCsvButton',
     excel: 'exportExcelButton',
@@ -326,7 +401,7 @@ function routeExportTarget(target) {
   };
   const id = map[target];
   if (!id) return;
-  if (clickWhenEnabled(id)) closeExportCenter();
+  clickWhenEnabled(id);
 }
 
 function bindShellEvents() {
@@ -367,11 +442,12 @@ function bindShellEvents() {
 
   $('exportCenterCloseButton')?.addEventListener('click', closeExportCenter);
   $('exportCenterCancelButton')?.addEventListener('click', closeExportCenter);
-  $('exportCenterOverlay')?.addEventListener('click', (event) => { if (event.target === $('exportCenterOverlay')) closeExportCenter(); });
+  $('exportCenterOverlay')?.addEventListener('click', (event) => { if (event.target === $('exportCenterOverlay') && !$('exportCenterOverlay')?.classList.contains('workspace-embedded')) closeExportCenter(); });
+  $('exportWorkspaceBackButton')?.addEventListener('click', () => setWorkspace('export', { action: false }));
   document.querySelectorAll('[data-export-target]').forEach((button) => button.addEventListener('click', () => routeExportTarget(button.dataset.exportTarget)));
 
   window.addEventListener('universalcad:notify', (event) => addNotification(event.detail?.message, event.detail?.type || 'info'));
-  window.addEventListener('universalcad:workspace', (event) => setWorkspace(event.detail?.workspace || 'mapping'));
+  window.addEventListener('universalcad:workspace', (event) => setWorkspace(event.detail?.workspace || 'mapping', { action: event.detail?.action !== false }));
   window.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault(); openCommandPalette(); return;
@@ -380,7 +456,7 @@ function bindShellEvents() {
       event.preventDefault(); $('globalSearchInput')?.focus(); return;
     }
     if (event.key === 'Escape') {
-      closeCommandPalette(); closeNotifications(); closeExportCenter();
+      closeCommandPalette(); closeNotifications(); if (!$('exportCenterOverlay')?.classList.contains('workspace-embedded')) closeExportCenter();
     }
   });
 }
@@ -406,10 +482,11 @@ export function initUiShell() {
   applyUiLevel(level);
   renderCommands();
   renderNotifications();
+  dockWorkspaceSurfaces();
   bindShellEvents();
   observeHomeMetrics();
   setWorkspace('home', { action: false });
-  addNotification('Universal CAD Studio v0.29.0 interface is ready.', 'success');
+  addNotification('Universal CAD Studio v0.29.1 workspace navigation is ready.', 'success');
 
   const media = window.matchMedia?.('(prefers-color-scheme: light)');
   media?.addEventListener?.('change', () => {

@@ -2017,3 +2017,201 @@ html[data-theme="light"] .danger-button { color: var(--danger); }
 .npi-link-button:hover { text-decoration:underline; }
 .pcb-data-foundation .npi-list { max-height:220px; overflow:auto; }
 @media (max-width: 980px) { .npi-split-grid { grid-template-columns:1fr; } }
+
+/* --------------------------------------------------------------------------
+   Universal CAD Studio v0.29.1 — workspace-first UX hotfix
+   Each primary navigation item owns a real page. Large tools are embedded in
+   the page instead of opening as full-screen modal overlays.
+   -------------------------------------------------------------------------- */
+:root { --workspace-nav-width: 72px; }
+.legacy-route-trigger { display: none !important; }
+
+.primary-nav { width: var(--workspace-nav-width); padding-inline: 7px; }
+.workspace-context-bar {
+  margin-left: var(--workspace-nav-width);
+  width: calc(100% - var(--workspace-nav-width));
+  box-sizing: border-box;
+}
+.app-shell {
+  margin-left: var(--workspace-nav-width);
+  width: calc(100% - var(--workspace-nav-width));
+  box-sizing: border-box;
+}
+
+/* Left sidebar is contextual: import controls never appear on Mapping and
+   mapping controls never appear on Import. */
+.left-panel [data-workspace-section] { display: none; }
+body[data-workspace="import"] .left-panel [data-workspace-section="import"],
+body[data-workspace="mapping"] .left-panel [data-workspace-section="mapping"] { display: block; }
+
+/* Every large navigation target has a dedicated route page. */
+.route-page { display: none; min-width: 0; min-height: 0; height: 100%; }
+.route-page.active { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.route-page-export.active { grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+.route-page-heading {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 16px;
+}
+.route-page-heading h2 { margin: 3px 0 2px; font-size: 16px; letter-spacing: -.015em; }
+.route-page-heading p { margin: 0; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+.route-embed-host { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
+.route-empty-state {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  padding: 28px;
+  text-align: center;
+}
+.route-empty-state.hidden { display: none !important; }
+.route-empty-state h3 { margin: 2px 0; font-size: 18px; }
+.route-empty-state p { max-width: 560px; margin: 0 0 8px; color: var(--muted); line-height: 1.55; }
+.route-empty-icon { font-size: 34px; color: var(--primary); }
+
+/* Home consumes all available content width. There is no reserved left tool
+   column on this route; only the visible navigation rail remains. */
+body[data-workspace="home"] .app-shell { grid-template-columns: minmax(0, 1fr) !important; }
+body[data-workspace="home"] .workspace { width: 100%; min-width: 0; display: block; }
+body[data-workspace="home"] .home-dashboard { width: 100%; max-width: none; min-height: 100%; }
+
+/* Import is a real two-column intake page: controls + board preview. */
+body[data-workspace="import"] .app-shell { grid-template-columns: minmax(310px, 380px) minmax(0, 1fr) !important; }
+body[data-workspace="import"] .right-panel,
+body[data-workspace="import"] .workspace-toolbar,
+body[data-workspace="import"] .table-panel { display: none !important; }
+body[data-workspace="import"] .workspace { display: grid; grid-template-rows: minmax(0, 1fr); }
+body[data-workspace="import"] .viewer { display: block; min-height: 440px; }
+
+/* Mapping owns mapping tools only. */
+body[data-workspace="mapping"] .app-shell { grid-template-columns: 268px minmax(0, 1fr) 304px !important; }
+body[data-workspace="mapping"] .workspace { grid-template-rows: auto minmax(330px, 1fr) 248px; }
+body[data-workspace="mapping"] .workspace-toolbar,
+body[data-workspace="mapping"] .viewer,
+body[data-workspace="mapping"] .table-panel { display: flex; }
+body[data-workspace="mapping"] .table-panel { display: block; }
+
+/* Large professional tools use the whole content canvas. */
+body[data-workspace="editor"] .app-shell,
+body[data-workspace="npi"] .app-shell,
+body[data-workspace="validation"] .app-shell,
+body[data-workspace="export"] .app-shell { grid-template-columns: minmax(0, 1fr) !important; }
+body[data-workspace="editor"] .left-panel,
+body[data-workspace="editor"] .right-panel,
+body[data-workspace="editor"] .workspace-toolbar,
+body[data-workspace="editor"] .viewer,
+body[data-workspace="editor"] .table-panel,
+body[data-workspace="npi"] .left-panel,
+body[data-workspace="npi"] .right-panel,
+body[data-workspace="npi"] .workspace-toolbar,
+body[data-workspace="npi"] .viewer,
+body[data-workspace="npi"] .table-panel,
+body[data-workspace="validation"] .left-panel,
+body[data-workspace="validation"] .right-panel,
+body[data-workspace="validation"] .workspace-toolbar,
+body[data-workspace="validation"] .viewer,
+body[data-workspace="validation"] .table-panel,
+body[data-workspace="export"] .left-panel,
+body[data-workspace="export"] .right-panel,
+body[data-workspace="export"] .workspace-toolbar,
+body[data-workspace="export"] .viewer,
+body[data-workspace="export"] .table-panel { display: none !important; }
+body[data-workspace="editor"] .workspace,
+body[data-workspace="npi"] .workspace,
+body[data-workspace="validation"] .workspace,
+body[data-workspace="export"] .workspace { display: block; min-height: 0; overflow: hidden; }
+
+/* Dock former full-screen dialogs into route pages. Confirmation, errors,
+   command palette, and small quick tools remain true modals. */
+.workspace-embedded.modal-overlay {
+  position: relative !important;
+  inset: auto !important;
+  z-index: auto !important;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+  padding: 0 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+.workspace-embedded.modal-overlay.hidden { display: none !important; }
+.workspace-embedded.cad-editor-overlay { background: transparent !important; }
+.workspace-embedded .cad-editor-dialog,
+.workspace-embedded .cad-studio-shell {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 14px !important;
+}
+.workspace-embedded .npi-workspace-dialog,
+.workspace-embedded .export-center-dialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 14px;
+}
+.workspace-embedded .npi-workspace-header,
+.workspace-embedded .export-center-dialog > header { padding-block: 13px; }
+.workspace-embedded #npiCloseButton,
+.workspace-embedded #exportCenterCloseButton,
+.workspace-embedded #exportCenterCancelButton { display: none !important; }
+.workspace-embedded .npi-tabs { overflow-x: auto; flex-wrap: nowrap; padding-inline: 10px; }
+.workspace-embedded .npi-tabs button[hidden],
+.workspace-embedded .npi-tab-group[hidden] { display: none !important; }
+
+/* Export page switches between output choices and its BOM designer without a
+   popup or a route change. */
+body[data-workspace="export"] #exportWorkspaceHost,
+body[data-workspace="export"] #exportWorkspaceNpiHost { min-height: 0; }
+body[data-workspace="export"] .export-center-dialog { box-shadow: none; }
+
+/* Route-specific toolbar discipline: only Mapping displays the shared mapping
+   toolbar. This avoids duplicate actions on unrelated pages. */
+body:not([data-workspace="mapping"]) .workspace-toolbar { display: none !important; }
+
+@media (max-width: 1180px) {
+  body[data-workspace="mapping"] .app-shell { grid-template-columns: 245px minmax(0, 1fr) !important; }
+  body[data-workspace="mapping"] .right-panel { position: fixed !important; }
+  .home-card-grid { grid-template-columns: 1fr 1fr; }
+  .home-project-card { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  :root { --workspace-nav-width: 0px; }
+  .workspace-context-bar,
+  .app-shell { margin-left: 0 !important; width: 100% !important; }
+  body[data-workspace="import"] .app-shell,
+  body[data-workspace="mapping"] .app-shell,
+  body[data-workspace="editor"] .app-shell,
+  body[data-workspace="npi"] .app-shell,
+  body[data-workspace="validation"] .app-shell,
+  body[data-workspace="export"] .app-shell { grid-template-columns: 1fr !important; }
+  body[data-workspace="mapping"] .left-panel { max-height: none; }
+  .route-page.active { height: auto; min-height: calc(100vh - 190px); }
+  .route-page-heading { align-items: flex-start; flex-direction: column; }
+  .route-embed-host { min-height: 620px; }
+  .workspace-embedded .cad-editor-dialog,
+  .workspace-embedded .cad-studio-shell,
+  .workspace-embedded .npi-workspace-dialog,
+  .workspace-embedded .export-center-dialog { min-height: 620px; border-radius: 10px !important; }
+  .home-card-grid, .home-workflow-grid { grid-template-columns: 1fr; }
+  .home-project-card { grid-column: auto; }
+}
+/* v0.29.1 route-grid corrections */
+.route-page-export.active { grid-template-rows: auto minmax(0, 1fr); }
+.route-page-editor > .route-empty-state,
+.route-page-editor > .route-embed-host,
+.route-page-export > .route-embed-host { grid-row: 2; grid-column: 1; }
+body[data-workspace="mapping"] .viewer { display: block; }
+@media (max-width: 760px) {
+  body[data-workspace="import"] .workspace { display: grid !important; }
+}

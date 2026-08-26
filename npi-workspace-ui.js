@@ -149,12 +149,19 @@ export function initNpiWorkspace(context = {}) {
   }
 
   function open() {
+    if (overlay.classList.contains('workspace-embedded') && typeof window?.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('universalcad:workspace', { detail: { workspace: 'npi', action: false } }));
+    }
     overlay.classList.remove('hidden');
     refresh();
-    $('npiCloseButton')?.focus();
+    if (!overlay.classList.contains('workspace-embedded')) $('npiCloseButton')?.focus();
   }
 
   function close() {
+    if (overlay.classList.contains('workspace-embedded')) {
+      if (typeof window?.dispatchEvent === 'function' && typeof CustomEvent === 'function') window.dispatchEvent(new CustomEvent('universalcad:workspace', { detail: { workspace: 'home', action: false } }));
+      return;
+    }
     overlay.classList.add('hidden');
     $('npiWorkspaceButton')?.focus();
   }
@@ -482,7 +489,7 @@ export function initNpiWorkspace(context = {}) {
 
   $('npiWorkspaceButton')?.addEventListener('click', open);
   $('npiCloseButton')?.addEventListener('click', close);
-  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  overlay.addEventListener('click', (event) => { if (event.target === overlay && !overlay.classList.contains('workspace-embedded')) close(); });
   if (typeof overlay.querySelectorAll === 'function') overlay.querySelectorAll('[data-npi-tab]').forEach((button) => button.addEventListener('click', () => setTab(button.dataset.npiTab)));
   $('npiPcbSearch')?.addEventListener('input', renderPcbData);
   $('npiOpenProjectStorage')?.addEventListener('click', () => context.openProjectStorage?.());
@@ -623,7 +630,7 @@ export function initNpiWorkspace(context = {}) {
   });
 
   if (typeof document.addEventListener === 'function') document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden') && !overlay.classList.contains('workspace-embedded')) close();
   });
 
   setTab('overview');

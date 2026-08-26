@@ -20,7 +20,7 @@ try {
 }
 </script>
 <link href="./styles.css" rel="stylesheet"/>
-<title>Universal CAD Studio v0.29.0</title>
+<title>Universal CAD Studio v0.29.1</title>
 </head>
 <body>
 <header class="topbar">
@@ -32,10 +32,10 @@ try {
 </div>
 </div>
 <div class="top-actions">
-<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.29.0 · Schema 2</span>
+<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.29.1 · Schema 2</span>
 <span class="status-pill muted" id="projectStatus">No project open</span>
 <button class="ghost hidden" id="appUpdateButton" type="button">Update available · Update</button>
-<button class="npi-launch" id="npiWorkspaceButton" type="button">NPI Workspace</button>
+<button aria-hidden="true" class="npi-launch legacy-route-trigger" id="npiWorkspaceButton" tabindex="-1" type="button">NPI Workspace</button>
 <button class="top-action-button" id="commandPaletteButton" title="Command Palette (Ctrl+K)" type="button"><span>⌘</span><span class="top-action-label">Commands</span></button>
 <div class="theme-control">
 <button aria-expanded="false" class="top-action-button" id="themeToggleButton" type="button"><span data-theme-icon>◐</span><span class="top-action-label" data-theme-label>System</span></button>
@@ -52,13 +52,13 @@ try {
 </div>
 </header>
 <nav aria-label="Primary workspace navigation" class="primary-nav">
-<button class="active" data-workspace-route="home" type="button"><span class="nav-icon">⌂</span><span>Home</span></button>
-<button data-workspace-route="import" type="button"><span class="nav-icon">⇩</span><span>Import</span></button>
-<button data-workspace-route="editor" type="button"><span class="nav-icon">◇</span><span>Editor</span></button>
-<button data-workspace-route="mapping" type="button"><span class="nav-icon">⇄</span><span>Mapping</span></button>
-<button data-workspace-route="npi" type="button"><span class="nav-icon">▦</span><span>NPI</span></button>
-<button data-workspace-route="validation" type="button"><span class="nav-icon">✓</span><span>Validate</span></button>
-<button data-workspace-route="export" type="button"><span class="nav-icon">⇧</span><span>Export</span></button>
+<button class="active" data-workspace-route="home" title="Project dashboard and recent work" type="button"><span class="nav-icon">⌂</span><span>Home</span></button>
+<button data-workspace-route="import" title="Import CAD, BOM, placement, archives, and backups" type="button"><span class="nav-icon">⇩</span><span>Import</span></button>
+<button data-workspace-route="editor" title="Edit board, component, package, and land geometry" type="button"><span class="nav-icon">◇</span><span>Board</span></button>
+<button data-workspace-route="mapping" title="Map source records to CAD lands" type="button"><span class="nav-icon">⇄</span><span>Mapping</span></button>
+<button data-workspace-route="npi" title="Prepare packages, alignment, panelization, and automation" type="button"><span class="nav-icon">▦</span><span>Prepare</span></button>
+<button data-workspace-route="validation" title="Review project health, compatibility, revisions, and issues" type="button"><span class="nav-icon">✓</span><span>Validate</span></button>
+<button data-workspace-route="export" title="Export CAD, BOM, reports, and project backups" type="button"><span class="nav-icon">⇧</span><span>Export</span></button>
 </nav>
 <section class="workspace-context-bar" aria-label="Current workspace">
 <div class="workspace-context-copy"><small id="workspaceBreadcrumb">Project / Home</small><div><strong id="workspaceContextTitle">Home</strong><span id="workspaceContextSubtitle">Project status, recent work, recovery, and quick actions.</span></div></div>
@@ -67,7 +67,7 @@ try {
 </section>
 <main class="app-shell">
 <aside class="left-panel panel">
-<section class="panel-section import-section">
+<section class="panel-section import-section" data-workspace-section="import">
 <div class="section-heading">
 <div>
 <span class="eyebrow">1. IMPORT</span>
@@ -102,8 +102,8 @@ try {
 <p class="helper-text" id="importMessage">Files are processed locally in your browser and are not uploaded to a server.</p>
 <details class="archive-diagnostics hidden" id="archiveDiagnostics"><summary>File Diagnostics</summary><pre id="archiveDiagnosticsText">—</pre></details>
 </section>
-<section class="panel-section">
-<span class="eyebrow">2. AUTO DETECT</span>
+<section class="panel-section" data-workspace-section="import">
+<span class="eyebrow">2. SOURCE COLUMNS</span>
 <h2>Source Data Columns</h2>
 <div class="form-grid">
 <label>Component<select id="componentColumn"></select></label>
@@ -113,7 +113,7 @@ try {
 </div>
 <button class="primary full" disabled="" id="remapButton" type="button">Recalculate Mapping</button>
 </section>
-<section class="panel-section stats-section">
+<section class="panel-section stats-section" data-workspace-section="mapping">
 <span class="eyebrow">3. SUMMARY</span>
 <div class="stat-grid">
 <div class="stat"><span>Mapped</span><strong id="mappedStat">0</strong></div>
@@ -124,8 +124,8 @@ try {
 </div>
 <div class="formula-card" id="mappingFormula">No mapping strategy yet</div>
 </section>
-<section class="panel-section">
-<span class="eyebrow">4. VIEW</span>
+<section class="panel-section" data-workspace-section="mapping">
+<span class="eyebrow">VIEW & FILTER</span>
 <label>Active CAD
           <select id="activeCadSelect"><option value="">— No CAD loaded —</option></select>
 </label>
@@ -152,7 +152,7 @@ try {
 <section class="home-dashboard" id="homeDashboard">
 <div class="home-hero panel">
 <div><span class="eyebrow">PROJECT HOME</span><h2>Universal CAD Studio</h2><p>Import, edit, map, validate, and export manufacturing data through a guided project workflow.</p></div>
-<div class="home-build"><span>Build</span><strong id="homeBuild">v0.29.0</strong></div>
+<div class="home-build"><span>Build</span><strong id="homeBuild">v0.29.1</strong></div>
 </div>
 <div class="home-card-grid">
 <article class="home-card panel home-project-card"><span class="eyebrow">CURRENT PROJECT</span><h3 id="homeProjectStatus">No project open</h3><p id="homeActiveCad">No CAD loaded</p><div class="home-card-actions"><button data-ui-route="import" type="button">Open / Import</button><button class="primary" data-ui-route="mapping" type="button">Continue Mapping</button></div></article>
@@ -170,6 +170,24 @@ try {
 <button data-ui-route="export" type="button"><b>06</b><strong>Export</strong><span>Preflight and export CAD data, BOM, reports, or backups.</span></button>
 </div>
 </div>
+</section>
+<section class="route-page route-page-editor" data-route-page="editor" id="editorWorkspacePage">
+  <header class="route-page-heading panel"><div><span class="eyebrow">BOARD EDITOR</span><h2>Edit Board Geometry</h2><p>Component, package, land, transform, history, and CAD export tools live only on this page.</p></div></header>
+  <div class="route-empty-state panel" id="editorWorkspaceEmpty"><div class="route-empty-icon">◇</div><h3>No editable CAD is open</h3><p>Import a supported CAD source first. The editor will open here as a full workspace instead of a popup.</p><button class="primary" data-ui-route="import" type="button">Go to Import</button></div>
+  <div class="route-embed-host" id="editorWorkspaceHost"></div>
+</section>
+<section class="route-page route-page-npi" data-route-page="npi" id="npiWorkspacePage">
+  <header class="route-page-heading panel"><div><span class="eyebrow">NPI PREPARATION</span><h2>Prepare Manufacturing Data</h2><p>Package, alignment, panelization, reconciliation preparation, and safe automation are grouped here.</p></div></header>
+  <div class="route-embed-host" id="npiWorkspaceHost"></div>
+</section>
+<section class="route-page route-page-validation" data-route-page="validation" id="validationWorkspacePage">
+  <header class="route-page-heading panel"><div><span class="eyebrow">VALIDATION CENTER</span><h2>Review Before Release</h2><p>Project health, compatibility, PCB data, revision comparison, and reference checks are grouped here.</p></div></header>
+  <div class="route-embed-host" id="validationWorkspaceHost"></div>
+</section>
+<section class="route-page route-page-export" data-route-page="export" id="exportWorkspacePage">
+  <header class="route-page-heading panel"><div><span class="eyebrow">EXPORT CENTER</span><h2>Choose, Preflight, Export</h2><p>Manufacturing CAD, BOM, mapping reports, and project backups are grouped here.</p></div><button class="hidden" id="exportWorkspaceBackButton" type="button">← Back to Export Options</button></header>
+  <div class="route-embed-host" id="exportWorkspaceHost"></div>
+  <div class="route-embed-host hidden" id="exportWorkspaceNpiHost"></div>
 </section>
 <div class="workspace-toolbar panel">
 <div class="search-wrap">

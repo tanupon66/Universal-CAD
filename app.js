@@ -191,11 +191,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.0'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.1'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.29.0 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.1 · Development · Schema 2';
   }
 }
 
@@ -639,7 +639,7 @@ function showGlobalError(error, context = {}) {
   window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.29.0', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.1', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -797,10 +797,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.29.0'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.1'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.0.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.1.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -2649,7 +2649,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.0.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.1.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2709,7 +2709,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.0.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.1.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2735,7 +2735,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.29.0', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.1', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2744,7 +2744,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.0.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.1.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -4038,7 +4038,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.0.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.1.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -4796,6 +4796,10 @@ function renderCadEditor() {
 function openCadEditor() {
   const file = cadEditorFile();
   if (!file) return toast('Open a supported CAD, XML, ZIP, or TGZ file first');
+  const embeddedWorkspace = els.cadEditorOverlay?.classList.contains('workspace-embedded');
+  if (embeddedWorkspace && document.body.dataset.workspace !== 'editor' && typeof window?.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('universalcad:workspace', { detail: { workspace: 'editor', action: false } }));
+  }
   if (!file.editorModel) {
     const activeText = file.editedText || file.text;
     const source = file.renames?.size ? rewriteCadXml(activeText, file.renames) : activeText;
@@ -4824,7 +4828,9 @@ function openCadEditor() {
   closeCadEditorConfirm({ animate: false });
   setCadEditorBusy(false);
   els.cadEditorOverlay.classList.remove('hidden');
-  document.body.classList.add('cad-editor-open');
+  if (embeddedWorkspace) document.getElementById('editorWorkspaceEmpty')?.classList.add('hidden');
+  if (!embeddedWorkspace) document.body.classList.add('cad-editor-open');
+  else document.body.classList.remove('cad-editor-open');
   renderCadEditor();
   // Wait for the full-screen grid and canvas wrapper to finish stretching before fitting.
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -4875,11 +4881,15 @@ function finalizeCloseCadEditor() {
   state.cadEditor.visual.interaction = null;
   state.cadEditor.visual.spaceDown = false;
   els.cadEditorCanvas.classList.remove('panning', 'moving-selection', 'pan-tool');
+  const embeddedWorkspace = els.cadEditorOverlay?.classList.contains('workspace-embedded');
   els.cadEditorOverlay.classList.add('hidden');
   document.body.classList.remove('cad-editor-open');
   setCadEditorBusy(false);
   const file = cadEditorFile();
   requestAnimationFrame(() => window.setTimeout(() => refreshMainViewAfterCadEditor(file), 0));
+  if (embeddedWorkspace && document.body.dataset.workspace === 'editor' && typeof window?.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('universalcad:workspace', { detail: { workspace: 'mapping', action: false } }));
+  }
   return true;
 }
 function closeCadEditor(options = {}) {
@@ -6048,7 +6058,7 @@ els.cadExportXmlButton.addEventListener('click', exportCorrectedCadXml);
 els.cadInspectorPrevPage.addEventListener('click', () => { state.cadInspector.page -= 1; renderCadInspectorTable(); });
 els.cadInspectorNextPage.addEventListener('click', () => { state.cadInspector.page += 1; renderCadInspectorTable(); });
 els.closeCadEditorButton.addEventListener('click', () => closeCadEditor());
-els.cadEditorOverlay.addEventListener('click', (event) => { if (event.target === els.cadEditorOverlay) closeCadEditor(); });
+els.cadEditorOverlay.addEventListener('click', (event) => { if (event.target === els.cadEditorOverlay && !els.cadEditorOverlay.classList.contains('workspace-embedded')) closeCadEditor(); });
 els.cadStudioOpenButton?.addEventListener('click', () => closeCadEditor({ pendingAction: () => els.projectFile.click() }));
 els.appConfirmCancel?.addEventListener('click', () => closeAppConfirm(false));
 els.appConfirmAccept?.addEventListener('click', () => closeAppConfirm(true));
