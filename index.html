@@ -9,7 +9,7 @@
 <link href="./manifest.webmanifest" rel="manifest"/>
 <link href="./icons/icon.svg" rel="icon" type="image/svg+xml"/>
 <link href="./styles.css" rel="stylesheet"/>
-<title>Universal CAD Studio v0.26.0</title>
+<title>Universal CAD Studio v0.27.0</title>
 </head>
 <body>
 <header class="topbar">
@@ -21,7 +21,7 @@
 </div>
 </div>
 <div class="top-actions">
-<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.26.0 · Schema 2</span>
+<span class="status-pill muted" id="buildInfoBadge" title="App version · Build commit · Schema version">v0.27.0 · Schema 2</span>
 <span class="status-pill muted" id="projectStatus">No project open</span>
 <button class="ghost hidden" id="appUpdateButton" type="button">Update available · Update</button>
 <button class="npi-launch" id="npiWorkspaceButton" type="button">NPI Workspace</button>
@@ -1067,6 +1067,7 @@
 <nav aria-label="NPI workspace sections" class="npi-tabs">
 <button class="active" data-npi-tab="overview" type="button">Overview</button>
 <button data-npi-tab="compatibility" type="button">Compatibility</button>
+<button data-npi-tab="automation" type="button">Automation</button>
 <button data-npi-tab="packages" type="button">Packages</button>
 <button data-npi-tab="reconcile" type="button">Reconcile</button>
 <button data-npi-tab="alignment" type="button">Alignment</button>
@@ -1106,6 +1107,17 @@
 </div>
 <div class="npi-issue-list" id="npiCompatibilityIssues"><p class="npi-empty">No compatibility issues detected.</p></div>
 </section>
+
+<section class="npi-panel" data-npi-panel="automation">
+<div class="npi-section-card">
+<div class="npi-section-heading"><div><span class="eyebrow">SMART NPI AUTOMATION</span><h3>Safe Automation Preview</h3><p id="npiAutomationSummary">Analyze the current revision before applying any automatic correction.</p></div></div>
+<div class="npi-form-grid compact"><label>Rotation snap tolerance (degrees)<input id="npiAutomationRotationTolerance" min="0" max="10" step="0.1" type="number" value="2"/></label><div class="npi-readout"><span>Generic target readiness</span><strong id="npiTargetReadiness">—</strong></div></div>
+<div class="npi-actions"><button id="npiAutomationAnalyze" type="button">Analyze Suggestions</button><button class="primary" id="npiAutomationApplyRotations" type="button">Apply Safe Rotation Fixes</button></div>
+<p class="helper-text">Automation never mutates the immutable source. Applying suggestions creates a normal project revision and remains undo/rollback compatible.</p>
+<div class="npi-table-wrap"><table><thead><tr><th>Type</th><th>Subject</th><th>Suggestion</th><th>Confidence / rule</th></tr></thead><tbody id="npiAutomationBody"></tbody></table></div>
+</div>
+</section>
+
 <section class="npi-panel" data-npi-panel="packages">
 <div class="npi-section-card">
 <div class="npi-section-heading"><div><span class="eyebrow">PACKAGE INTELLIGENCE</span><h3>Package Library &amp; Auto Recognition</h3><p id="npiPackageLibrarySummary">0 packages</p></div><div class="npi-actions"><button id="npiSavePackageLibrary" type="button">Save Current Library</button><button id="npiClearPackageLibrary" type="button">Clear Local Library</button></div></div>

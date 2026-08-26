@@ -1552,7 +1552,7 @@ body.global-error-open { overflow: hidden; }
   .land-grid-manual-editor { grid-template-columns: 1fr; }
 }
 
-/* v0.26.0 visual system — neutral NPI workspace */
+/* v0.27.0 visual system — neutral NPI workspace */
 :root {
   --bg: #071019;
   --panel: rgba(14, 26, 38, .92);

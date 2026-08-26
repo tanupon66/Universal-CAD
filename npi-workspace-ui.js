@@ -29,6 +29,9 @@ import {
 } from './bom-export.js';
 import { safeDownloadName } from './export-safety.js';
 import { cloneCadValue } from './universal-cad-model.js';
+import { DEFAULT_TARGET_PROFILE, validateModelAgainstTargetProfile } from './target-profile-engine.js';
+import { runSmartNpiAutomation, proposeRotationNormalization } from './npi-automation.js';
+import { processInChunks } from './worker-pipeline.js';
 
 const PACKAGE_LIBRARY_KEY = 'universal-cad-package-library-v1';
 const EXPORT_PROFILE_KEY = 'universal-cad-export-profiles-v1';
@@ -93,12 +96,26 @@ export function initNpiWorkspace(context = {}) {
   const overlay = $('npiWorkspaceOverlay');
   if (!overlay) return { refresh() {} };
 
+  // v0.27 is injected defensively so older cached/index shells remain compatible during PWA update.
+  const tabNav = overlay.querySelector?.('.npi-tabs');
+  if (tabNav && !overlay.querySelector?.('[data-npi-tab="automation"]')) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.npiTab = 'automation'; button.textContent = 'Automation';
+    const compatibility = tabNav.querySelector('[data-npi-tab="compatibility"]'); compatibility?.after(button) || tabNav.append(button);
+  }
+  const workspaceBody = overlay.querySelector?.('.npi-workspace-body');
+  if (workspaceBody && !overlay.querySelector?.('[data-npi-panel="automation"]')) {
+    const section = document.createElement('section'); section.className = 'npi-panel'; section.dataset.npiPanel = 'automation';
+    section.innerHTML = `<div class="npi-section-card"><div class="npi-section-heading"><div><span class="eyebrow">SMART NPI AUTOMATION</span><h3>Safe Automation Preview</h3><p id="npiAutomationSummary">Analyze the current revision before applying any automatic correction.</p></div></div><div class="npi-form-grid compact"><label>Rotation snap tolerance (degrees)<input id="npiAutomationRotationTolerance" min="0" max="10" step="0.1" type="number" value="2"/></label><div class="npi-readout"><span>Generic target readiness</span><strong id="npiTargetReadiness">—</strong></div></div><div class="npi-actions"><button id="npiAutomationAnalyze" type="button">Analyze Suggestions</button><button class="primary" id="npiAutomationApplyRotations" type="button">Apply Safe Rotation Fixes</button></div><p class="helper-text">Automation never mutates the immutable source. Applying suggestions creates a normal project revision and remains undo/rollback compatible.</p><div class="npi-table-wrap"><table><thead><tr><th>Type</th><th>Subject</th><th>Suggestion</th><th>Confidence / rule</th></tr></thead><tbody id="npiAutomationBody"></tbody></table></div></div>`;
+    const packages = workspaceBody.querySelector('[data-npi-panel="packages"]'); packages?.before(section) || workspaceBody.append(section);
+  }
+
   const state = {
     tab: 'overview',
     goldenText: '',
     bomLayout: normalizeBomLayout(),
     customProfiles: loadJson(EXPORT_PROFILE_KEY, []),
     lastCalibration: null,
+    automationPreview: null,
   };
 
   const getProject = () => context.getProject?.() || null;
@@ -368,6 +385,28 @@ export function initNpiWorkspace(context = {}) {
     setText('npiBomSummary', `${currentBom().length} BOM rows · ${state.bomLayout.orientation === 'columns' ? 'Fields are columns (A, B, C…)' : 'Fields are rows (1, 2, 3…)'}`);
   }
 
+
+  function renderAutomation() {
+    const model = getModel();
+    const summary = $('npiAutomationSummary');
+    const body = $('npiAutomationBody');
+    if (!model) { if (summary) summary.textContent = 'Open a CAD project to run automation analysis.'; if (body) body.innerHTML = ''; return; }
+    const target = validateModelAgainstTargetProfile(model, DEFAULT_TARGET_PROFILE);
+    const preview = runSmartNpiAutomation(model, { rotation: { tolerance: Number($('npiAutomationRotationTolerance')?.value || 2) } });
+    state.automationPreview = preview;
+    if (summary) summary.textContent = `${preview.packageRecognition.length} package pattern(s) · ${preview.rotationNormalization.length} safe rotation suggestion(s) · ${target.summary.blocking} target blocking issue(s)`;
+    if (body) {
+      body.innerHTML = '';
+      const rows = [
+        ...preview.rotationNormalization.slice(0, 80).map((item) => ({ type: 'Rotation', subject: item.reference || item.componentId, detail: `${item.from}° → ${item.to}° (Δ ${formatNumber(item.delta, 3)}°)`, confidence: 'Tolerance rule' })),
+        ...preview.packageRecognition.slice(0, 80).map((item) => ({ type: 'Package', subject: item.currentName || item.packageId, detail: item.suggestedFamily, confidence: `${Math.round(Number(item.confidence || 0) * 100)}%` })),
+      ];
+      for (const item of rows) { const tr = document.createElement('tr'); tr.innerHTML = `<td>${htmlEscape(item.type)}</td><td>${htmlEscape(item.subject)}</td><td>${htmlEscape(item.detail)}</td><td>${htmlEscape(item.confidence)}</td>`; body.append(tr); }
+      if (!rows.length) body.innerHTML = '<tr><td colspan="4" class="npi-empty">No automation suggestions.</td></tr>';
+    }
+    setText('npiTargetReadiness', target.compatible ? 'Ready' : 'Needs review');
+  }
+
   function renderGolden() {
     if (!state.goldenText) {
       setText('npiGoldenSummary', 'Load a trusted reference XML to compare structure and formatting.');
@@ -387,6 +426,7 @@ export function initNpiWorkspace(context = {}) {
       panel: renderPanel,
       bom: renderBomLayout,
       golden: renderGolden,
+      automation: renderAutomation,
     }[tab] || (() => {}))();
   }
 
@@ -400,6 +440,21 @@ export function initNpiWorkspace(context = {}) {
   overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
   if (typeof overlay.querySelectorAll === 'function') overlay.querySelectorAll('[data-npi-tab]').forEach((button) => button.addEventListener('click', () => setTab(button.dataset.npiTab)));
   $('npiOpenProjectStorage')?.addEventListener('click', () => context.openProjectStorage?.());
+
+
+  $('npiAutomationAnalyze')?.addEventListener('click', renderAutomation);
+  $('npiAutomationApplyRotations')?.addEventListener('click', async () => {
+    const model = getModel(); if (!model) return;
+    const tolerance = Number($('npiAutomationRotationTolerance')?.value || 2);
+    const proposals = proposeRotationNormalization(model, { tolerance });
+    if (!proposals.length) { toast?.('No safe rotation normalization suggestions.'); return; }
+    const next = cloneCadValue(model); const byId = new Map((next.components || []).map((item) => [String(item.id), item]));
+    await processInChunks(proposals, async (chunk) => { for (const item of chunk) { const component = byId.get(String(item.componentId)); if (component) component.rotation = item.to; } return chunk.length; }, { chunkSize: 250 });
+    try {
+      const result = await context.commitModelChange?.({ label: 'Apply safe NPI rotation normalization', model: next, changes: proposals.map((item) => ({ type: 'normalize-rotation', ...item })) });
+      toast?.(`Applied ${proposals.length} rotation normalization(s) as revision ${result?.revision ?? 'new'}.`); refresh();
+    } catch (error) { toast?.(error.message); }
+  });
 
   $('npiProfileSelect')?.addEventListener('change', renderCompatibility);
   $('npiSaveCustomProfile')?.addEventListener('click', saveCustomProfile);
