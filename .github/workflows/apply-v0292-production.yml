@@ -1,0 +1,60 @@
+name: Apply v0.29.2 production release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-v0292-production.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and apply tested v0.29.2 production patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp v0292-production.patch.gz.b64 /tmp/v0292.b64
+          echo "68c3b8b004f6f7eadc6e57eaf8424fd90789429143c404636d1849ff71fddefa  /tmp/v0292.b64" | sha256sum -c -
+          base64 -d /tmp/v0292.b64 > /tmp/v0292.patch.gz
+          echo "786f8ca9984da1ffaf6d69413d62f1e2cddd0f7c72fe768288b35519adff8604  /tmp/v0292.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/v0292.patch.gz > /tmp/v0292.patch
+          echo "4c11c49bf348ddefe0c1bf12bbac00bf1cb9cc4984fbab36aeae5881ae516999  /tmp/v0292.patch" | sha256sum -c -
+          git apply --check /tmp/v0292.patch
+          git apply /tmp/v0292.patch
+
+      - name: Static production sanity gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Universal CAD Studio v0.29.2' index.html
+          grep -q '"version": "0.29.2"' manifest.webmanifest
+          grep -q "const APP_VERSION = '0.29.2'" sw.js
+          grep -q 'Universal CAD Studio v0.29.2 — route width / ghost-column hotfix' styles.css
+          grep -q 'grid-template-areas: "workspace" !important' styles.css
+          grep -q 'grid-template-columns: 268px minmax(0, 1fr) !important' styles.css
+          node -e "const m=require('./build-info.json'); if(m.appVersion!=='0.29.2') process.exit(1)"
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "app.js build-info.json index.html manifest.webmanifest styles.css sw.js ui-shell.js "
+
+      - name: Clean release staging files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f v0292-production.patch.gz.b64 .github/workflows/apply-v0292-production.yml
+
+      - name: Commit v0.29.2 production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js build-info.json index.html manifest.webmanifest styles.css sw.js ui-shell.js
+          git commit -m 'Release Universal CAD Studio v0.29.2'
+          git push origin HEAD:main
