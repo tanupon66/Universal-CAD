@@ -2215,3 +2215,77 @@ body[data-workspace="mapping"] .viewer { display: block; }
 @media (max-width: 760px) {
   body[data-workspace="import"] .workspace { display: grid !important; }
 }
+
+/* --------------------------------------------------------------------------
+   Universal CAD Studio v0.29.2 — route width / ghost-column hotfix
+   Legacy grid-template-areas from the pre-route layout must not reserve
+   invisible columns after a workspace hides its contextual side panels.
+   -------------------------------------------------------------------------- */
+body[data-workspace="home"] .app-shell,
+body[data-workspace="editor"] .app-shell,
+body[data-workspace="npi"] .app-shell,
+body[data-workspace="validation"] .app-shell,
+body[data-workspace="export"] .app-shell {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-areas: "workspace" !important;
+}
+
+body[data-workspace="import"] .app-shell {
+  grid-template-columns: minmax(310px, 380px) minmax(0, 1fr) !important;
+  grid-template-areas: "sidebar workspace" !important;
+}
+
+/* Land details is an explicit drawer, therefore Mapping needs only the
+   contextual tool column plus the board workspace. Never reserve a dead
+   third column for the drawer. */
+body[data-workspace="mapping"] .app-shell {
+  grid-template-columns: 268px minmax(0, 1fr) !important;
+  grid-template-areas: "sidebar workspace" !important;
+}
+
+body[data-workspace="home"] .workspace,
+body[data-workspace="editor"] .workspace,
+body[data-workspace="npi"] .workspace,
+body[data-workspace="validation"] .workspace,
+body[data-workspace="export"] .workspace,
+.route-page,
+.route-page-heading,
+.route-embed-host {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  justify-self: stretch;
+}
+
+.route-page.active { align-self: stretch; }
+.workspace-embedded .npi-workspace-dialog,
+.workspace-embedded .export-center-dialog,
+.workspace-embedded .cad-editor-dialog,
+.workspace-embedded .cad-studio-shell {
+  width: 100% !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  body[data-workspace="mapping"] .app-shell {
+    grid-template-columns: 245px minmax(0, 1fr) !important;
+    grid-template-areas: "sidebar workspace" !important;
+  }
+}
+
+@media (max-width: 760px) {
+  body[data-workspace="home"] .app-shell,
+  body[data-workspace="import"] .app-shell,
+  body[data-workspace="mapping"] .app-shell,
+  body[data-workspace="editor"] .app-shell,
+  body[data-workspace="npi"] .app-shell,
+  body[data-workspace="validation"] .app-shell,
+  body[data-workspace="export"] .app-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: "workspace" !important;
+  }
+  body[data-workspace="import"] .app-shell {
+    grid-template-areas: "sidebar" !important;
+  }
+}

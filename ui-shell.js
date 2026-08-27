@@ -172,7 +172,7 @@ function updateWorkspaceHome() {
   set('homeUnmapped', $('unmappedStat')?.textContent || '0');
   set('homeCadLands', $('xmlLandStat')?.textContent || '0');
   set('homeRawParts', $('componentStat')?.textContent || '0');
-  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.1');
+  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.2');
   set('homeActiveCad', $('activeCadSelect')?.selectedOptions?.[0]?.textContent || 'No CAD loaded');
 }
 
@@ -486,7 +486,7 @@ export function initUiShell() {
   bindShellEvents();
   observeHomeMetrics();
   setWorkspace('home', { action: false });
-  addNotification('Universal CAD Studio v0.29.1 workspace navigation is ready.', 'success');
+  addNotification('Universal CAD Studio v0.29.2 workspace navigation is ready.', 'success');
 
   const media = window.matchMedia?.('(prefers-color-scheme: light)');
   media?.addEventListener?.('change', () => {
