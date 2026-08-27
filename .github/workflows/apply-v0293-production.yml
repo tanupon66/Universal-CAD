@@ -1,0 +1,72 @@
+name: Apply v0.29.3 production release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-v0293-production.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reassemble and verify tested v0.29.3 production patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v0293-production.patch.gz.b64.part1 \
+              v0293-production.patch.gz.b64.part2 \
+              v0293-production.patch.gz.b64.part3 \
+              v0293-production.patch.gz.b64.part4 > /tmp/v0293.b64
+          echo "5a6ab96096829e2ee367590d53bf6704f5de1c41a7d6d2b6d4ef4b0c9dd1df12  /tmp/v0293.b64" | sha256sum -c -
+          base64 -d /tmp/v0293.b64 > /tmp/v0293.patch.gz
+          echo "b6420f2e329db5ac241f4215b01c4962729f7978bf80b5d0b6e18071a5c1fb04  /tmp/v0293.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/v0293.patch.gz > /tmp/v0293.patch
+          echo "04881c3d79028dde07faba4d92e6342315fe723bad7de38df38744db4efed3c9  /tmp/v0293.patch" | sha256sum -c -
+          git apply --check /tmp/v0293.patch
+          git apply /tmp/v0293.patch
+
+      - name: Static production sanity gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Universal CAD Studio v0.29.3' index.html
+          grep -q '"version": "0.29.3"' manifest.webmanifest
+          grep -q "const APP_VERSION = '0.29.3'" sw.js
+          grep -q 'Universal CAD Studio v0.29.3 — immersive editor + unified CAD theme' styles.css
+          grep -q 'grid-template-columns: 268px minmax(0, 1fr) !important' styles.css
+          grep -q "from './component-population.js'" app.js
+          grep -q 'findNonPopComponents' app.js
+          node -e "const m=require('./build-info.json'); if(m.appVersion!=='0.29.3') process.exit(1)"
+          node --check app.js
+          node --check cad-editor.js
+          node --check component-population.js
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "app.js build-info.json cad-editor.js index.html manifest.webmanifest parsers.js pcb-ascii-formats.js precache-manifest.js project-session.js styles.css sw.js ui-shell.js universal-cad-model.js "
+
+      - name: Clean release staging files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f v0293-production.patch.gz.b64.part1 \
+                    v0293-production.patch.gz.b64.part2 \
+                    v0293-production.patch.gz.b64.part3 \
+                    v0293-production.patch.gz.b64.part4 \
+                    .github/workflows/apply-v0293-production.yml
+          git rm -f --ignore-unmatch __probe_should_not_exist__
+
+      - name: Commit v0.29.3 production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js build-info.json cad-editor.js component-population.js index.html manifest.webmanifest parsers.js pcb-ascii-formats.js precache-manifest.js project-session.js styles.css sw.js ui-shell.js universal-cad-model.js
+          git commit -m 'Release Universal CAD Studio v0.29.3'
+          git push origin HEAD:main
