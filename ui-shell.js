@@ -123,6 +123,24 @@ function toggleEditorFullscreen() {
   setEditorFullscreen(!document.body.classList.contains('cad-editor-user-fullscreen'));
 }
 
+function syncEditorWorkspaceState({ openIfAvailable = false } = {}) {
+  const overlay = $('cadEditorOverlay');
+  const host = $('editorWorkspaceHost');
+  const empty = $('editorWorkspaceEmpty');
+  const trigger = $('cadEditorButton');
+  let opened = Boolean(overlay && !overlay.classList.contains('hidden'));
+
+  if (!opened && openIfAvailable && trigger && !trigger.disabled) {
+    trigger.click();
+    opened = Boolean(overlay && !overlay.classList.contains('hidden'));
+  }
+
+  host?.classList.toggle('hidden', !opened);
+  empty?.classList.toggle('hidden', opened);
+  if (!opened) overlay?.classList.add('hidden');
+  return opened;
+}
+
 function setEmbeddedModalState(overlay, embedded = true) {
   if (!overlay) return;
   overlay.classList.toggle('workspace-embedded', embedded);
@@ -132,7 +150,11 @@ function setEmbeddedModalState(overlay, embedded = true) {
 function dockWorkspaceSurfaces() {
   const editor = $('cadEditorOverlay');
   const editorHost = $('editorWorkspaceHost');
-  if (editor && editorHost) { editorHost.append(editor); setEmbeddedModalState(editor, true); }
+  if (editor && editorHost) {
+    editorHost.append(editor);
+    setEmbeddedModalState(editor, true);
+    syncEditorWorkspaceState({ openIfAvailable: false });
+  }
 
   const npi = $('npiWorkspaceOverlay');
   const npiHost = $('npiWorkspaceHost');
@@ -186,7 +208,7 @@ function updateWorkspaceHome() {
   set('homeUnmapped', $('unmappedStat')?.textContent || '0');
   set('homeCadLands', $('xmlLandStat')?.textContent || '0');
   set('homeRawParts', $('componentStat')?.textContent || '0');
-  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.4');
+  set('homeBuild', $('buildInfoBadge')?.textContent || 'v0.29.5');
   set('homeActiveCad', $('activeCadSelect')?.selectedOptions?.[0]?.textContent || 'No CAD loaded');
 }
 
@@ -226,13 +248,15 @@ function setWorkspace(name, { action = true } = {}) {
     exportBack?.classList.add('hidden');
   }
 
-  if (!action) return;
+  if (!action) {
+    if (next === 'editor') syncEditorWorkspaceState({ openIfAvailable: false });
+    return;
+  }
   if (next === 'import') {
     document.querySelector('.left-panel')?.scrollTo?.({ top: 0, behavior: 'smooth' });
     setTimeout(() => $('dropZone')?.focus?.(), 0);
   } else if (next === 'editor') {
-    const opened = clickWhenEnabled('cadEditorButton');
-    editorEmpty?.classList.toggle('hidden', opened);
+    syncEditorWorkspaceState({ openIfAvailable: true });
   } else if (next === 'mapping') {
     $('searchInput')?.focus?.();
   }
@@ -503,7 +527,7 @@ export function initUiShell() {
   bindShellEvents();
   observeHomeMetrics();
   setWorkspace('home', { action: false });
-  addNotification('Universal CAD Studio v0.29.4 workspace navigation is ready.', 'success');
+  addNotification('Universal CAD Studio v0.29.5 workspace navigation is ready.', 'success');
 
   const media = window.matchMedia?.('(prefers-color-scheme: light)');
   media?.addEventListener?.('change', () => {

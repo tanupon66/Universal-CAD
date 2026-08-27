@@ -2316,51 +2316,6 @@ html[data-theme="light"] {
   --canvas-marquee-stroke: #176da4;
 }
 
-body[data-workspace="editor"] { overflow: hidden !important; }
-body[data-workspace="editor"] #editorWorkspacePage,
-body[data-workspace="editor"] #editorWorkspaceHost {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 180 !important;
-  width: 100vw !important;
-  height: 100dvh !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  background: var(--bg) !important;
-}
-body[data-workspace="editor"] #editorWorkspacePage > .route-page-heading,
-body[data-workspace="editor"] #editorWorkspaceEmpty { display: none !important; }
-body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 190 !important;
-  width: 100vw !important;
-  height: 100dvh !important;
-  max-width: none !important;
-  max-height: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  background: var(--bg) !important;
-  backdrop-filter: none !important;
-}
-body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded.hidden { display: none !important; }
-body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-editor-dialog,
-body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-shell {
-  width: 100vw !important;
-  height: 100dvh !important;
-  max-width: none !important;
-  max-height: none !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
 
 /* CAD Studio surfaces inherit the global theme. This intentionally overrides
    older hard-coded dark editor colors instead of maintaining a second theme. */
@@ -2499,18 +2454,6 @@ body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-s
 .cad-population-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .cad-population-actions .danger-button { color: var(--danger); }
 
-@media (max-width: 760px) {
-  body[data-workspace="editor"] { padding-bottom: 0 !important; }
-  body[data-workspace="editor"] #editorWorkspacePage,
-  body[data-workspace="editor"] #editorWorkspaceHost,
-  body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded,
-  body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-shell {
-    width: 100vw !important;
-    height: 100dvh !important;
-    min-height: 0 !important;
-    border-radius: 0 !important;
-  }
-}
 
 /* v0.29.3 theme completeness for editor helper/confirmation surfaces */
 .cad-dock-helper {
@@ -2535,76 +2478,62 @@ body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-s
 .cad-confirm-summary,
 .cad-editor-busy-actions button { background: var(--control); border-color: var(--line); color: var(--text); }
 
-/* v0.29.3 Board Editor blank-route hotfix
-   Keep the route heading/empty state visible until the embedded editor is
-   actually opened. When the editor opens, JS adds .hidden to the empty state
-   and the fixed editor overlay covers the route surface. */
+/* --------------------------------------------------------------------------
+   Universal CAD Studio v0.29.5 — deterministic Board Editor route state
+   The routed Board page is always normal workspace content. A hidden editor
+   host can never cover the no-CAD empty state. Fullscreen is opt-in only.
+   -------------------------------------------------------------------------- */
+body[data-workspace="editor"] { overflow: hidden; }
+body[data-workspace="editor"] #editorWorkspacePage {
+  position: static;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  background: transparent;
+}
 body[data-workspace="editor"] #editorWorkspacePage > .route-page-heading {
-  display: flex !important;
+  display: flex;
 }
 body[data-workspace="editor"] #editorWorkspaceEmpty {
-  display: grid !important;
+  grid-row: 2;
+  grid-column: 1;
+  display: grid;
+  min-height: 320px;
 }
-body[data-workspace="editor"] #editorWorkspaceEmpty.hidden {
-  display: none !important;
+body[data-workspace="editor"] #editorWorkspaceEmpty.hidden { display: none !important; }
+body[data-workspace="editor"] #editorWorkspaceHost {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
 }
-
-
-/* v0.29.4 Board Editor navigation + opt-in fullscreen
-   Board Editor stays inside the routed workspace by default. The viewport
-   takeover is enabled only by the explicit Fullscreen button. */
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) {
-  overflow: hidden !important;
-}
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #editorWorkspacePage {
-  position: static !important;
-  inset: auto !important;
-  z-index: auto !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  background: transparent !important;
-  display: grid !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
-  gap: 10px !important;
-}
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #editorWorkspaceHost {
+body[data-workspace="editor"] #editorWorkspaceHost.hidden { display: none !important; }
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded {
   position: relative !important;
   inset: auto !important;
   z-index: auto !important;
   width: 100% !important;
   height: 100% !important;
-  max-width: none !important;
   min-width: 0 !important;
   min-height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  background: transparent !important;
-}
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #editorWorkspacePage > .route-page-heading {
-  display: flex !important;
-}
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #cadEditorOverlay.workspace-embedded {
-  position: relative !important;
-  inset: auto !important;
-  z-index: auto !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  max-height: none !important;
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
   backdrop-filter: none !important;
 }
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #cadEditorOverlay.workspace-embedded .cad-editor-dialog,
-body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #cadEditorOverlay.workspace-embedded .cad-studio-shell {
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded.hidden { display: none !important; }
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-editor-dialog,
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-shell {
   width: 100% !important;
   height: 100% !important;
   max-width: none !important;
@@ -2631,7 +2560,7 @@ body.cad-editor-user-fullscreen[data-workspace="editor"] #cadEditorOverlay.works
   background: var(--bg) !important;
 }
 body.cad-editor-user-fullscreen[data-workspace="editor"] #editorWorkspacePage { z-index: 180 !important; }
-body.cad-editor-user-fullscreen[data-workspace="editor"] #editorWorkspaceHost { z-index: 185 !important; }
+body.cad-editor-user-fullscreen[data-workspace="editor"] #editorWorkspaceHost { z-index: 185 !important; display: block !important; }
 body.cad-editor-user-fullscreen[data-workspace="editor"] #cadEditorOverlay.workspace-embedded { z-index: 190 !important; }
 body.cad-editor-user-fullscreen[data-workspace="editor"] #editorWorkspacePage > .route-page-heading,
 body.cad-editor-user-fullscreen[data-workspace="editor"] #editorWorkspaceEmpty { display: none !important; }
@@ -2649,10 +2578,11 @@ body.cad-editor-user-fullscreen[data-workspace="editor"] #cadEditorOverlay.works
 }
 
 @media (max-width: 820px) {
-  body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #editorWorkspacePage {
-    min-height: calc(100dvh - 150px) !important;
+  body[data-workspace="editor"] { overflow: auto; }
+  body[data-workspace="editor"] #editorWorkspacePage {
+    height: auto;
+    min-height: calc(100dvh - 150px);
+    overflow: visible;
   }
-  body[data-workspace="editor"]:not(.cad-editor-user-fullscreen) #editorWorkspaceHost {
-    min-height: 620px !important;
-  }
+  body[data-workspace="editor"] #editorWorkspaceHost:not(.hidden) { min-height: 620px; }
 }
