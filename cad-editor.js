@@ -34,6 +34,10 @@ export function createCadEditorModel(xmlTextOrParsed) {
     centerX: component.centerX,
     centerY: component.centerY,
     angle: component.angle,
+    variation: String(component.variation || ''),
+    populationStatus: String(component.populationStatus || ''),
+    nonPop: Boolean(component.nonPop),
+    sourceMetadata: component.sourceMetadata && typeof component.sourceMetadata === 'object' ? { ...component.sourceMetadata } : {},
     isNew: Boolean(component.inferred),
     lands: (component.lands || []).map((land) => component.inferred ? { ...cloneLand(land), isNew: true, originalComponentId: null, originalGlobalId: null } : cloneLand(land)),
   }));
@@ -138,6 +142,10 @@ export function cadEditorModelToData(model) {
       centerX: Number.isFinite(Number(source.centerX)) ? Number(source.centerX) : null,
       centerY: Number.isFinite(Number(source.centerY)) ? Number(source.centerY) : null,
       angle: Number.isFinite(Number(source.angle)) ? Number(source.angle) : null,
+      variation: String(source.variation || ''),
+      populationStatus: String(source.populationStatus || ''),
+      nonPop: Boolean(source.nonPop),
+      sourceMetadata: source.sourceMetadata && typeof source.sourceMetadata === 'object' ? { ...source.sourceMetadata } : {},
       lands,
     };
     if (lands.length) {
@@ -202,6 +210,10 @@ export async function cadEditorModelToDataAsync(model, options = {}) {
       centerX: Number.isFinite(Number(source.centerX)) ? Number(source.centerX) : null,
       centerY: Number.isFinite(Number(source.centerY)) ? Number(source.centerY) : null,
       angle: Number.isFinite(Number(source.angle)) ? Number(source.angle) : null,
+      variation: String(source.variation || ''),
+      populationStatus: String(source.populationStatus || ''),
+      nonPop: Boolean(source.nonPop),
+      sourceMetadata: source.sourceMetadata && typeof source.sourceMetadata === 'object' ? { ...source.sourceMetadata } : {},
       lands,
     };
     if (lands.length) {
@@ -355,6 +367,10 @@ export function addComponent(model, values = {}) {
     centerX: Number.isFinite(Number(values.centerX)) ? Number(values.centerX) : 0,
     centerY: Number.isFinite(Number(values.centerY)) ? Number(values.centerY) : 0,
     angle: Number.isFinite(Number(values.angle)) ? Number(values.angle) : 0,
+    variation: String(values.variation || ''),
+    populationStatus: String(values.populationStatus || ''),
+    nonPop: Boolean(values.nonPop),
+    sourceMetadata: values.sourceMetadata && typeof values.sourceMetadata === 'object' ? { ...values.sourceMetadata } : {},
     isNew: true,
     lands: [],
   };
@@ -585,6 +601,10 @@ function updateComponentNode(node, component) {
   if (!item) { item = node.ownerDocument.createElement('ComponentInformationItem'); node.appendChild(item); }
   item.setAttribute('ComponentNumberId', String(component.packageName || ''));
   item.setAttribute('ComponentNumberRevision', String(component.revision || ''));
+  if (component.variation) item.setAttribute('UCADVariation', String(component.variation)); else item.removeAttribute('UCADVariation');
+  if (component.populationStatus) item.setAttribute('UCADPopulationStatus', String(component.populationStatus)); else item.removeAttribute('UCADPopulationStatus');
+  if (component.nonPop) item.setAttribute('UCADNonPop', 'true'); else item.removeAttribute('UCADNonPop');
+  if (component.sourceMetadata && typeof component.sourceMetadata === 'object' && Object.keys(component.sourceMetadata).length) item.setAttribute('UCADSourceMetadata', JSON.stringify(component.sourceMetadata)); else item.removeAttribute('UCADSourceMetadata');
   let position = node.getElementsByTagName('PositionAngle')[0];
   if (!position) { position = node.ownerDocument.createElement('PositionAngle'); node.appendChild(position); }
   setNumberAttribute(position, 'CenterPosX', component.centerX);
@@ -623,6 +643,18 @@ function numericAttribute(value) {
   return Number.isFinite(number) ? String(number) : '';
 }
 
+function standaloneComponentItemAttributes(component) {
+  const attrs = [
+    `ComponentNumberId="${xmlAttribute(component.packageName)}"`,
+    `ComponentNumberRevision="${xmlAttribute(component.revision)}"`,
+  ];
+  if (component.variation) attrs.push(`UCADVariation="${xmlAttribute(component.variation)}"`);
+  if (component.populationStatus) attrs.push(`UCADPopulationStatus="${xmlAttribute(component.populationStatus)}"`);
+  if (component.nonPop) attrs.push('UCADNonPop="true"');
+  if (component.sourceMetadata && typeof component.sourceMetadata === 'object' && Object.keys(component.sourceMetadata).length) attrs.push(`UCADSourceMetadata="${xmlAttribute(JSON.stringify(component.sourceMetadata))}"`);
+  return attrs.join(' ');
+}
+
 export function serializeCadEditorModelStandalone(model, options = {}) {
   const side = options.side || 'all';
   const keepLand = (land) => side === 'all' || normalizeSide(land.side) === side;
@@ -633,7 +665,7 @@ export function serializeCadEditorModelStandalone(model, options = {}) {
   chunks.push('  <Components>\n');
   for (const component of components) {
     chunks.push(`    <ComponentInformation Id="${xmlAttribute(component.id)}" Name="${xmlAttribute(component.name)}">\n`);
-    chunks.push(`      <ComponentInformationItem ComponentNumberId="${xmlAttribute(component.packageName)}" ComponentNumberRevision="${xmlAttribute(component.revision)}"/>\n`);
+    chunks.push(`      <ComponentInformationItem ${standaloneComponentItemAttributes(component)}/>\n`);
     chunks.push(`      <PositionAngle CenterPosX="${xmlAttribute(numericAttribute(component.centerX))}" CenterPosY="${xmlAttribute(numericAttribute(component.centerY))}" Angle="${xmlAttribute(numericAttribute(component.angle))}"/>\n`);
     chunks.push('    </ComponentInformation>\n');
   }
@@ -666,7 +698,7 @@ export async function serializeCadEditorModelStandaloneAsync(model, options = {}
   chunks.push('  <Components>\n');
   for (const component of components) {
     chunks.push(`    <ComponentInformation Id="${xmlAttribute(component.id)}" Name="${xmlAttribute(component.name)}">\n`);
-    chunks.push(`      <ComponentInformationItem ComponentNumberId="${xmlAttribute(component.packageName)}" ComponentNumberRevision="${xmlAttribute(component.revision)}"/>\n`);
+    chunks.push(`      <ComponentInformationItem ${standaloneComponentItemAttributes(component)}/>\n`);
     chunks.push(`      <PositionAngle CenterPosX="${xmlAttribute(numericAttribute(component.centerX))}" CenterPosY="${xmlAttribute(numericAttribute(component.centerY))}" Angle="${xmlAttribute(numericAttribute(component.angle))}"/>\n`);
     chunks.push('    </ComponentInformation>\n');
   }

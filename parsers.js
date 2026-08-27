@@ -1,5 +1,6 @@
 import { ZipArchive } from './zip-reader.js';
 import { assertSafeXml } from './import-adapters.js';
+import { populationInfo } from './component-population.js';
 
 function decodeXml(value = '') {
   return value
@@ -16,6 +17,28 @@ function attrs(text = '') {
   let match;
   while ((match = re.exec(text))) result[match[1]] = decodeXml(match[3]);
   return result;
+}
+
+
+function parseSourceMetadata(item = {}, componentAttributes = {}, body = '') {
+  let sourceMetadata = {};
+  if (item.UCADSourceMetadata) {
+    try {
+      const parsed = JSON.parse(item.UCADSourceMetadata);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) sourceMetadata = parsed;
+    } catch { /* malformed optional metadata is ignored */ }
+  }
+  for (const [key, value] of Object.entries(item)) {
+    if (['ComponentNumberId','ComponentNumberRevision','UCADSourceMetadata','UCADVariation','UCADPopulationStatus','UCADNonPop'].includes(key)) continue;
+    if (value != null && String(value).trim() !== '') sourceMetadata[key] = value;
+  }
+  for (const [key, value] of Object.entries(componentAttributes || {})) {
+    if (['Id','Name'].includes(key)) continue;
+    if (value != null && String(value).trim() !== '' && !(key in sourceMetadata)) sourceMetadata[key] = value;
+  }
+  const namedState = String(body || '').match(/<(?:[A-Za-z_][\w.-]*:)?(?:Variation|Variant|Population|PopulationStatus)\b[^>]*\bName\s*=\s*(["'])([\s\S]*?)\1/i)?.[2];
+  if (namedState && !sourceMetadata.Variation) sourceMetadata.Variation = decodeXml(namedState);
+  return sourceMetadata;
 }
 
 function numberOrNull(value) {
@@ -189,6 +212,11 @@ export function parseInspectionXml(xmlText) {
     const posTag = body.match(/<(?:[A-Za-z_][\w.-]*:)?PositionAngle\b([^>]*)\/?\s*>/i);
     const item = itemTag ? attrs(itemTag[1]) : {};
     const pos = posTag ? attrs(posTag[1]) : {};
+    const sourceMetadata = parseSourceMetadata(item, a, body);
+    const variation = item.UCADVariation || sourceMetadata.Variation || sourceMetadata.VARIATION || sourceMetadata.Variant || sourceMetadata.VARIANT || '';
+    const populationStatus = item.UCADPopulationStatus || sourceMetadata.PopulationStatus || sourceMetadata.POPULATIONSTATUS || sourceMetadata.Population || sourceMetadata.POPULATION || '';
+    const explicitNonPop = /^(?:1|true|yes)$/i.test(String(item.UCADNonPop || '').trim());
+    const population = populationInfo({ variation, populationStatus, sourceMetadata, nonPop: explicitNonPop });
     const component = {
       id: String(a.Id ?? ''),
       name: a.Name || '',
@@ -197,6 +225,10 @@ export function parseInspectionXml(xmlText) {
       centerX: numberOrNull(pos.CenterPosX),
       centerY: numberOrNull(pos.CenterPosY),
       angle: numberOrNull(pos.Angle),
+      variation: String(variation || ''),
+      populationStatus: String(populationStatus || ''),
+      nonPop: population.nonPop,
+      sourceMetadata,
       lands: [],
     };
     components.push(component);
@@ -238,6 +270,10 @@ export function parseInspectionXml(xmlText) {
         centerX: null,
         centerY: null,
         angle: null,
+        variation: '',
+        populationStatus: '',
+        nonPop: false,
+        sourceMetadata: {},
         lands: [],
         inferred: true,
       };

@@ -1,4 +1,5 @@
 import { ParseError, ValidationError } from './cad-errors.js';
+import { compactPopulationMetadata, inferPopulationFields } from './component-population.js';
 
 const MM_PER_INCH = 25.4;
 const DEFAULT_LAND_MM = 0.5;
@@ -84,8 +85,20 @@ function boardBoundsFromLines(lines, scale) {
   const xs = points.map((p) => p.x); const ys = points.map((p) => p.y);
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
+function componentMetadataAttributes(component = {}) {
+  const metadata = compactPopulationMetadata(component.sourceMetadata || component.metadata || {});
+  const attributes = [
+    `ComponentNumberId="${xmlEscape(component.packageName)}"`,
+    `ComponentNumberRevision="${xmlEscape(component.revision || '')}"`,
+  ];
+  if (component.variation) attributes.push(`UCADVariation="${xmlEscape(component.variation)}"`);
+  if (component.populationStatus) attributes.push(`UCADPopulationStatus="${xmlEscape(component.populationStatus)}"`);
+  if (component.nonPop) attributes.push('UCADNonPop="true"');
+  if (Object.keys(metadata).length) attributes.push(`UCADSourceMetadata="${xmlEscape(JSON.stringify(metadata))}"`);
+  return attributes.join(' ');
+}
 function makeInspectionXml({ boardName, boardWidth, boardHeight, boardThickness = 0, components, lands, sourceFormat }) {
-  const componentXml = components.map((component) => `    <ComponentInformation Id="${xmlEscape(component.id)}" Name="${xmlEscape(component.ref)}"><ComponentInformationItem ComponentNumberId="${xmlEscape(component.packageName)}" ComponentNumberRevision="${xmlEscape(component.revision || '')}"/><PositionAngle CenterPosX="${component.x}" CenterPosY="${component.y}" Angle="${component.rotation}"/></ComponentInformation>`).join('\n');
+  const componentXml = components.map((component) => `    <ComponentInformation Id="${xmlEscape(component.id)}" Name="${xmlEscape(component.ref)}"><ComponentInformationItem ${componentMetadataAttributes(component)}/><PositionAngle CenterPosX="${component.x}" CenterPosY="${component.y}" Angle="${component.rotation}"/></ComponentInformation>`).join('\n');
   const landXml = lands.map((land) => `    <LandNumber LandId="${xmlEscape(land.id)}" Component="${xmlEscape(land.componentId)}" Name="${xmlEscape(land.name)}" Side="${xmlEscape(land.side)}"><Land Left="${land.left}" Top="${land.top}" Width="${land.width}" Length="${land.height}"/></LandNumber>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<InspectionData SourceFormat="${xmlEscape(sourceFormat)}">\n  <BoardInformation Name="${xmlEscape(boardName)}" Width="${Math.max(0, boardWidth || 0)}" Height="${Math.max(0, boardHeight || 0)}" Thickness="${Math.max(0, boardThickness || 0)}"/>\n  <Components>\n${componentXml}\n  </Components>\n  <Lands>\n${landXml}\n  </Lands>\n</InspectionData>\n`;
 }
@@ -258,7 +271,7 @@ function finalizeFabmasterStreamingState(state, options = {}) {
   const components = []; const componentIdByRef = new Map(); let componentId = 1;
   for (const component of componentMap.values()) {
     const id = String(componentId++); componentIdByRef.set(component.ref, id);
-    components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '' });
+    components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '', sourceMetadata: component.sourceMetadata || {}, variation: component.variation || '', populationStatus: component.populationStatus || '', nonPop: Boolean(component.nonPop) });
   }
 
   const lands = []; let landId = 1;
@@ -386,11 +399,14 @@ export async function convertFabmasterStreamToInspectionXml(readable, options = 
       const ref = String(row.REFDES || '').trim(); if (!ref) return;
       const x = finite(row.SYMX, null); const y = finite(row.SYMY, null);
       if ((x != null && y != null) || !state.componentMap.has(ref)) {
+        const sourceMetadata = compactPopulationMetadata(row);
+        const population = inferPopulationFields(sourceMetadata);
         state.componentMap.set(ref, {
           ref,
           packageName: String(row.SYMNAME || row.COMPPACKAGE || row.COMPPARTNUMBER || row.COMPDEVICETYPE || 'UNASSIGNED').trim() || 'UNASSIGNED',
           x: (x ?? 0) * unit.toMm, y: (y ?? 0) * unit.toMm,
           rotation: normalizeRotation(row.SYMROTATE || 0), side: normalizeSide(row.SYMMIRROR || row.SIDE || 'NO'),
+          sourceMetadata, variation: population.variation, populationStatus: population.populationStatus, nonPop: population.nonPop,
         });
       }
       if (String(row.PINNUMBER || '').trim() && finite(row.PINX, null) != null && finite(row.PINY, null) != null) {
@@ -460,11 +476,14 @@ export function convertFabmasterExtractToInspectionXml(text, options = {}) {
         const ref = String(row.REFDES || '').trim(); if (!ref) continue;
         const x = finite(row.SYMX, null); const y = finite(row.SYMY, null);
         if ((x != null && y != null) || !componentMap.has(ref)) {
+          const sourceMetadata = compactPopulationMetadata(row);
+          const population = inferPopulationFields(sourceMetadata);
           componentMap.set(ref, {
             ref,
             packageName: String(row.SYMNAME || row.COMPPACKAGE || row.COMPPARTNUMBER || row.COMPDEVICETYPE || 'UNASSIGNED').trim() || 'UNASSIGNED',
             x: (x ?? 0) * unit.toMm, y: (y ?? 0) * unit.toMm,
             rotation: normalizeRotation(row.SYMROTATE || 0), side: normalizeSide(row.SYMMIRROR || row.SIDE || 'NO'),
+            sourceMetadata, variation: population.variation, populationStatus: population.populationStatus, nonPop: population.nonPop,
           });
         }
         if (String(row.PINNUMBER || '').trim() && finite(row.PINX, null) != null && finite(row.PINY, null) != null) pinRows.push(row);
@@ -477,7 +496,7 @@ export function convertFabmasterExtractToInspectionXml(text, options = {}) {
   }
   if (!componentMap.size) throw new ParseError('Manufacturing ASCII contains no readable component placements.', { stage: 'fabmaster-components', fileName: options.fileName, code: 'FABMASTER_COMPONENTS_EMPTY' });
   const components = []; const componentIdByRef = new Map(); let componentId = 1;
-  for (const component of componentMap.values()) { const id = String(componentId++); componentIdByRef.set(component.ref, id); components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '' }); }
+  for (const component of componentMap.values()) { const id = String(componentId++); componentIdByRef.set(component.ref, id); components.push({ id, ref: component.ref, packageName: component.packageName, x: component.x, y: component.y, rotation: component.rotation, revision: '', sourceMetadata: component.sourceMetadata || {}, variation: component.variation || '', populationStatus: component.populationStatus || '', nonPop: Boolean(component.nonPop) }); }
   const lands = []; let landId = 1;
   for (const row of pinRows) {
     const ref = String(row.REFDES || row.SYMNAME || '').trim(); const componentIdValue = componentIdByRef.get(ref); if (!componentIdValue) continue;

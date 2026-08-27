@@ -2229,20 +2229,14 @@ body[data-workspace="export"] .app-shell {
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-areas: "workspace" !important;
 }
-
 body[data-workspace="import"] .app-shell {
   grid-template-columns: minmax(310px, 380px) minmax(0, 1fr) !important;
   grid-template-areas: "sidebar workspace" !important;
 }
-
-/* Land details is an explicit drawer, therefore Mapping needs only the
-   contextual tool column plus the board workspace. Never reserve a dead
-   third column for the drawer. */
 body[data-workspace="mapping"] .app-shell {
   grid-template-columns: 268px minmax(0, 1fr) !important;
   grid-template-areas: "sidebar workspace" !important;
 }
-
 body[data-workspace="home"] .workspace,
 body[data-workspace="editor"] .workspace,
 body[data-workspace="npi"] .workspace,
@@ -2256,7 +2250,6 @@ body[data-workspace="export"] .workspace,
   min-width: 0;
   justify-self: stretch;
 }
-
 .route-page.active { align-self: stretch; }
 .workspace-embedded .npi-workspace-dialog,
 .workspace-embedded .export-center-dialog,
@@ -2266,14 +2259,12 @@ body[data-workspace="export"] .workspace,
   max-width: none !important;
   margin-inline: 0 !important;
 }
-
 @media (max-width: 1180px) {
   body[data-workspace="mapping"] .app-shell {
     grid-template-columns: 245px minmax(0, 1fr) !important;
     grid-template-areas: "sidebar workspace" !important;
   }
 }
-
 @media (max-width: 760px) {
   body[data-workspace="home"] .app-shell,
   body[data-workspace="import"] .app-shell,
@@ -2285,7 +2276,261 @@ body[data-workspace="export"] .workspace,
     grid-template-columns: minmax(0, 1fr) !important;
     grid-template-areas: "workspace" !important;
   }
-  body[data-workspace="import"] .app-shell {
-    grid-template-areas: "sidebar" !important;
+  body[data-workspace="import"] .app-shell { grid-template-areas: "sidebar" !important; }
+}
+
+/* --------------------------------------------------------------------------
+   Universal CAD Studio v0.29.3 — immersive editor + unified CAD theme
+   Board Editor is a route, but when open it owns the whole viewport like the
+   pre-workspace full-screen editor. The X button returns to Mapping.
+   -------------------------------------------------------------------------- */
+:root,
+html[data-theme="dark"] {
+  --canvas-origin: rgba(107, 174, 206, .30);
+  --canvas-board-fill: rgba(19, 31, 41, .28);
+  --canvas-board-stroke: rgba(151, 184, 206, .58);
+  --canvas-board-label: rgba(185, 207, 224, .78);
+  --canvas-component-fill: rgba(34, 76, 105, .07);
+  --canvas-selection-fill: rgba(255, 196, 70, .18);
+  --canvas-component-label: #cbe7f7;
+  --canvas-land-stroke: rgba(220, 242, 255, .48);
+  --canvas-selection-label: #fff3c7;
+  --canvas-selection-handle-fill: #fff4c7;
+  --canvas-selection-handle-stroke: #5a4821;
+  --canvas-marquee-fill: rgba(65, 180, 255, .13);
+  --canvas-marquee-stroke: #64c7ff;
+}
+html[data-theme="light"] {
+  --canvas-origin: rgba(42, 104, 155, .30);
+  --canvas-board-fill: rgba(65, 116, 153, .10);
+  --canvas-board-stroke: rgba(60, 91, 119, .58);
+  --canvas-board-label: rgba(39, 60, 80, .82);
+  --canvas-component-fill: rgba(31, 82, 116, .055);
+  --canvas-selection-fill: rgba(155, 101, 0, .15);
+  --canvas-component-label: #20394b;
+  --canvas-land-stroke: rgba(38, 62, 83, .48);
+  --canvas-selection-label: #523800;
+  --canvas-selection-handle-fill: #fff3bd;
+  --canvas-selection-handle-stroke: #6d530c;
+  --canvas-marquee-fill: rgba(23, 109, 164, .11);
+  --canvas-marquee-stroke: #176da4;
+}
+
+body[data-workspace="editor"] { overflow: hidden !important; }
+body[data-workspace="editor"] #editorWorkspacePage,
+body[data-workspace="editor"] #editorWorkspaceHost {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 180 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: var(--bg) !important;
+}
+body[data-workspace="editor"] #editorWorkspacePage > .route-page-heading,
+body[data-workspace="editor"] #editorWorkspaceEmpty { display: none !important; }
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 190 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: var(--bg) !important;
+  backdrop-filter: none !important;
+}
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded.hidden { display: none !important; }
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-editor-dialog,
+body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-shell {
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* CAD Studio surfaces inherit the global theme. This intentionally overrides
+   older hard-coded dark editor colors instead of maintaining a second theme. */
+.cad-editor-overlay,
+.cad-studio-shell { background: var(--bg); color: var(--text); }
+.cad-studio-titlebar {
+  border-color: var(--line-soft);
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  color: var(--text);
+}
+.cad-studio-project { color: var(--muted); }
+.cad-studio-window-actions button,
+.cad-studio-commandbar button,
+.cad-studio-commandbar select,
+.cad-studio-commandbar input,
+.cad-editor-search-field,
+.cad-editor-export-controls select,
+.cad-editor-export-controls button,
+.cad-dock-actions button,
+.cad-editor-property-section button,
+.cad-dock-panel[data-cad-panel="navigator"] > button {
+  background: var(--control);
+  color: var(--text);
+  border-color: var(--line);
+}
+.cad-studio-window-actions button:hover:not(:disabled),
+.cad-studio-commandbar button:hover:not(:disabled),
+.cad-dock-actions button:hover:not(:disabled),
+.cad-editor-property-section button:hover:not(:disabled) {
+  background: var(--control-hover);
+  border-color: color-mix(in srgb, var(--primary-2) 45%, var(--line));
+}
+.cad-studio-menubar,
+.cad-studio-commandbar,
+.cad-studio-statusbar {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line-soft);
+}
+.cad-studio-menu-group button { color: var(--text); }
+.cad-studio-menu-group button:hover { background: var(--surface-soft); }
+.cad-studio-summary { color: var(--muted); }
+.cad-studio-summary b { color: var(--text); }
+.cad-studio-summary .cad-non-pop-summary,
+.cad-studio-summary .cad-non-pop-summary b { color: var(--danger); }
+.cad-command-divider,
+.cad-tool-separator { background: var(--line); }
+.cad-editor-search-field { background: var(--control); border-color: var(--line); }
+.cad-editor-search-field span { color: var(--muted); }
+.cad-editor-search-field input { background: transparent; color: var(--text); }
+.cad-studio-main { background: var(--canvas-bg); }
+.cad-studio-toolrail,
+.cad-studio-dock {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line-soft);
+}
+.cad-studio-toolrail button { color: var(--muted); }
+.cad-studio-toolrail button:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--line); }
+.cad-studio-toolrail button.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--line));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.cad-studio-toolrail .danger-tool:not(:disabled) { color: var(--danger); }
+.cad-editor-visual-workspace,
+.cad-studio-canvas-wrap { background: var(--canvas-bg); }
+.cad-editor-canvas-topline strong,
+.cad-editor-canvas-topline span,
+.cad-editor-axis-badge {
+  background: color-mix(in srgb, var(--hud-bg) 94%, transparent);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.cad-editor-canvas-topline strong { color: var(--text); }
+.cad-selection-bar,
+.cad-context-menu,
+.cad-menu-dropdown {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.cad-selection-bar button { background: var(--control); color: var(--text); border-color: var(--line); }
+.cad-selection-bar button:hover:not(:disabled),
+.cad-context-menu button:hover,
+.cad-menu-dropdown button:hover { background: var(--control-hover); }
+.cad-context-menu button,
+.cad-menu-dropdown button { color: var(--text); }
+.cad-context-menu kbd,
+.cad-menu-dropdown kbd { color: var(--muted); }
+.cad-context-menu hr,
+.cad-menu-dropdown hr { background: var(--line); border-color: var(--line); }
+.cad-context-menu .danger-menu,
+.cad-menu-dropdown .danger-menu { color: var(--danger); }
+.cad-dock-tabs { border-color: var(--line-soft); }
+.cad-dock-tabs button { background: var(--surface); color: var(--muted); }
+.cad-dock-tabs button:hover { background: var(--surface-soft); }
+.cad-dock-tabs button.active {
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: inset 0 -2px 0 var(--primary-2);
+}
+.cad-editor-properties-header { border-color: var(--line-soft); }
+.cad-editor-properties-header p,
+.cad-land-selection-label,
+.cad-dock-helper,
+.cad-dock-panel[data-cad-panel="navigator"] p { color: var(--muted); }
+.cad-selection-readout { border-color: var(--line); }
+.cad-selection-readout > div {
+  background: var(--surface-raised);
+  border-color: var(--line-soft);
+}
+.cad-selection-readout span { color: var(--muted); }
+.cad-selection-readout strong { color: var(--text); }
+.cad-selection-readout strong.non-pop-value { color: var(--danger); }
+.cad-editor-property-section.compact,
+.cad-navigator-help,
+.cad-editor-check {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text);
+}
+.cad-layer-cards button { background: var(--surface-raised); color: var(--text); border-color: var(--line); }
+.cad-layer-cards button:hover { background: var(--control-hover); }
+.cad-layer-cards span,
+.cad-navigator-help strong { color: var(--text); }
+.cad-layer-cards strong,
+.cad-navigator-help span { color: var(--muted); }
+.cad-status-left { color: var(--muted); }
+.cad-status-left > span:first-child,
+.cad-status-left b { color: var(--text); }
+
+.cad-population-section { margin-bottom: 8px; }
+.cad-population-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cad-population-actions .danger-button { color: var(--danger); }
+
+@media (max-width: 760px) {
+  body[data-workspace="editor"] { padding-bottom: 0 !important; }
+  body[data-workspace="editor"] #editorWorkspacePage,
+  body[data-workspace="editor"] #editorWorkspaceHost,
+  body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded,
+  body[data-workspace="editor"] #cadEditorOverlay.workspace-embedded .cad-studio-shell {
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    border-radius: 0 !important;
   }
 }
+
+/* v0.29.3 theme completeness for editor helper/confirmation surfaces */
+.cad-dock-helper {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.cad-dock-helper strong { color: var(--text); }
+.cad-confirm-overlay,
+.cad-editor-busy-overlay { background: var(--overlay); }
+.cad-confirm-dialog,
+.cad-editor-busy-card {
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.cad-confirm-dialog h3,
+.cad-editor-busy-card strong { color: var(--text); }
+.cad-confirm-dialog p,
+.cad-editor-busy-card span:last-child { color: var(--muted); }
+.cad-confirm-summary,
+.cad-editor-busy-actions button { background: var(--control); border-color: var(--line); color: var(--text); }

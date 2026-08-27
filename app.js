@@ -81,6 +81,7 @@ import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
 import { initUiShell } from './ui-shell.js';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
+import { findNonPopComponents, populationInfo } from './component-population.js';
 import { verifyExportedLegacyCad, summarizeExportVerification, exportVerificationSnapshot } from './export-verification.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -146,12 +147,12 @@ const els = {
   componentReportScope: $('componentReportScope'), componentReportZones: $('componentReportZones'), componentReportLabels: $('componentReportLabels'), componentReportNameSource: $('componentReportNameSource'), componentReportResolution: $('componentReportResolution'), componentReportHeatmap: $('componentReportHeatmap'), componentReportCompatibility: $('componentReportCompatibility'),
   componentReportPartCount: $('componentReportPartCount'), componentReportLandCount: $('componentReportLandCount'), componentReportZoneCount: $('componentReportZoneCount'), componentReportMeasurementCount: $('componentReportMeasurementCount'), componentReportMessage: $('componentReportMessage'), generateComponentReportButton: $('generateComponentReportButton'),
   cadEditorOverlay: $('cadEditorOverlay'), closeCadEditorButton: $('closeCadEditorButton'), cadEditorSource: $('cadEditorSource'),
-  cadEditorComponentCount: $('cadEditorComponentCount'), cadEditorLandCount: $('cadEditorLandCount'), cadEditorTopCount: $('cadEditorTopCount'), cadEditorBottomCount: $('cadEditorBottomCount'), cadEditorUnknownCount: $('cadEditorUnknownCount'),
+  cadEditorComponentCount: $('cadEditorComponentCount'), cadEditorLandCount: $('cadEditorLandCount'), cadEditorTopCount: $('cadEditorTopCount'), cadEditorBottomCount: $('cadEditorBottomCount'), cadEditorUnknownCount: $('cadEditorUnknownCount'), cadEditorNonPopCount: $('cadEditorNonPopCount'), cadEditorNonPopSummary: $('cadEditorNonPopSummary'),
   cadEditorUndoButton: $('cadEditorUndoButton'), cadEditorRedoButton: $('cadEditorRedoButton'), cadEditorHistoryStatus: $('cadEditorHistoryStatus'),
   cadEditorCanvas: $('cadEditorCanvas'), cadEditorSelectTool: $('cadEditorSelectTool'), cadEditorPanTool: $('cadEditorPanTool'), cadEditorComponentMode: $('cadEditorComponentMode'), cadEditorLandMode: $('cadEditorLandMode'), cadEditorVisualSearch: $('cadEditorVisualSearch'), cadEditorVisualSideFilter: $('cadEditorVisualSideFilter'), cadEditorFitButton: $('cadEditorFitButton'), cadEditorZoomInButton: $('cadEditorZoomInButton'), cadEditorZoomOutButton: $('cadEditorZoomOutButton'), cadEditorLabelToggle: $('cadEditorLabelToggle'), cadEditorGridToggle: $('cadEditorGridToggle'), cadEditorSnapToggle: $('cadEditorSnapToggle'), cadEditorSelectionLabel: $('cadEditorSelectionLabel'), cadEditorSelectionHint: $('cadEditorSelectionHint'),
   cadStudioDirtyBadge: $('cadStudioDirtyBadge'), cadStudioOpenButton: $('cadStudioOpenButton'), cadEditorSelectionBar: $('cadEditorSelectionBar'), cadEditorContextMenu: $('cadEditorContextMenu'),
   cadEditorRotateLeftButton: $('cadEditorRotateLeftButton'), cadEditorRotateRightButton: $('cadEditorRotateRightButton'), cadEditorFlipSideButton: $('cadEditorFlipSideButton'), cadEditorAlignLeftButton: $('cadEditorAlignLeftButton'), cadEditorAlignCenterXButton: $('cadEditorAlignCenterXButton'), cadEditorAlignRightButton: $('cadEditorAlignRightButton'), cadEditorAlignTopButton: $('cadEditorAlignTopButton'), cadEditorAlignCenterYButton: $('cadEditorAlignCenterYButton'), cadEditorAlignBottomButton: $('cadEditorAlignBottomButton'),
-  cadEditorInfoType: $('cadEditorInfoType'), cadEditorInfoName: $('cadEditorInfoName'), cadEditorInfoPackage: $('cadEditorInfoPackage'), cadEditorInfoSide: $('cadEditorInfoSide'), cadEditorInfoPosition: $('cadEditorInfoPosition'), cadEditorInfoSize: $('cadEditorInfoSize'), cadEditorDockDuplicateButton: $('cadEditorDockDuplicateButton'), cadEditorDockRotateButton: $('cadEditorDockRotateButton'), cadEditorDockFlipButton: $('cadEditorDockFlipButton'), cadNavigatorFitSearchButton: $('cadNavigatorFitSearchButton'), cadNavigatorClearSearchButton: $('cadNavigatorClearSearchButton'), cadEditorCursorX: $('cadEditorCursorX'), cadEditorCursorY: $('cadEditorCursorY'), cadEditorZoomStatus: $('cadEditorZoomStatus'), cadLayerTopCount: $('cadLayerTopCount'), cadLayerBottomCount: $('cadLayerBottomCount'),
+  cadEditorInfoType: $('cadEditorInfoType'), cadEditorInfoName: $('cadEditorInfoName'), cadEditorInfoPackage: $('cadEditorInfoPackage'), cadEditorInfoSide: $('cadEditorInfoSide'), cadEditorInfoPosition: $('cadEditorInfoPosition'), cadEditorInfoSize: $('cadEditorInfoSize'), cadEditorInfoPopulation: $('cadEditorInfoPopulation'), cadEditorSelectNonPopButton: $('cadEditorSelectNonPopButton'), cadEditorDeleteNonPopButton: $('cadEditorDeleteNonPopButton'), cadEditorDockDuplicateButton: $('cadEditorDockDuplicateButton'), cadEditorDockRotateButton: $('cadEditorDockRotateButton'), cadEditorDockFlipButton: $('cadEditorDockFlipButton'), cadNavigatorFitSearchButton: $('cadNavigatorFitSearchButton'), cadNavigatorClearSearchButton: $('cadNavigatorClearSearchButton'), cadEditorCursorX: $('cadEditorCursorX'), cadEditorCursorY: $('cadEditorCursorY'), cadEditorZoomStatus: $('cadEditorZoomStatus'), cadLayerTopCount: $('cadLayerTopCount'), cadLayerBottomCount: $('cadLayerBottomCount'),
   cadEditorPropertyTitle: $('cadEditorPropertyTitle'), cadEditorPropertySubtitle: $('cadEditorPropertySubtitle'), cadEditorSelectAllButton: $('cadEditorSelectAllButton'), cadEditorClearSelectionButton: $('cadEditorClearSelectionButton'), cadEditorMoveDx: $('cadEditorMoveDx'), cadEditorMoveDy: $('cadEditorMoveDy'), cadEditorNudgeStep: $('cadEditorNudgeStep'), cadEditorMoveButton: $('cadEditorMoveButton'),
   cadEditorComponentLabel: $('cadEditorComponentLabel'), cadEditorAddComponentButton: $('cadEditorAddComponentButton'), cadEditorComponentSearch: $('cadEditorComponentSearch'), cadEditorComponentList: $('cadEditorComponentList'), cadEditorDeleteComponentButton: $('cadEditorDeleteComponentButton'),
   cadEditorComponentId: $('cadEditorComponentId'), cadEditorComponentName: $('cadEditorComponentName'), cadEditorPackageName: $('cadEditorPackageName'), cadEditorRevision: $('cadEditorRevision'), cadEditorCenterX: $('cadEditorCenterX'), cadEditorCenterY: $('cadEditorCenterY'), cadEditorAngle: $('cadEditorAngle'), cadEditorSaveComponentButton: $('cadEditorSaveComponentButton'),
@@ -191,11 +192,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.2'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.3'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.29.2 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.3 · Development · Schema 2';
   }
 }
 
@@ -639,7 +640,7 @@ function showGlobalError(error, context = {}) {
   window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.29.2', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.3', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -797,10 +798,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.29.2'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.3'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.2.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.3.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -2649,7 +2650,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.2.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.3.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2709,7 +2710,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.2.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.3.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2735,7 +2736,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.29.2', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.3', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2744,7 +2745,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.2.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.3.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -3011,7 +3012,7 @@ function drawCadEditorGrid(width, height) {
   for (let y = Math.floor(minY / step) * step; y <= maxY; y += step) { const p = cadEditorWorldToScreen(0, y); cadEditorCtx.moveTo(0, Math.round(p.y) + .5); cadEditorCtx.lineTo(width, Math.round(p.y) + .5); }
   cadEditorCtx.stroke();
   const origin = cadEditorWorldToScreen(0, 0);
-  cadEditorCtx.strokeStyle = 'rgba(107,174,206,.30)'; cadEditorCtx.beginPath();
+  cadEditorCtx.strokeStyle = themeCanvasColor('--canvas-origin', 'rgba(107,174,206,.30)'); cadEditorCtx.beginPath();
   cadEditorCtx.moveTo(origin.x, 0); cadEditorCtx.lineTo(origin.x, height); cadEditorCtx.moveTo(0, origin.y); cadEditorCtx.lineTo(width, origin.y); cadEditorCtx.stroke();
   cadEditorCtx.restore();
 }
@@ -3570,6 +3571,10 @@ function cloneCadEditorComponent(source, dx, dy) {
     centerX: Number(source.centerX || cadEditorBounds(source).centerX) + dx,
     centerY: Number(source.centerY || cadEditorBounds(source).centerY) + dy,
     angle: Number(source.angle || 0),
+    variation: source.variation,
+    populationStatus: source.populationStatus,
+    nonPop: source.nonPop,
+    sourceMetadata: source.sourceMetadata,
   });
   for (const land of source.lands || []) {
     addLand(state.cadEditor.model, copy, {
@@ -3604,6 +3609,10 @@ function copyCadEditorSelection() {
     name: component.name,
     packageName: component.packageName,
     revision: component.revision,
+    variation: component.variation,
+    populationStatus: component.populationStatus,
+    nonPop: component.nonPop,
+    sourceMetadata: component.sourceMetadata && typeof component.sourceMetadata === 'object' ? cloneCadValue(component.sourceMetadata) : {},
     centerX: Number(component.centerX), centerY: Number(component.centerY), angle: Number(component.angle || 0),
     lands: (component.lands || []).map((land) => ({ cadName: land.cadName, side: land.side, left: Number(land.left), top: Number(land.top), width: Number(land.width), length: Number(land.length) })),
   }));
@@ -3623,6 +3632,10 @@ function pasteCadEditorClipboard() {
       centerX: (Number.isFinite(source.centerX) ? source.centerX : 0) + step,
       centerY: (Number.isFinite(source.centerY) ? source.centerY : 0) - step,
       angle: source.angle,
+      variation: source.variation,
+      populationStatus: source.populationStatus,
+      nonPop: source.nonPop,
+      sourceMetadata: source.sourceMetadata,
     });
     for (const land of source.lands || []) addLand(state.cadEditor.model, component, { ...land, left: land.left + step, top: land.top - step });
     copies.push(component);
@@ -4038,7 +4051,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.2.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.3.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -4334,12 +4347,12 @@ function drawCadEditorLands(component, selectedComponent, width, height) {
     const w = Math.max(2, p2.x - p1.x), h = Math.max(2, p2.y - p1.y);
     const isSelected = selectedLands.has(land.uid);
     cadEditorCtx.fillStyle = isSelected ? themeCanvasColor('--canvas-selection', '#ffd36e') : normalizeSide(land.side) === 'bottom' ? themeCanvasColor('--canvas-land-bottom', 'rgba(211,104,255,.58)') : themeCanvasColor('--canvas-land-top', 'rgba(64,220,201,.58)');
-    cadEditorCtx.strokeStyle = isSelected ? '#fff2c2' : 'rgba(220,242,255,.48)';
+    cadEditorCtx.strokeStyle = isSelected ? themeCanvasColor('--canvas-selection-label', '#fff2c2') : themeCanvasColor('--canvas-land-stroke', 'rgba(220,242,255,.48)');
     cadEditorCtx.lineWidth = isSelected ? 2 : 1;
     cadEditorCtx.fillRect(p1.x, p1.y, w, h); cadEditorCtx.strokeRect(p1.x, p1.y, w, h);
     if (isSelected && selectedLandCount === 1 && selectedLand?.uid === land.uid) {
-      cadEditorCtx.fillStyle = '#fff4c7';
-      cadEditorCtx.strokeStyle = '#5a4821';
+      cadEditorCtx.fillStyle = themeCanvasColor('--canvas-selection-handle-fill', '#fff4c7');
+      cadEditorCtx.strokeStyle = themeCanvasColor('--canvas-selection-handle-stroke', '#5a4821');
       cadEditorCtx.lineWidth = 1;
       for (const [, hx, hy] of cadEditorLandHandlePoints(rect)) {
         const handle = cadEditorWorldToScreen(hx, hy);
@@ -4348,7 +4361,7 @@ function drawCadEditorLands(component, selectedComponent, width, height) {
       }
     }
     if (view.labels && (isSelected || w > 22) && h > 9) {
-      cadEditorCtx.fillStyle = '#f3fbff'; cadEditorCtx.font = '9px system-ui'; cadEditorCtx.textAlign = 'center'; cadEditorCtx.textBaseline = 'middle';
+      cadEditorCtx.fillStyle = themeCanvasColor('--canvas-selection-label', '#f3fbff'); cadEditorCtx.font = '9px system-ui'; cadEditorCtx.textAlign = 'center'; cadEditorCtx.textBaseline = 'middle';
       cadEditorCtx.fillText(String(land.cadName || land.globalId || ''), p1.x + w / 2, p1.y + h / 2, Math.max(10, w - 3));
     }
   }
@@ -4367,14 +4380,14 @@ function drawCadEditorCanvas() {
     const boardTopLeft = cadEditorWorldToScreen(boardBounds.minX, boardBounds.maxY);
     const boardBottomRight = cadEditorWorldToScreen(boardBounds.maxX, boardBounds.minY);
     cadEditorCtx.save();
-    cadEditorCtx.fillStyle = 'rgba(19,31,41,.28)';
-    cadEditorCtx.strokeStyle = 'rgba(151,184,206,.58)';
+    cadEditorCtx.fillStyle = themeCanvasColor('--canvas-board-fill', 'rgba(19,31,41,.28)');
+    cadEditorCtx.strokeStyle = themeCanvasColor('--canvas-board-stroke', 'rgba(151,184,206,.58)');
     cadEditorCtx.lineWidth = 1.4;
     cadEditorCtx.setLineDash([8, 5]);
     cadEditorCtx.fillRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
     cadEditorCtx.strokeRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
     cadEditorCtx.setLineDash([]);
-    cadEditorCtx.fillStyle = 'rgba(185,207,224,.72)';
+    cadEditorCtx.fillStyle = themeCanvasColor('--canvas-board-label', 'rgba(185,207,224,.72)');
     cadEditorCtx.font = '9px system-ui';
     cadEditorCtx.textAlign = 'left';
     cadEditorCtx.textBaseline = 'bottom';
@@ -4394,13 +4407,13 @@ function drawCadEditorCanvas() {
     const isSelected = selected.has(component.uid);
     const sides = new Set((component.lands || []).map((land) => normalizeSide(land.side)));
     const stroke = sides.has('top') && sides.has('bottom') ? '#79b7ff' : sides.has('bottom') ? '#d56eff' : '#55dcc9';
-    cadEditorCtx.fillStyle = isSelected ? 'rgba(255,196,70,.18)' : 'rgba(34,76,105,.07)';
+    cadEditorCtx.fillStyle = isSelected ? themeCanvasColor('--canvas-selection-fill', 'rgba(255,196,70,.18)') : themeCanvasColor('--canvas-component-fill', 'rgba(34,76,105,.07)');
     cadEditorCtx.strokeStyle = isSelected ? '#ffd36e' : stroke;
     cadEditorCtx.lineWidth = isSelected ? 2.2 : Math.max(.7, Math.min(1.3, state.cadEditor.visual.scale / 25));
     cadEditorCtx.fillRect(p1.x, p1.y, w, h); cadEditorCtx.strokeRect(p1.x, p1.y, w, h);
     if (isSelected) { cadEditorCtx.fillStyle = '#ffd36e'; for (const [x,y] of [[p1.x,p1.y],[p2.x,p1.y],[p2.x,p2.y],[p1.x,p2.y]]) cadEditorCtx.fillRect(x-2.5,y-2.5,5,5); }
     if (state.cadEditor.visual.labels && (isSelected || w * h > 360) && w > 16 && h > 8) {
-      cadEditorCtx.fillStyle = isSelected ? '#fff3c7' : '#cbe7f7'; cadEditorCtx.font = `${isSelected ? '600 ' : ''}10px system-ui`; cadEditorCtx.textAlign = 'center'; cadEditorCtx.textBaseline = 'middle';
+      cadEditorCtx.fillStyle = isSelected ? themeCanvasColor('--canvas-selection-label', '#fff3c7') : themeCanvasColor('--canvas-component-label', '#cbe7f7'); cadEditorCtx.font = `${isSelected ? '600 ' : ''}10px system-ui`; cadEditorCtx.textAlign = 'center'; cadEditorCtx.textBaseline = 'middle';
       cadEditorCtx.fillText(String(component.name || component.id || ''), p1.x + w / 2, p1.y + h / 2, Math.max(12, w - 4));
     }
     if ((!lightweightSelection && isSelected) || drawAllLands || state.cadEditor.visual.mode === 'land' && component.uid === state.cadEditor.selectedComponentUid) drawCadEditorLands(component, isSelected, width, height);
@@ -4409,7 +4422,7 @@ function drawCadEditorCanvas() {
   if (interaction?.kind === 'marquee' || interaction?.kind === 'land-marquee') {
     const x = Math.min(interaction.start.x, interaction.current.x), y = Math.min(interaction.start.y, interaction.current.y);
     const w = Math.abs(interaction.current.x - interaction.start.x), h = Math.abs(interaction.current.y - interaction.start.y);
-    cadEditorCtx.fillStyle = 'rgba(65,180,255,.13)'; cadEditorCtx.strokeStyle = '#64c7ff'; cadEditorCtx.lineWidth = 1.2; cadEditorCtx.setLineDash([6,4]);
+    cadEditorCtx.fillStyle = themeCanvasColor('--canvas-marquee-fill', 'rgba(65,180,255,.13)'); cadEditorCtx.strokeStyle = themeCanvasColor('--canvas-marquee-stroke', '#64c7ff'); cadEditorCtx.lineWidth = 1.2; cadEditorCtx.setLineDash([6,4]);
     cadEditorCtx.fillRect(x,y,w,h); cadEditorCtx.strokeRect(x+.5,y+.5,w,h); cadEditorCtx.setLineDash([]);
   }
   if (els.cadEditorZoomStatus) els.cadEditorZoomStatus.textContent = `${Math.round(state.cadEditor.visual.scale * 100)}%`;
@@ -4581,7 +4594,7 @@ function renderCadEditorVisualProperties() {
     ? (landCount === 1 ? `${primary?.name || primary?.id} · ${land.cadName || land.globalId}` : `${primary?.name || primary?.id} · selected ${formatInt.format(landCount)} lands`)
     : (primary ? `${primary.name || primary.id} · select Land, then click a pad` : 'Select a component first');
 
-  let infoType = '—', infoName = '—', infoPackage = '—', infoSide = '—', infoPosition = '—', infoSize = '—';
+  let infoType = '—', infoName = '—', infoPackage = '—', infoSide = '—', infoPosition = '—', infoSize = '—', infoPopulation = '—';
   if (isLand) {
     const rect = landCount === 1 ? cadEditorLandRect(land) : combinedCadEditorLandBounds(selectedLands);
     infoType = landCount === 1 ? 'Land / Pin' : 'Multi Land selection';
@@ -4602,6 +4615,8 @@ function renderCadEditorVisualProperties() {
     infoSide = sides.has('top') && sides.has('bottom') ? 'Top + Bottom' : sides.has('bottom') ? 'Bottom' : 'Top';
     infoPosition = `X ${formatFloat.format(bounds.centerX)} · Y ${formatFloat.format(bounds.centerY)} mm`;
     infoSize = `${formatFloat.format(bounds.width)} × ${formatFloat.format(bounds.height)} mm · ${formatInt.format(primary.lands?.length || 0)} Lands`;
+    const population = populationInfo(primary);
+    infoPopulation = population.nonPop ? `NON POP${population.value && population.value !== true ? ` · ${population.value}` : ''}` : (primary.variation || primary.populationStatus || 'Populated / unspecified');
   } else if (count > 1) {
     const bounds = combinedCadEditorBounds(selected);
     infoType = 'Multi selection';
@@ -4610,6 +4625,8 @@ function renderCadEditorVisualProperties() {
     infoSide = 'Mixed';
     infoPosition = bounds ? `Center X ${formatFloat.format(bounds.centerX)} · Y ${formatFloat.format(bounds.centerY)}` : '—';
     infoSize = bounds ? `${formatFloat.format(bounds.width)} × ${formatFloat.format(bounds.height)} mm` : '—';
+    const nonPopSelected = selected.filter((component) => populationInfo(component).nonPop).length;
+    infoPopulation = nonPopSelected ? `${formatInt.format(nonPopSelected)} Non-Pop / ${formatInt.format(count)} selected` : 'No Non-Pop selected';
   }
   if (els.cadEditorInfoType) els.cadEditorInfoType.textContent = infoType;
   if (els.cadEditorInfoName) els.cadEditorInfoName.textContent = infoName;
@@ -4617,6 +4634,10 @@ function renderCadEditorVisualProperties() {
   if (els.cadEditorInfoSide) els.cadEditorInfoSide.textContent = infoSide;
   if (els.cadEditorInfoPosition) els.cadEditorInfoPosition.textContent = infoPosition;
   if (els.cadEditorInfoSize) els.cadEditorInfoSize.textContent = infoSize;
+  if (els.cadEditorInfoPopulation) {
+    els.cadEditorInfoPopulation.textContent = infoPopulation;
+    els.cadEditorInfoPopulation.classList.toggle('non-pop-value', /NON POP|Non-Pop/i.test(infoPopulation));
+  }
 
   const summary = modelSummary(state.cadEditor.model);
   if (els.cadLayerTopCount) els.cadLayerTopCount.textContent = formatInt.format(summary.top);
@@ -4644,6 +4665,11 @@ function renderCadEditorSummary() {
   els.cadEditorTopCount.textContent = formatInt.format(summary.top);
   els.cadEditorBottomCount.textContent = formatInt.format(summary.bottom);
   els.cadEditorUnknownCount.textContent = formatInt.format(summary.unknown);
+  const nonPopCount = cadEditorNonPopComponents().length;
+  if (els.cadEditorNonPopCount) els.cadEditorNonPopCount.textContent = formatInt.format(nonPopCount);
+  if (els.cadEditorNonPopSummary) els.cadEditorNonPopSummary.classList.toggle('hidden', nonPopCount === 0);
+  if (els.cadEditorSelectNonPopButton) els.cadEditorSelectNonPopButton.disabled = nonPopCount === 0 || state.cadEditor.busy;
+  if (els.cadEditorDeleteNonPopButton) els.cadEditorDeleteNonPopButton.disabled = nonPopCount === 0 || state.cadEditor.busy;
   const file = cadEditorFile();
   const rootKind = file?.archive?.packageInfo?.root?.kind || 'file';
   const packageInfo = file?.archive ? packageOutputInfo(file.archive.packageInfo, els.cadEditorExportSide.value || 'all') : null;
@@ -5003,6 +5029,61 @@ async function removeCadEditorLand() {
   markCadEditorChanged(`Delete ${formatInt.format(selected.length)} Land completed`);
   renderCadEditor();
   commitCadEditorHistory(historyTransaction, { componentUids: [component] });
+  return true;
+}
+function cadEditorNonPopComponents() {
+  return findNonPopComponents(state.cadEditor.model?.components || []);
+}
+function resetCadEditorPopulationFilters() {
+  state.cadEditor.visual.search = '';
+  state.cadEditor.visual.side = 'all';
+  if (els.cadEditorVisualSearch) els.cadEditorVisualSearch.value = '';
+  if (els.cadEditorVisualSideFilter) els.cadEditorVisualSideFilter.value = 'all';
+}
+function selectNonPopCadEditorComponents() {
+  const matches = cadEditorNonPopComponents();
+  if (!matches.length) {
+    toast('No Non-Pop components were detected from Variation / Population metadata.', 4200);
+    return false;
+  }
+  resetCadEditorPopulationFilters();
+  state.cadEditor.visual.mode = 'component';
+  clearCadEditorLandSelection();
+  setCadEditorSelection(matches, { primary: matches[0] || null });
+  fitCadEditorView(matches);
+  renderCadEditor();
+  const sample = matches.slice(0, 3).map((component) => {
+    const info = populationInfo(component);
+    return `${component.name || component.id}${info.value ? ` (${info.value})` : ''}`;
+  }).join(', ');
+  toast(`Selected ${formatInt.format(matches.length)} Non-Pop components${sample ? ` · ${sample}${matches.length > 3 ? '…' : ''}` : ''}`, 5200);
+  return true;
+}
+async function deleteNonPopCadEditorComponents() {
+  const matches = cadEditorNonPopComponents();
+  if (!matches.length) {
+    toast('No Non-Pop components were detected from Variation / Population metadata.', 4200);
+    return false;
+  }
+  const lands = matches.reduce((sum, component) => sum + (component.lands?.length || 0), 0);
+  const confirmed = await requestAppConfirm({
+    title: 'Remove Non-Pop components from the Working Revision?',
+    message: `Remove ${formatInt.format(matches.length)} Non-Pop components and ${formatInt.format(lands)} lands from the editable revision.`,
+    detail: 'The Original CAD source is never modified. This removal is recorded in editor history and can be undone before Apply.',
+    confirmText: 'Yes - Remove Non-Pop',
+    destructive: true,
+  });
+  if (!confirmed) return false;
+  const historyTransaction = beginCadEditorHistory(`Remove ${matches.length} Non-Pop Component`, { componentUids: matches, structure: true });
+  for (const component of [...matches]) deleteComponent(state.cadEditor.model, component);
+  state.cadEditor.selectedComponentUids.clear();
+  state.cadEditor.selectedComponentUid = null;
+  clearCadEditorLandSelection();
+  invalidateCadEditorBounds();
+  markCadEditorChanged(`Removed ${formatInt.format(matches.length)} Non-Pop components from Working Revision`);
+  renderCadEditor();
+  commitCadEditorHistory(historyTransaction, { componentUids: matches });
+  toast(`Removed ${formatInt.format(matches.length)} Non-Pop components from Working Revision · Original CAD unchanged`, 5600);
   return true;
 }
 function nextCadEditorSplitName(component) {
@@ -5872,6 +5953,7 @@ function updateCadEditorMenuState() {
   const selectedCount = cadEditorSelectedComponents().length;
   const selectedLandCount = cadEditorSelectedLands().length;
   const hasLand = selectedLandCount > 0;
+  const nonPopCount = cadEditorNonPopComponents().length;
   const activeTarget = visual.mode === 'land' ? hasLand : selectedCount > 0;
   const checks = {
     grid: visual.grid !== false,
@@ -5909,6 +5991,10 @@ function updateCadEditorMenuState() {
   setCommandDisabled('board-mirror-left-right', !state.cadEditor.model?.components?.length || state.cadEditor.busy);
   setCommandDisabled('board-mirror-top-bottom', !state.cadEditor.model?.components?.length || state.cadEditor.busy);
   setCommandDisabled('grid-map', !cadEditorSingleComponentForTool() || state.cadEditor.busy);
+  setCommandDisabled('select-non-pop', nonPopCount === 0 || state.cadEditor.busy);
+  setCommandDisabled('delete-non-pop', nonPopCount === 0 || state.cadEditor.busy);
+  if (els.cadEditorSelectNonPopButton) els.cadEditorSelectNonPopButton.disabled = nonPopCount === 0 || state.cadEditor.busy;
+  if (els.cadEditorDeleteNonPopButton) els.cadEditorDeleteNonPopButton.disabled = nonPopCount === 0 || state.cadEditor.busy;
   if (els.cadEditorBoardReverseButton) els.cadEditorBoardReverseButton.disabled = !state.cadEditor.model?.components?.length || state.cadEditor.busy;
   for (const button of [els.cadEditorGridMapButton, els.cadEditorGridMapFooterButton]) if (button) button.disabled = !cadEditorSingleComponentForTool() || state.cadEditor.busy;
   updateCadEditorHistoryControls();
@@ -5974,6 +6060,8 @@ function runCadEditorCommand(command) {
     case 'board-mirror-top-bottom': requestCadEditorBoardTransform('mirror-top-bottom'); return true;
     case 'grid-map': openLandGridMapper(); return true;
     case 'open-name-inspector': return requestCadNameInspectorFromEditor();
+    case 'select-non-pop': return runCadEditorOperation('Select Non-Pop Components', selectNonPopCadEditorComponents);
+    case 'delete-non-pop': return runCadEditorOperation('Remove Non-Pop Components', deleteNonPopCadEditorComponents);
     case 'validate': return validateCadEditorFromMenu();
     default: return false;
   }
@@ -6117,6 +6205,8 @@ els.cadEditorExportFormat?.addEventListener('change', () => { updateCadEditorExp
 els.cadEditorExportSide.addEventListener('change', renderCadEditorSummary);
 els.cadEditorAddComponentButton.addEventListener('click', () => runCadEditorAction('duplicate'));
 els.cadEditorDeleteComponentButton.addEventListener('click', () => runCadEditorAction('delete'));
+els.cadEditorSelectNonPopButton?.addEventListener('click', () => runCadEditorCommand('select-non-pop'));
+els.cadEditorDeleteNonPopButton?.addEventListener('click', () => runCadEditorCommand('delete-non-pop'));
 els.cadEditorSaveComponentButton.addEventListener('click', saveCadEditorComponent);
 els.cadEditorAddLandButton.addEventListener('click', addCadEditorLand);
 els.cadEditorDuplicateLandButton.addEventListener('click', duplicateCadEditorLand);

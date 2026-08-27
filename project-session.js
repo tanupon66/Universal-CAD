@@ -33,6 +33,18 @@ export function prepareProjectRevision(session, { legacyCad, workingXml = '', ch
   for (const key of ['layers', 'nets', 'vias', 'traces', 'holes', 'fiducials', 'pins']) {
     if (Array.isArray(project.currentModel?.[key])) model[key] = cloneCadValue(project.currentModel[key]);
   }
+  const previousComponents = new Map((project.currentModel?.components || []).map((component) => [String(component.id), component]));
+  for (const component of model.components || []) {
+    const previous = previousComponents.get(String(component.id));
+    if (!previous?.metadata) continue;
+    component.metadata = {
+      ...(component.metadata || {}),
+      ...(previous.metadata.sourceMetadata ? { sourceMetadata: cloneCadValue(previous.metadata.sourceMetadata) } : {}),
+      ...(previous.metadata.variation ? { variation: previous.metadata.variation } : {}),
+      ...(previous.metadata.populationStatus ? { populationStatus: previous.metadata.populationStatus } : {}),
+      ...(previous.metadata.nonPop ? { nonPop: true } : {}),
+    };
+  }
   if (project.currentModel?.metadata?.pcbFoundation) model.metadata.pcbFoundation = cloneCadValue(project.currentModel.metadata.pcbFoundation);
   model.validationIssues = cloneCadValue(validationIssues);
   model.metadata = { ...model.metadata, workingXml, sourceSize: project.sourceFiles?.[0]?.size || 0 };

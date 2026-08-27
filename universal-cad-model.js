@@ -125,7 +125,13 @@ export function normalizeLegacyCad(legacyCad, options = {}) {
       landIds: componentLandIds,
       boardId: 'board:main',
       panelInstanceId: null,
-      metadata: sourceComponent.inferred ? { inferred: true } : {},
+      metadata: {
+        ...(sourceComponent.inferred ? { inferred: true } : {}),
+        ...(sourceComponent.sourceMetadata && typeof sourceComponent.sourceMetadata === 'object' ? { sourceMetadata: cloneCadValue(sourceComponent.sourceMetadata) } : {}),
+        ...(sourceComponent.variation ? { variation: String(sourceComponent.variation) } : {}),
+        ...(sourceComponent.populationStatus ? { populationStatus: String(sourceComponent.populationStatus) } : {}),
+        ...(sourceComponent.nonPop ? { nonPop: true } : {}),
+      },
     });
   }
 
@@ -207,6 +213,10 @@ export function universalCadToLegacy(model) {
       centerX: component.position?.x ?? null,
       centerY: component.position?.y ?? null,
       angle: normalizeRotation(component.rotation),
+      variation: String(component.metadata?.variation || ''),
+      populationStatus: String(component.metadata?.populationStatus || ''),
+      nonPop: Boolean(component.metadata?.nonPop),
+      sourceMetadata: component.metadata?.sourceMetadata && typeof component.metadata.sourceMetadata === 'object' ? cloneCadValue(component.metadata.sourceMetadata) : {},
       lands: componentLands,
     };
   });
