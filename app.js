@@ -192,11 +192,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.3'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.4'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.29.3 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.4 · Development · Schema 2';
   }
 }
 
@@ -640,7 +640,7 @@ function showGlobalError(error, context = {}) {
   window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.29.3', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.4', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -798,10 +798,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.29.3'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.4'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.3.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.4.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -1517,7 +1517,6 @@ async function processFile(file, cadRole = 'auto') {
   if (!file) return;
   const importStarted = performance.now();
   let importSucceeded = false;
-  let autoOpenEditor = false;
   setLoading(true, `Opening ${file.name}…`); await nextFrame();
   try {
     const lowerName = String(file.name || '').toLowerCase();
@@ -1624,7 +1623,6 @@ async function processFile(file, cadRole = 'auto') {
 
     populateComponents(state.selectedComponentId || BOARD_VIEW); updateStats(); renderTable(); renderTeachPanel(); refreshDuplicateControls(); draw(); renderHistogram();
     importSucceeded = true;
-    autoOpenEditor = Boolean(importedRole && state.xmlData && !state.xlsxData && !canCompareCad());
   } catch (error) {
     const typed = asCadError(error, ImportError, { stage: error?.stage || 'import', fileName: file.name, code: error?.code || 'IMPORT_FAILED' });
     console.error(typed); els.importMessage.textContent = `Import failed [${typed.code}] · ${typed.message}`; toast(`Import failed [${typed.code}]`, 6200);
@@ -1632,7 +1630,6 @@ async function processFile(file, cadRole = 'auto') {
   } finally {
     state.diagnostics.record('import', performance.now() - importStarted, { success: importSucceeded, fileName: String(file.name || '').slice(0, 180), components: state.xmlData?.components?.length || 0, packages: new Set((state.xmlData?.components || []).map((item) => item.packageName)).size, lands: state.xmlData?.totalLands || 0 });
     setLoading(false); els.projectFile.value = ''; els.originalCadFile.value = ''; els.generatedCadFile.value = ''; els.archiveCadFile.value = '';
-    if (autoOpenEditor) setTimeout(() => { if (state.xmlData) openCadEditor(); }, 0);
   }
 }
 function resetProject() {
@@ -2650,7 +2647,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.3.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.4.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2710,7 +2707,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.3.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.4.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2736,7 +2733,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.29.3', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.4', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2745,7 +2742,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.3.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.4.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -4051,7 +4048,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.3.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.4.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
