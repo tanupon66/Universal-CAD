@@ -1,0 +1,102 @@
+name: Release locally tested v0.29.6
+
+on:
+  push:
+    branches:
+      - release-v0.29.6-tested
+    paths:
+      - '.github/workflows/release-v0296-tested.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging release
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify exact locally-tested patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/release.patch
+          for f in .release/v0296/part*.b64; do
+            base64 -d "$f" >> /tmp/release.patch
+          done
+          echo "ca56f1a733b4db69f44f264538758b3f34f155c50c2e6bb1bc8792066e4b3338  /tmp/release.patch" | sha256sum -c -
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "33096c86923080a2392756771e447a76093dbad2"
+
+      - name: Apply product patch to clean main and run regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard origin/main
+          git apply --check /tmp/release.patch
+          git apply /tmp/release.patch
+          git diff --check
+
+          echo "00d3dbab23a0e60e291058dd9712db07da26537d96673dd62f4fdccabf78089f  app.js" | sha256sum -c -
+          echo "5f4d5dfd982def756d80bb6af6e449a071e907c497abeb89dc6b867fa6f9a54a  bom-export.js" | sha256sum -c -
+          echo "be86ebfa376f5c08ed56b99289782c45fb3d7c9e778526cb0a984448f70615a8  build-info.json" | sha256sum -c -
+          echo "6a371d29513fa3e556b4d2581039776bb1d7285dcceeb7d50e6147d422b641e0  custcel-population.js" | sha256sum -c -
+          echo "16eb6a4b2c1384750d53ed263de42b4b015ba1a4e846339007f68d1a6907978f  index.html" | sha256sum -c -
+          echo "76a3661892a6a98d686531fb47f99f23e7ff8d0d20b5074978c67821cd1ac1e6  manifest.webmanifest" | sha256sum -c -
+          echo "67353cba4897c9c0a6f2a9a19aac6b21dbc4248da2e0a763bdeb8f4e44260f96  odb-parser.js" | sha256sum -c -
+          echo "8bf1311cefbfa1fe5dcf9251c0b47766b46444dd26168aeb34ca91600a2ee12c  precache-manifest.js" | sha256sum -c -
+          echo "951a2419c025b61b648b2d9b21e6e3f0cddccc67659501e672c691d544364ef3  sw.js" | sha256sum -c -
+
+          test "$(node -p "JSON.parse(require('fs').readFileSync('build-info.json','utf8')).appVersion")" = "0.29.6"
+          grep -q "APP_VERSION = '0.29.6'" sw.js
+          grep -q '"version": "0.29.6"' manifest.webmanifest
+          grep -q 'custcel-population.js' precache-manifest.js
+          grep -q 'gzipCompressed' odb-parser.js
+          grep -q 'filterBomRowsToModel' bom-export.js
+          test -f custcel-population.js
+          ! grep -q 'autoOpenEditor' app.js
+          grep -q 'route-embed-host hidden" id="editorWorkspaceHost"' index.html
+          grep -q 'deterministic Board Editor route state' styles.css
+
+          for f in *.js; do node --check "$f"; done
+
+          node --input-type=module <<'NODE'
+          import { parseCustcelText, applyCustcelPopulation } from './custcel-population.js';
+          import { buildBomRows } from './bom-export.js';
+          const parsed = parseCustcelText('3*** CATENA // SAMPLE * 1 ***** Top *****\nR2 NONPOP NONPOP NONE B VALUE\nR9 DNP DNP NONE B VALUE\n', { fileName: 'Custcel.ALL.txt' });
+          if (!parsed.recognized || parsed.nonPopCount !== 2) throw new Error('Custcel parse regression');
+          const model = {
+            components: [
+              { id: '1', reference: 'R1', packageId: 'P', landIds: ['L1'] },
+              { id: '2', reference: 'R2', packageId: 'P', landIds: ['L2'] },
+            ],
+            lands: [
+              { id: 'L1', componentId: '1' },
+              { id: 'L2', componentId: '2' },
+            ],
+            packages: [{ id: 'P', sourceComponentId: '1', templateLandIds: ['L1'], usageCount: 2 }],
+            nets: [],
+            bom: [
+              { location: 'R1', partNumber: 'A', quantity: 1 },
+              { location: 'R2', partNumber: 'B', quantity: 1 },
+            ],
+            metadata: {},
+          };
+          const applied = applyCustcelPopulation(model, parsed, { fileName: 'Custcel.ALL.txt' });
+          if (applied.removedComponentCount !== 1 || applied.removedLandCount !== 1) throw new Error('Custcel cascade regression');
+          const bom = buildBomRows(applied.model, { bom: model.bom, aggregate: false });
+          if (bom.some((row) => String(row.location).toUpperCase() === 'R2')) throw new Error('BOM working-revision sync regression');
+          NODE
+
+      - name: Publish one clean release commit to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js bom-export.js build-info.json custcel-population.js index.html manifest.webmanifest odb-parser.js precache-manifest.js sw.js
+          git commit -m "Release Universal CAD Studio v0.29.6"
+          git push origin HEAD:main
