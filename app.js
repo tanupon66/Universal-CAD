@@ -79,9 +79,10 @@ import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
-import { initUiShell } from './ui-shell.js?v=0.29.5';
+import { initUiShell } from './ui-shell.js?v=0.29.6';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
 import { findNonPopComponents, populationInfo } from './component-population.js';
+import { applyCustcelPopulation, parseCustcelText } from './custcel-population.js';
 import { verifyExportedLegacyCad, summarizeExportVerification, exportVerificationSnapshot } from './export-verification.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -192,11 +193,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.5'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.6'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.29.5 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.6 · Development · Schema 2';
   }
 }
 
@@ -239,6 +240,7 @@ const state = {
   duplicateView: { enabled: true, dimOthers: false, selectedName: '' },
   cadInspector: createCadInspectorState(),
   cadEditor: createCadEditorState(),
+  pendingCustcel: null,
 };
 
 const ctx = els.canvas.getContext('2d', { alpha: false });
@@ -640,7 +642,7 @@ function showGlobalError(error, context = {}) {
   window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.29.5', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.6', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -798,10 +800,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.29.5'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.6'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.5.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.6.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -1513,6 +1515,68 @@ async function runMapping() {
   updateStats(); renderTable(); renderTeachPanel(); fitView(); draw(); renderHistogram();
   toast(`Mapped ${formatInt.format(state.mappingData.stats.mapped)} from ${formatInt.format(state.mappingData.stats.total)} items`);
 }
+async function applyPendingCustcelPopulation(pending = state.pendingCustcel) {
+  if (!pending?.parsed?.recognized) return { applied: false, pending: false };
+  const file = activeCadFile();
+  if (!file) {
+    state.pendingCustcel = pending;
+    return { applied: false, pending: true, parsed: pending.parsed };
+  }
+  const session = ensureProjectSession(file);
+  const currentModel = session?.project?.currentModel;
+  if (!currentModel) throw new CadTransactionError('The active CAD does not have a Working Revision to apply Custcel data.', { stage: 'custcel-apply', code: 'CUSTCEL_NO_WORKING_MODEL', fileName: file.name });
+  const result = applyCustcelPopulation(currentModel, pending.parsed, { fileName: pending.fileName });
+  if (!result.removedComponentCount) {
+    state.pendingCustcel = null;
+    return { ...result, applied: false, pending: false, revision: projectRevision(file) };
+  }
+  const commit = await commitNpiModelChange({
+    label: `Apply Custcel population · ${pending.fileName}`,
+    model: result.model,
+    changes: [{
+      type: 'custcel-population',
+      sourceFile: pending.fileName,
+      sourceBoard: pending.parsed.sourceBoard || '',
+      nonPopCount: pending.parsed.nonPopCount,
+      removedComponents: result.removedComponentCount,
+      removedLands: result.removedLandCount,
+      unmatchedCount: result.unmatchedRefs.length,
+    }],
+  });
+  state.pendingCustcel = null;
+  return { ...result, applied: true, pending: false, revision: commit.revision };
+}
+
+function custcelStatusText(result, parsed) {
+  if (result?.pending) return `Custcel loaded · ${formatInt.format(parsed.nonPopCount)} NONPOP · import CAD and it will be applied automatically`;
+  if (!result?.removedComponentCount) return `Custcel checked · ${formatInt.format(parsed.nonPopCount)} NONPOP · no matching components remain in the current Working Revision`;
+  return `Custcel applied · removed ${formatInt.format(result.removedComponentCount)} Components / ${formatInt.format(result.removedLandCount)} Lands · ${formatInt.format(result.unmatchedRefs.length)} reference(s) not found · Revision ${result.revision}`;
+}
+
+async function importCustcelPopulationFile(file, probeText, encoding = 'utf-8') {
+  let text = probeText;
+  if (Number(file.size || 0) > new TextEncoder().encode(String(probeText || '')).length) {
+    text = decodeTextBytes(new Uint8Array(await file.arrayBuffer()), encoding || 'utf-8');
+  }
+  const parsed = parseCustcelText(text, { fileName: file.name });
+  if (!parsed.recognized) return null;
+  const pending = { fileName: file.name, parsed };
+  state.pendingCustcel = pending;
+  const result = await applyPendingCustcelPopulation(pending);
+  els.archiveDiagnostics.classList.remove('hidden');
+  els.archiveDiagnosticsText.textContent = [
+    `Format: Custcel population`,
+    parsed.sourceBoard ? `Assembly: ${parsed.sourceBoard}` : '',
+    `Rows: ${formatInt.format(parsed.dataRowCount)}`,
+    `Explicit NONPOP: ${formatInt.format(parsed.nonPopCount)}`,
+    result.pending ? 'Status: waiting for CAD' : `Matched and removed: ${formatInt.format(result.removedComponentCount || 0)}`,
+    !result.pending ? `Unmatched NONPOP refs: ${formatInt.format(result.unmatchedRefs?.length || 0)}` : '',
+  ].filter(Boolean).join('\n');
+  els.importMessage.textContent = custcelStatusText(result, parsed);
+  toast(result.pending ? `Custcel loaded · ${formatInt.format(parsed.nonPopCount)} NONPOP` : `Custcel applied · removed ${formatInt.format(result.removedComponentCount || 0)} components`, 5200);
+  return { parsed, result };
+}
+
 async function processFile(file, cadRole = 'auto') {
   if (!file) return;
   const importStarted = performance.now();
@@ -1528,6 +1592,13 @@ async function processFile(file, cadRole = 'auto') {
     } else {
       const probeBytes = new Uint8Array(await file.slice(0, Math.min(Number(file.size || 0), 1024 * 1024)).arrayBuffer());
       const probe = detectCadFormat({ name: file.name, mimeType: file.type, bytes: probeBytes });
+      const probeText = decodeTextBytes(probeBytes, probe.encoding || 'utf-8');
+      const custcelProbe = /(?:custcel|\.(?:txt|csv|dat|cel))$/i.test(lowerName) ? parseCustcelText(probeText, { fileName: file.name }) : { recognized: false };
+      if (custcelProbe.recognized) {
+        const importedCustcel = await importCustcelPopulationFile(file, probeText, probe.encoding || 'utf-8');
+        importSucceeded = Boolean(importedCustcel);
+        return;
+      }
       if (['cad-xy-delimited', 'cad-xy-bom-delimited', 'bom-delimited', 'delimited-text'].includes(probe.format)) {
         const text = decodeTextBytes(probeBytes, probe.encoding);
         project.tableData = parseDelimitedText(text, { fileName: file.name, encoding: probe.encoding, detection: probe, sheetName: probe.format.includes('bom') ? 'BOM / Placement' : 'CAD XY' });
@@ -1594,15 +1665,19 @@ async function processFile(file, cadRole = 'auto') {
     }
     syncCadFileLabels();
 
+    let custcelApplied = null;
     if (importedRole) {
       const shouldActivate = !state.activeCadRole || state.activeCadRole === importedRole || importedRole === 'original' || !state.cadFiles.original;
       if (shouldActivate) activateCad(importedRole, { rebuild: true, fit: true });
       else if (state.xlsxData && state.xmlData) rebuildMappingForActiveCad();
+      if (state.pendingCustcel && shouldActivate) custcelApplied = await applyPendingCustcelPopulation();
     } else if (state.xmlData && state.xlsxData) {
       rebuildMappingForActiveCad(); populateComponents(state.selectedComponentId || BOARD_VIEW); fitView();
     }
 
-    if (canCompareCad()) {
+    if (custcelApplied) {
+      els.importMessage.textContent = custcelStatusText(custcelApplied, { nonPopCount: custcelApplied.requestedCount || 0 });
+    } else if (canCompareCad()) {
       rebuildCadComparison();
       const summary = state.cadCompare.result.summary;
       els.importMessage.textContent = `${availablePairLabel()} · CAD↔CAD matched ${formatInt.format(summary.matchedLands)} Land · Rename ${formatInt.format(summary.renamed + summary.renamedMoved)} points${state.mappingData ? ` · Raw verified ${formatInt.format(state.mappingData.stats.verified || 0)}` : ''}`;
@@ -1644,6 +1719,7 @@ function resetProject() {
     duplicateView: { enabled: true, dimOthers: false, selectedName: '' },
     cadInspector: createCadInspectorState(),
     cadEditor: createCadEditorState(),
+    pendingCustcel: null,
   });
   resetHistogramState();
   document.body.classList.remove('cad-editor-open', 'app-confirm-open');
@@ -2649,7 +2725,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.5.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.6.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2709,7 +2785,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.5.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.6.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2735,7 +2811,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.29.5', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.6', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2744,7 +2820,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.5.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.6.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -4050,7 +4126,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.5.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.6.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -6463,7 +6539,7 @@ if ('serviceWorker' in navigator) {
   });
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=0.29.5', { updateViaCache: 'none' });
+      const registration = await navigator.serviceWorker.register('./sw.js?v=0.29.6', { updateViaCache: 'none' });
       state.serviceWorkerRegistration = registration;
       if (registration.waiting && navigator.serviceWorker.controller) showServiceWorkerUpdate(registration);
       registration.addEventListener('updatefound', () => {

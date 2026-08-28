@@ -12,6 +12,7 @@ self.__PRECACHE_ASSETS = [
   "./cad-inspector.js",
   "./component-population.js",
   "./component-report.js",
+  "./custcel-population.js",
   "./coordinate-system-manager.js",
   "./coordinate-transform.js",
   "./delimited-import.js",

@@ -16,12 +16,50 @@ export const BOM_FIELDS = Object.freeze([
 
 function labelFor(key) { return BOM_FIELDS.find((item) => item.key === key)?.label || key; }
 function packageMap(model) { return new Map((model?.packages || []).map((item) => [String(item.id), item])); }
+function normalizeRef(value) { return String(value ?? '').trim().toUpperCase(); }
+function looksLikeReference(value) {
+  const text = String(value ?? '').trim();
+  return /[A-Za-z]/.test(text) && /\d/.test(text) && /^[A-Za-z0-9_.+\-/#]+$/.test(text);
+}
+function sourceRowRefs(row) {
+  if (Array.isArray(row?.references)) return row.references.map(String).map((item) => item.trim()).filter(looksLikeReference);
+  const location = String(row?.location ?? row?.reference ?? row?.refDes ?? row?.references ?? '').trim();
+  return location.split(/[\s,;]+/).map((item) => item.trim()).filter(looksLikeReference);
+}
+
+/** Keep source BOM metadata, but only for references that still exist in the
+ * current Working Revision. This prevents deleted/Non-Pop parts from returning
+ * when BOM CSV/XLSX is exported. */
+export function filterBomRowsToModel(model, rows) {
+  const source = Array.isArray(rows) ? rows : [];
+  const activeRefs = new Set((model?.components || []).map((component) => normalizeRef(component.reference || component.id)).filter(Boolean));
+  if (!activeRefs.size) return source.map((row) => ({ ...row }));
+  const output = [];
+  for (const row of source) {
+    const refs = sourceRowRefs(row);
+    if (!refs.length) { output.push({ ...row }); continue; }
+    const kept = refs.filter((ref) => activeRefs.has(normalizeRef(ref)));
+    if (!kept.length) continue;
+    const next = { ...row };
+    if (Array.isArray(next.references)) next.references = kept;
+    if ('location' in next) next.location = kept.join(', ');
+    if ('reference' in next) next.reference = kept.length === 1 ? kept[0] : kept.join(', ');
+    if ('refDes' in next) next.refDes = kept.length === 1 ? kept[0] : kept.join(', ');
+    if (refs.length !== kept.length) {
+      if ('quantity' in next) next.quantity = kept.length;
+      if ('qty' in next) next.qty = kept.length;
+    }
+    output.push(next);
+  }
+  return output;
+}
 
 export function buildBomRows(model, options = {}) {
   const packages = packageMap(model);
   const sourceBom = Array.isArray(options.bom) && options.bom.length ? options.bom : (model?.bom || []);
   if (sourceBom.length && options.preferSourceBom !== false) {
-    return sourceBom.map((row, index) => ({
+    const synchronizedBom = options.syncToWorkingModel === false ? sourceBom : filterBomRowsToModel(model, sourceBom);
+    return synchronizedBom.map((row, index) => ({
       location: String(row.location ?? row.reference ?? row.refDes ?? row.references ?? ''),
       partNumber: String(row.partNumber ?? row.mpn ?? row.pn ?? ''),
       description: String(row.description ?? row.desc ?? ''),

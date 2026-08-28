@@ -1,4 +1,4 @@
-import { textFromBytes } from './archive-reader.js';
+import { gunzip, textFromBytes } from './archive-reader.js';
 import { isUnixCompress, unlzw } from './unix-compress.js';
 import { extractOdbFoundation } from './pcb-data-foundation.js';
 
@@ -35,10 +35,16 @@ export async function collectOdbFiles(root) {
 
     let decoded = bytes;
     let unixCompressed = false;
+    let gzipCompressed = false;
     if (isUnixCompress(bytes)) {
       decoded = unlzw(bytes);
       unixCompressed = true;
       // Give the browser a chance to repaint progress text between large files.
+      await Promise.resolve();
+    } else if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      decoded = await gunzip(bytes);
+      gzipCompressed = true;
+      // Some ODB++ exporters use .Z filenames for gzip streams instead of classic Unix compress.
       await Promise.resolve();
     }
     files.push({
@@ -47,6 +53,7 @@ export async function collectOdbFiles(root) {
       bytes: decoded,
       originalBytes: bytes,
       unixCompressed,
+      gzipCompressed,
     });
   };
 
@@ -336,7 +343,9 @@ export async function convertOdbPackageToInspectionXml(root) {
   const warnings = [];
   const edaCache = new Map();
   const profileCache = new Map();
-  let decompressedCount = files.filter((file) => file.unixCompressed).length;
+  const unixCompressedCount = files.filter((file) => file.unixCompressed).length;
+  const gzipCompressedCount = files.filter((file) => file.gzipCompressed).length;
+  const decompressedCount = unixCompressedCount + gzipCompressedCount;
 
   for (const { file } of selectedByLayer.values()) {
     const path = normalizePath(file.path);
@@ -438,7 +447,7 @@ export async function convertOdbPackageToInspectionXml(root) {
     '</InspectionData>',
   ].join('\n');
 
-  if (decompressedCount) warnings.unshift(`Decompressed ${decompressedCount} Unix .Z file(s).`);
+  if (decompressedCount) warnings.unshift(`Decompressed ${decompressedCount} compressed ODB++ member(s).`);
   const packageCount = [...edaCache.values()].reduce((sum, packages) => sum + packages.filter(Boolean).length, 0);
   warnings.push(`Read ${packageCount} EDA package(s) and converted coordinates to millimeters.`);
 
@@ -455,7 +464,9 @@ export async function convertOdbPackageToInspectionXml(root) {
     ],
     warnings,
     units: 'MM',
-    unixCompressedFiles: decompressedCount,
+    unixCompressedFiles: unixCompressedCount,
+    gzipCompressedFiles: gzipCompressedCount,
+    compressedFiles: decompressedCount,
     packages: packageCount,
     foundation,
   };
