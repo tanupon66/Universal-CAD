@@ -1,0 +1,26 @@
+name: Verify staged v0.29.7 patch
+
+on:
+  push:
+    branches:
+      - integration-test-v0.29.7
+    paths:
+      - '.github/workflows/verify-v0297-patch.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact locally tested patch bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '84ab6c8d5b4b4db5ed571f4fee427be050817518b73cada59c55a932fec6ca04  .release/v0297/patch.b64' | sha256sum -c -
+          base64 -d .release/v0297/patch.b64 > /tmp/release.patch
+          echo '04fa8811eb67925d703c035f8da150c8aca262cf53742363b50c01a362f9e90d  /tmp/release.patch' | sha256sum -c -
+          test "$(wc -c < /tmp/release.patch)" = '24784'
+          echo PATCH_BYTES_VERIFIED
