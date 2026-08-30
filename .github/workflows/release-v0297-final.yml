@@ -1,0 +1,75 @@
+name: Release locally tested v0.29.7
+
+on:
+  push:
+    branches: [integration-test-v0.29.7]
+    paths: ['.github/workflows/release-v0297-final.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble exact release transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .release/v0297/release.part01.py .release/v0297/release.part02.py .release/v0297/release.part03.py > /tmp/release_v0297.py
+          echo '0ad8824087a4573a0ba36ef408a45cc18f8708cb48cf4839fe3d40169099e7d8  /tmp/release_v0297.py' | sha256sum -c -
+          test "$(wc -c < /tmp/release_v0297.py)" = '9712'
+
+      - name: Apply to exact v0.29.6 production parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = '6acb9b89c34171345a8ad58cbe971323d6fb060b'
+          git checkout --detach origin/main
+          python /tmp/release_v0297.py
+          echo '93c0eb55fb1b0d099cc7b7679eb6e8f1a41a82d8d83bdd2bbfa988142650fab1  app.js' | sha256sum -c -
+          echo '3699066216142b8002eeedd7346f3aa5014c37317806157c8927d474ef7d47c9  custcel-population.js' | sha256sum -c -
+          echo '9f50c69c8d5291d0a4999f15b28ce8e96a899d6195ae846588c8999e44b47769  build-info.json' | sha256sum -c -
+          echo '29f0c5845cbeb767a25a4c3c789204511cb1b0933bd0d7626ad0f66b8737a66c  index.html' | sha256sum -c -
+          echo '3036cf46eaa038aae52e81b3f663660abc62fa2890af1298c2c138c7272268aa  manifest.webmanifest' | sha256sum -c -
+          echo '2dc8c1052923d53d5899415aa4247e18457d40bb90676b6e4fadb3c927826c17  sw.js' | sha256sum -c -
+          actual="$(git diff --name-only | sort | tr '\n' ' ')"
+          test "$actual" = 'app.js build-info.json custcel-population.js index.html manifest.webmanifest sw.js '
+
+      - name: Regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in *.js; do node --check "$f" >/dev/null; done
+          grep -q 'v0.29.7' index.html
+          grep -q "APP_VERSION = '0.29.7'" sw.js
+          grep -q '"version": "0.29.7"' manifest.webmanifest
+          ! grep -R '0\.29\.6' -n app.js build-info.json index.html manifest.webmanifest sw.js
+          node --experimental-default-type=module <<'NODE'
+          import { parseCustcelText, applyCustcelPopulation, findCustcelPopulationComponents } from './custcel-population.js';
+          const p=parseCustcelText('CATENA // TEST * Top\nC112 NONPOP NONPOP NONE B X\nR1 PART PART SMT T X\n',{fileName:'Custcel.ALL.txt'});
+          if(!p.recognized||p.nonPopCount!==1) throw new Error('Custcel parse regression');
+          const model={components:[{id:'1',reference:'C112',landIds:['L1']},{id:'2',reference:'R1',landIds:['L2']}],lands:[{id:'L1',componentId:'1'},{id:'L2',componentId:'2'}],packages:[],nets:[],bom:[{location:'C112, R1',quantity:2}],metadata:{}};
+          if(findCustcelPopulationComponents(model.components,p).length!==1) throw new Error('Model match regression');
+          if(findCustcelPopulationComponents([{id:'1',name:'C112'}],p).length!==1) throw new Error('Editor match regression');
+          const r=applyCustcelPopulation(model,p,{fileName:'Custcel.ALL.txt'});
+          if(r.removedComponentCount!==1||r.model.components.length!==1||r.model.lands.length!==1||r.unmatchedRefs.length) throw new Error('Population apply regression');
+          if((r.model.bom[0]?.location||'').toUpperCase().includes('C112')) throw new Error('BOM sync regression');
+          console.log('CUSTCEL_INTEGRATION_GATE_PASS');
+          NODE
+
+      - name: Publish one clean product commit to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js custcel-population.js build-info.json index.html manifest.webmanifest sw.js
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = 'app.js build-info.json custcel-population.js index.html manifest.webmanifest sw.js '
+          git commit -m 'Release Universal CAD Studio v0.29.7'
+          git push origin HEAD:main
