@@ -61,6 +61,30 @@ function rowReferences(row) {
   return String(value).split(/[\s,;]+/).map((item) => item.trim()).filter(looksLikeReference);
 }
 
+function componentReferenceCandidates(component = {}) {
+  const metadata = component?.metadata && typeof component.metadata === 'object' ? component.metadata : {};
+  const sourceMetadata = component?.sourceMetadata && typeof component.sourceMetadata === 'object' ? component.sourceMetadata : {};
+  return [
+    component.reference, component.refDes, component.name, component.id,
+    metadata.reference, metadata.refDes, metadata.name,
+    sourceMetadata.reference, sourceMetadata.refDes, sourceMetadata.name,
+  ].map(normalizeRef).filter(Boolean);
+}
+
+/** Return components that are explicitly listed as NONPOP by the active Custcel
+ * file. This accepts both normalized Universal CAD components (reference) and
+ * CAD Editor components (name/id), so every workspace uses the same population
+ * decision. */
+export function findCustcelPopulationComponents(components = [], parsed = null) {
+  const requested = new Set((parsed?.nonPopRefs || []).map(normalizeRef).filter(Boolean));
+  if (!requested.size) return [];
+  return (components || []).filter((component) => componentReferenceCandidates(component).some((ref) => requested.has(ref)));
+}
+
+export function isCustcelNonPopComponent(component, parsed = null) {
+  return findCustcelPopulationComponents([component], parsed).length === 1;
+}
+
 function removeBomReferences(rows, removingRefs) {
   if (!Array.isArray(rows) || !rows.length || !removingRefs.size) return cloneCadValue(rows || []);
   const output = [];
@@ -90,9 +114,9 @@ export function applyCustcelPopulation(model, parsed, options = {}) {
   const next = cloneCadValue(model);
   const requested = new Set((parsed?.nonPopRefs || []).map(normalizeRef).filter(Boolean));
   const components = Array.isArray(next?.components) ? next.components : [];
-  const removing = components.filter((component) => requested.has(normalizeRef(component.reference || component.id)));
+  const removing = findCustcelPopulationComponents(components, parsed);
   const removedComponentIds = new Set(removing.map((component) => String(component.id)));
-  const removedReferences = new Set(removing.map((component) => normalizeRef(component.reference || component.id)));
+  const removedReferences = new Set(removing.flatMap((component) => componentReferenceCandidates(component)));
   const removedLandIds = new Set((next?.lands || []).filter((land) => removedComponentIds.has(String(land.componentId))).map((land) => String(land.id)));
 
   next.components = components.filter((component) => !removedComponentIds.has(String(component.id)));
@@ -142,7 +166,11 @@ export function applyCustcelPopulation(model, parsed, options = {}) {
     },
   };
 
-  const matched = new Set(removing.map((component) => normalizeRef(component.reference || component.id)));
+  const matched = new Set();
+  for (const component of removing) {
+    const candidates = new Set(componentReferenceCandidates(component));
+    for (const ref of requested) if (candidates.has(ref)) matched.add(ref);
+  }
   const unmatchedRefs = (parsed?.nonPopRefs || []).filter((ref) => !matched.has(normalizeRef(ref)));
   return {
     model: next,

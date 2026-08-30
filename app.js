@@ -79,10 +79,10 @@ import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
-import { initUiShell } from './ui-shell.js?v=0.29.6';
+import { initUiShell } from './ui-shell.js?v=0.29.7';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
 import { findNonPopComponents, populationInfo } from './component-population.js';
-import { applyCustcelPopulation, parseCustcelText } from './custcel-population.js';
+import { applyCustcelPopulation, findCustcelPopulationComponents, parseCustcelText } from './custcel-population.js';
 import { verifyExportedLegacyCad, summarizeExportVerification, exportVerificationSnapshot } from './export-verification.js';
 import {
   createProjectStorageRecord, saveProjectRecord, listProjectRecords, loadProjectRecord, deleteProjectRecord,
@@ -193,11 +193,11 @@ async function loadBuildInformation() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = await response.json();
     const commit = info.commit && info.commit !== 'unavailable' ? ` · ${String(info.commit).slice(0, 12)}` : '';
-    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.6'}${commit} · Schema ${info.schemaVersion || 2}`;
+    els.buildInfoBadge.textContent = `v${info.appVersion || '0.29.7'}${commit} · Schema ${info.schemaVersion || 2}`;
     els.buildInfoBadge.title = `Build: ${info.buildDate || 'development'} | Commit: ${info.commit || 'unavailable'} | Schema: ${info.schemaVersion || 2}`;
   } catch {
     // Development mode may be opened directly from source without generated build-info.json.
-    els.buildInfoBadge.textContent = 'v0.29.6 · Development · Schema 2';
+    els.buildInfoBadge.textContent = 'v0.29.7 · Development · Schema 2';
   }
 }
 
@@ -241,6 +241,7 @@ const state = {
   cadInspector: createCadInspectorState(),
   cadEditor: createCadEditorState(),
   pendingCustcel: null,
+  activeCustcel: null,
 };
 
 const ctx = els.canvas.getContext('2d', { alpha: false });
@@ -642,7 +643,7 @@ function showGlobalError(error, context = {}) {
   window.dispatchEvent(new CustomEvent('universalcad:notify', { detail: { message: context.title || error?.message || 'Operation failed.', type: 'error' } }));
   const file = activeCadFile();
   currentDiagnosticReport = createDiagnosticReport(error, {
-    appVersion: '0.29.6', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
+    appVersion: '0.29.7', schemaVersion: file?.projectSession?.project?.schemaVersion || 2,
     projectId: file?.projectSession?.project?.projectId || '', revision: projectRevision(file),
     fileName: context.fileName || error?.fileName || file?.name || '', metrics: state.diagnostics?.snapshot?.() || [], ...context,
   });
@@ -800,10 +801,10 @@ function exportFullProjectBackup() {
     const file = activeCadFile(); const session = ensureProjectSession(file);
     if (!session) throw new Error('No project is available to back up');
     const payload = JSON.parse(exportProjectBackup(session));
-    payload.appVersion = '0.29.6'; payload.projectWorkspace = projectWorkspaceSnapshot();
+    payload.appVersion = '0.29.7'; payload.projectWorkspace = projectWorkspaceSnapshot();
     payload.exportedAt = new Date().toISOString();
     const content = JSON.stringify(payload, jsonBackupReplacer, 2);
-    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.6.json`));
+    downloadBlob(new Blob([content], { type: 'application/json;charset=utf-8' }), safeDownloadName(`${session.project.name || 'cad-project'}-r${session.project.appliedRevision}-backup-v0.29.7.json`));
     toast(`Export Project Backup Revision ${session.project.appliedRevision} successful`);
   } catch (error) { showGlobalError(error, { title: 'Project backup export failed', operation: 'project-backup-export' }); }
 }
@@ -1515,8 +1516,9 @@ async function runMapping() {
   updateStats(); renderTable(); renderTeachPanel(); fitView(); draw(); renderHistogram();
   toast(`Mapped ${formatInt.format(state.mappingData.stats.mapped)} from ${formatInt.format(state.mappingData.stats.total)} items`);
 }
-async function applyPendingCustcelPopulation(pending = state.pendingCustcel) {
+async function applyPendingCustcelPopulation(pending = state.pendingCustcel || state.activeCustcel) {
   if (!pending?.parsed?.recognized) return { applied: false, pending: false };
+  state.activeCustcel = pending;
   const file = activeCadFile();
   if (!file) {
     state.pendingCustcel = pending;
@@ -1528,11 +1530,13 @@ async function applyPendingCustcelPopulation(pending = state.pendingCustcel) {
   const result = applyCustcelPopulation(currentModel, pending.parsed, { fileName: pending.fileName });
   if (!result.removedComponentCount) {
     state.pendingCustcel = null;
+    file.populationProfile = pending;
     return { ...result, applied: false, pending: false, revision: projectRevision(file) };
   }
   const commit = await commitNpiModelChange({
     label: `Apply Custcel population · ${pending.fileName}`,
     model: result.model,
+    enforcePopulation: false,
     changes: [{
       type: 'custcel-population',
       sourceFile: pending.fileName,
@@ -1544,6 +1548,7 @@ async function applyPendingCustcelPopulation(pending = state.pendingCustcel) {
     }],
   });
   state.pendingCustcel = null;
+  file.populationProfile = pending;
   return { ...result, applied: true, pending: false, revision: commit.revision };
 }
 
@@ -1561,6 +1566,7 @@ async function importCustcelPopulationFile(file, probeText, encoding = 'utf-8') 
   const parsed = parseCustcelText(text, { fileName: file.name });
   if (!parsed.recognized) return null;
   const pending = { fileName: file.name, parsed };
+  state.activeCustcel = pending;
   state.pendingCustcel = pending;
   const result = await applyPendingCustcelPopulation(pending);
   els.archiveDiagnostics.classList.remove('hidden');
@@ -1670,7 +1676,7 @@ async function processFile(file, cadRole = 'auto') {
       const shouldActivate = !state.activeCadRole || state.activeCadRole === importedRole || importedRole === 'original' || !state.cadFiles.original;
       if (shouldActivate) activateCad(importedRole, { rebuild: true, fit: true });
       else if (state.xlsxData && state.xmlData) rebuildMappingForActiveCad();
-      if (state.pendingCustcel && shouldActivate) custcelApplied = await applyPendingCustcelPopulation();
+      if (state.activeCustcel && shouldActivate) custcelApplied = await applyPendingCustcelPopulation(state.activeCustcel);
     } else if (state.xmlData && state.xlsxData) {
       rebuildMappingForActiveCad(); populateComponents(state.selectedComponentId || BOARD_VIEW); fitView();
     }
@@ -1720,6 +1726,7 @@ function resetProject() {
     cadInspector: createCadInspectorState(),
     cadEditor: createCadEditorState(),
     pendingCustcel: null,
+    activeCustcel: null,
   });
   resetHistogramState();
   document.body.classList.remove('cad-editor-open', 'app-confirm-open');
@@ -2725,7 +2732,7 @@ async function generateComponentReport() {
       projectMetadata: exportMetadata,
     });
     const scopeName = components.length === 1 ? components[0].name : 'raw_parts';
-    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.6.xlsx`));
+    downloadBlob(blob, safeDownloadName(`${reportFileStem(state.xmlData.board?.Name)}_${reportFileStem(scopeName)}_component_report_r${exportMetadata.revisionNumber}_v0.29.7.xlsx`));
     els.componentReportMessage.textContent = `Excel created successfully · ${formatInt.format(components.length)} Component · ${formatInt.format(reportComponentsData.reduce((sum, item) => sum + item.rows.length, 0))} Land`;
     toast('Component Report Excel created successfully', 4200);
   } catch (error) {
@@ -2785,7 +2792,7 @@ function exportCsv() {
         lines.push([...base, ...mappingExportTail(m, metadata)].map(escapeCsv).join(','));
       }
     }
-    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.6.csv`);
+    const filename = safeDownloadName(`${state.xmlData?.board?.Name || 'cad'}_cad_mapping_v0.29.7.csv`);
     downloadBlob(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
     state.diagnostics.record('export-csv', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, rows: lines.length - 1 });
     toast(`Export CSV Revision ${metadata.revisionNumber} successful`, 4200);
@@ -2811,7 +2818,7 @@ function exportJson() {
     });
     const session = ensureProjectSession(file);
     const payload = {
-      app: 'Universal CAD / Land Editor', version: '0.29.6', schemaVersion: session.project.schemaVersion,
+      app: 'Universal CAD / Land Editor', version: '0.29.7', schemaVersion: session.project.schemaVersion,
       exportMetadata: metadata, files: state.fileNames, universalCadModel: session.project.currentModel,
       validation: file.lastValidation || preflight, board: state.xmlData?.board,
       gridLandMappings: ensureGridLandMapStore(file),
@@ -2820,7 +2827,7 @@ function exportJson() {
       cadNameRules: { maxLength: state.cadInspector.maxLength, prefix: state.cadInspector.prefix, overflowMode: state.cadInspector.overflowMode, duplicateMode: state.cadInspector.duplicateMode, duplicateCharacter: state.cadInspector.duplicateCharacter },
       cadNameOverrides, overrides,
     };
-    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.6.json`));
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), safeDownloadName(`universal-cad-editor-project-r${metadata.revisionNumber}-v0.29.7.json`));
     state.diagnostics.record('export-json', performance.now() - exportStarted, { success: true, revision: metadata.revisionNumber, overrides: overrides.length });
     toast(`Export JSON Model Revision ${metadata.revisionNumber} successful`, 4200);
   } catch (error) {
@@ -4126,7 +4133,7 @@ async function exportGridMapExcel() {
       metadata,
     });
     const blob = await buildGridMapExcelBlob(model);
-    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.6.xlsx`);
+    downloadBlob(blob, `${gridMapExcelFileStem(mapper)}_r${metadata.revisionNumber}_v0.29.7.xlsx`);
     toast(`Export Grid / Land Map Excel successful · ${formatInt.format(model.cells.length)} Generated name ↔ CAD Land`, 4800);
     return true;
   } catch (error) {
@@ -4690,7 +4697,7 @@ function renderCadEditorVisualProperties() {
     infoSide = sides.has('top') && sides.has('bottom') ? 'Top + Bottom' : sides.has('bottom') ? 'Bottom' : 'Top';
     infoPosition = `X ${formatFloat.format(bounds.centerX)} · Y ${formatFloat.format(bounds.centerY)} mm`;
     infoSize = `${formatFloat.format(bounds.width)} × ${formatFloat.format(bounds.height)} mm · ${formatInt.format(primary.lands?.length || 0)} Lands`;
-    const population = populationInfo(primary);
+    const population = cadEditorPopulationInfo(primary);
     infoPopulation = population.nonPop ? `NON POP${population.value && population.value !== true ? ` · ${population.value}` : ''}` : (primary.variation || primary.populationStatus || 'Populated / unspecified');
   } else if (count > 1) {
     const bounds = combinedCadEditorBounds(selected);
@@ -4700,7 +4707,7 @@ function renderCadEditorVisualProperties() {
     infoSide = 'Mixed';
     infoPosition = bounds ? `Center X ${formatFloat.format(bounds.centerX)} · Y ${formatFloat.format(bounds.centerY)}` : '—';
     infoSize = bounds ? `${formatFloat.format(bounds.width)} × ${formatFloat.format(bounds.height)} mm` : '—';
-    const nonPopSelected = selected.filter((component) => populationInfo(component).nonPop).length;
+    const nonPopSelected = selected.filter((component) => cadEditorPopulationInfo(component).nonPop).length;
     infoPopulation = nonPopSelected ? `${formatInt.format(nonPopSelected)} Non-Pop / ${formatInt.format(count)} selected` : 'No Non-Pop selected';
   }
   if (els.cadEditorInfoType) els.cadEditorInfoType.textContent = infoType;
@@ -5113,8 +5120,21 @@ async function removeCadEditorLand() {
   commitCadEditorHistory(historyTransaction, { componentUids: [component] });
   return true;
 }
+function cadEditorPopulationInfo(component) {
+  const embedded = populationInfo(component);
+  if (embedded.nonPop) return embedded;
+  const profile = state.activeCustcel;
+  if (profile?.parsed?.recognized && findCustcelPopulationComponents([component], profile.parsed).length) {
+    return { nonPop: true, field: 'Custcel', value: 'NONPOP', reason: `Custcel ${profile.fileName || ''}`.trim() };
+  }
+  return embedded;
+}
 function cadEditorNonPopComponents() {
-  return findNonPopComponents(state.cadEditor.model?.components || []);
+  const components = state.cadEditor.model?.components || [];
+  const matches = new Set(findNonPopComponents(components));
+  const profile = state.activeCustcel;
+  if (profile?.parsed?.recognized) for (const component of findCustcelPopulationComponents(components, profile.parsed)) matches.add(component);
+  return [...matches];
 }
 function resetCadEditorPopulationFilters() {
   state.cadEditor.visual.search = '';
@@ -5125,7 +5145,7 @@ function resetCadEditorPopulationFilters() {
 function selectNonPopCadEditorComponents() {
   const matches = cadEditorNonPopComponents();
   if (!matches.length) {
-    toast('No Non-Pop components were detected from Variation / Population metadata.', 4200);
+    toast('No Non-Pop components were detected from Custcel or CAD population metadata.', 4200);
     return false;
   }
   resetCadEditorPopulationFilters();
@@ -5135,7 +5155,7 @@ function selectNonPopCadEditorComponents() {
   fitCadEditorView(matches);
   renderCadEditor();
   const sample = matches.slice(0, 3).map((component) => {
-    const info = populationInfo(component);
+    const info = cadEditorPopulationInfo(component);
     return `${component.name || component.id}${info.value ? ` (${info.value})` : ''}`;
   }).join(', ');
   toast(`Selected ${formatInt.format(matches.length)} Non-Pop components${sample ? ` · ${sample}${matches.length > 3 ? '…' : ''}` : ''}`, 5200);
@@ -5144,7 +5164,7 @@ function selectNonPopCadEditorComponents() {
 async function deleteNonPopCadEditorComponents() {
   const matches = cadEditorNonPopComponents();
   if (!matches.length) {
-    toast('No Non-Pop components were detected from Variation / Population metadata.', 4200);
+    toast('No Non-Pop components were detected from Custcel or CAD population metadata.', 4200);
     return false;
   }
   const lands = matches.reduce((sum, component) => sum + (component.lands?.length || 0), 0);
@@ -5733,6 +5753,7 @@ async function commitCadEditorToProject({ keepEditorOpen = true, showToast = tru
     file.editRevision = nextRevision;
     file.mappingDirty = false;
     file.viewerDirty = true;
+    if (state.activeCustcel?.parsed?.recognized) file.populationProfile = state.activeCustcel;
     file.renames = new Map();
     file.lastValidation = validationCenter;
     state.cadInspector.renames = file.renames;
@@ -6539,7 +6560,7 @@ if ('serviceWorker' in navigator) {
   });
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=0.29.6', { updateViaCache: 'none' });
+      const registration = await navigator.serviceWorker.register('./sw.js?v=0.29.7', { updateViaCache: 'none' });
       state.serviceWorkerRegistration = registration;
       if (registration.waiting && navigator.serviceWorker.controller) showServiceWorkerUpdate(registration);
       registration.addEventListener('updatefound', () => {
@@ -6561,7 +6582,7 @@ resizeObserver.observe(els.measurementHistogram);
 resizeObserver.observe(els.detailedHistogramCanvas);
 resizeObserver.observe(els.cadEditorCanvas);
 
-async function commitNpiModelChange({ label = 'NPI model update', model, changes = [] } = {}) {
+async function commitNpiModelChange({ label = 'NPI model update', model, changes = [], enforcePopulation = true } = {}) {
   const file = activeCadFile();
   if (!file) throw new CadTransactionError('No active CAD project is available.', { stage: 'npi-commit', code: 'NPI_NO_PROJECT' });
   const session = ensureProjectSession(file);
@@ -6581,7 +6602,10 @@ async function commitNpiModelChange({ label = 'NPI model update', model, changes
     stateSchema: state.schema,
   };
   try {
-    const candidate = cloneCadValue(model);
+    let candidate = cloneCadValue(model);
+    if (enforcePopulation && state.activeCustcel?.parsed?.recognized) {
+      candidate = applyCustcelPopulation(candidate, state.activeCustcel.parsed, { fileName: state.activeCustcel.fileName }).model;
+    }
     const validation = validateUniversalCad(candidate, { unsupportedRecords: file.archive?.candidate?.adapterInfo?.unsupportedRecords || [] });
     if (validation.blockingCount) {
       const detail = validation.issues.filter((item) => item.level === 'blocking-error').slice(0, 4).map((item) => `${item.code}: ${item.message}`).join(' · ');
@@ -6610,20 +6634,32 @@ async function commitNpiModelChange({ label = 'NPI model update', model, changes
     file.lastValidation = validation;
     file.mappingDirty = false;
     file.viewerDirty = true;
+    if (state.activeCustcel?.parsed?.recognized) file.populationProfile = state.activeCustcel;
     if (state.activeCadRole === file.role) {
       state.xmlData = nextLegacy;
       state.xmlText = workingXml;
       state.schema = preparedMapping.schema;
       state.mappingData = preparedMapping.mappingData;
       state.cadEditor.model = file.editorModel;
+      state.viewerSpatialIndex = null;
+      state.cadInspector.audit = null;
+      state.cadCompare.result = null;
+      resetHistogramState();
       normalizeMappings();
       state.selected = null;
       state.preview = null;
       state.page = 1;
+      state.selectedComponentId = BOARD_VIEW;
+      state.duplicateView.selectedName = '';
       populateComponents(BOARD_VIEW);
       renderTable();
+      renderTeachPanel();
+      refreshDuplicateControls();
       draw();
+      renderHistogram();
       updateStats();
+      updateCadCompareControls();
+      if (canCompareCad()) rebuildCadComparison();
       if (!els.cadEditorOverlay.classList.contains('hidden')) renderCadEditor();
     }
     scheduleProjectAutosave(file);
