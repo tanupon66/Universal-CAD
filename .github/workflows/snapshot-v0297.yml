@@ -1,0 +1,33 @@
+name: Snapshot v0.29.7 integration source
+
+on:
+  push:
+    branches:
+      - integration-test-v0.29.7
+    paths:
+      - '.github/workflows/snapshot-v0297.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Record base
+        run: |
+          git rev-parse HEAD > SOURCE_SHA.txt
+          git status --short
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-cad-v0297-integration-source
+          path: |
+            .
+            !.git/**
+          include-hidden-files: true
+          retention-days: 1
