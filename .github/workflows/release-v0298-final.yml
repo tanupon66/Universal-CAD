@@ -1,0 +1,84 @@
+name: Release locally tested v0.29.8
+
+on:
+  push:
+    branches:
+      - release-v0.29.8-tested
+    paths:
+      - '.github/workflows/release-v0298-final.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct exact locally tested patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .release/v0298/part00.b64 .release/v0298/part01.b64 | base64 -d > /tmp/v0298.patch.gz
+          echo 'd951e55916e2f37407f5f4be9f53c7311002daee009b1c588566976d52cef488  /tmp/v0298.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/v0298.patch.gz > /tmp/v0298.patch
+          echo '0d99ec47d6d3e8b978dbbdff6ebe6653e453e66d208aedb9de20ab6839a3eed9  /tmp/v0298.patch' | sha256sum -c -
+          test "$(wc -c < /tmp/v0298.patch)" = '26830'
+
+      - name: Apply patch to current production base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = 'c91ed56d96c5cf72d75773b8c60a0af9f5858dc0'
+          git checkout -B v0298-release-target origin/main
+          git apply --check /tmp/v0298.patch
+          git apply /tmp/v0298.patch
+
+      - name: Verify release behavior and regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in *.js; do node --check "$f" >/dev/null; done
+          ! grep -R -nE 'window\.(confirm|alert|prompt)\s*\(' --include='*.js' .
+          grep -q "enforcePopulation = false" app.js
+          grep -q "custcelInspection = inspectCustcelPopulation" app.js
+          grep -q "Action: detection only" app.js
+          ! grep -q "await applyPendingCustcelPopulation" app.js
+          grep -q "beforeExport: (label) => confirmCustcelExportIfPending" app.js
+          test "$(grep -c 'context.beforeExport' npi-workspace-ui.js)" -ge 2
+          grep -q 'background: linear-gradient(180deg, var(--surface-raised), var(--surface));' styles.css
+          node - <<'NODE'
+          const fs=require('fs');
+          const build=JSON.parse(fs.readFileSync('build-info.json','utf8'));
+          const manifest=JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));
+          if(build.appVersion!=='0.29.8') process.exit(1);
+          if(manifest.version!=='0.29.8') process.exit(1);
+          if(!fs.readFileSync('sw.js','utf8').includes("const APP_VERSION = '0.29.8'")) process.exit(1);
+          if(!fs.readFileSync('index.html','utf8').includes('v0.29.8')) process.exit(1);
+          NODE
+
+      - name: Verify exact tested file bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '79911a6f63254575810434b6d0b2a70b1af437be64307382dafa10afe27f051d  app.js' | sha256sum -c -
+          echo '6f9814b617031a6cbc5695d2959373b070f8935f14dceb7f86e8d8b23d5469f1  build-info.json' | sha256sum -c -
+          echo '95f56415e12b174ea3c98b855eba0f0b716cfdd04bc5a3c6c3eb5026c8856cbb  index.html' | sha256sum -c -
+          echo 'c790876821871ca86efcdef08732b7658b0e8714d94a56a255f3f986564f60cd  manifest.webmanifest' | sha256sum -c -
+          echo 'e05f8a01fcdbb3039f81bf3312f11d40b3aa12c8248a43c4f2635eb773916b45  npi-workspace-ui.js' | sha256sum -c -
+          echo '9eb6c514ed7b4934c08a8e65f7431e36a81a838f41c2f3ec33c19671c08c8bfa  styles.css' | sha256sum -c -
+          echo 'e8e654addd8fdaf5cbfdb710ff1bfbac0d88ba9d1d595ab75d6c20f581b715bf  sw.js' | sha256sum -c -
+
+      - name: Publish v0.29.8 to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js build-info.json index.html manifest.webmanifest npi-workspace-ui.js styles.css sw.js
+          git commit -m 'Release Universal CAD Studio v0.29.8'
+          git push origin HEAD:main
