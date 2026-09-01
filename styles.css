@@ -2588,7 +2588,7 @@ body.cad-editor-user-fullscreen[data-workspace="editor"] #cadEditorOverlay.works
 }
 
 
-/* v0.29.8 — unified dialog theme. Every confirmation/error/submodal uses the
+/* v0.29.9 — unified dialog theme. Every confirmation/error/submodal uses the
    active application theme instead of legacy hard-coded dark surfaces. */
 .modal-overlay,
 .cad-submodal-overlay,

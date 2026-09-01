@@ -1,5 +1,5 @@
 {
-  "name": "Universal CAD Studio v0.29.8",
+  "name": "Universal CAD Studio v0.29.9",
   "short_name": "Universal CAD",
   "description": "Offline-first CAD and NPI preparation workspace for board data, mapping, validation, revision comparison, package analysis, BOM, and multi-format export.",
   "start_url": "./",
@@ -28,7 +28,7 @@
     }
   ],
   "id": "./",
-  "version": "0.29.8",
+  "version": "0.29.9",
   "lang": "en",
   "dir": "ltr",
   "launch_handler": {

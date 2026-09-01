@@ -1,7 +1,7 @@
-/* Universal CAD Studio v0.29.8 — static PWA service worker */
+/* Universal CAD Studio v0.29.9 — static PWA service worker */
 importScripts('./precache-manifest.js');
 
-const APP_VERSION = '0.29.8';
+const APP_VERSION = '0.29.9';
 const SCHEMA_VERSION = 2;
 const CACHE_PREFIX = 'universal-cad-studio';
 const CACHE = `${CACHE_PREFIX}-v${APP_VERSION}-schema${SCHEMA_VERSION}`;
