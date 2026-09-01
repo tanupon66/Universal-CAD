@@ -1,0 +1,150 @@
+name: Hotfix Universal CAD v0.29.9
+
+on:
+  push:
+    branches:
+      - hotfix-v0.29.9
+    paths:
+      - '.github/workflows/hotfix-v0299.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and verify v0.29.9 from deployed v0.29.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_MAIN='d7b1fe3af5b10f0be9b79ce8b63d342e7bf76967'
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN"
+          git checkout -B v0299-main origin/main
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          from datetime import datetime, timezone
+
+          root = Path('.')
+          app = root / 'app.js'
+          data = app.read_bytes()
+          broken = b"].filter(Boolean).join('" + bytes([10]) + b"');"
+          fixed = b"].filter(Boolean).join('" + bytes([92, 110]) + b"');"
+          count = data.count(broken)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one broken Custcel newline literal, found {count}')
+          app.write_bytes(data.replace(broken, fixed))
+
+          expected_counts = {
+              'app.js': 12,
+              'index.html': 5,
+              'styles.css': 1,
+              'manifest.webmanifest': 2,
+              'sw.js': 2,
+              'build-info.json': 1,
+          }
+          for name, expected in expected_counts.items():
+              path = root / name
+              text = path.read_text(encoding='utf-8')
+              found = text.count('0.29.8')
+              if found != expected:
+                  raise SystemExit(f'{name}: expected {expected} v0.29.8 occurrence(s), found {found}')
+              path.write_text(text.replace('0.29.8', '0.29.9'), encoding='utf-8')
+
+          build_info = root / 'build-info.json'
+          obj = json.loads(build_info.read_text(encoding='utf-8'))
+          obj['appVersion'] = '0.29.9'
+          obj['buildDate'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+          obj['commit'] = 'unavailable'
+          build_info.write_text(json.dumps(obj, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          echo 'Checking every JavaScript file as a real ES module...'
+          for f in *.js; do
+            node --input-type=module --check < "$f"
+          done
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          root = Path('.')
+          missing = []
+          for fp in root.glob('*.js'):
+              text = fp.read_text(encoding='utf-8')
+              for match in re.finditer(r"(?:from\s+|import\s*)['\"](\./[^'\"]+)['\"]", text):
+                  spec = match.group(1).split('?')[0].split('#')[0]
+                  target = (fp.parent / spec).resolve()
+                  if not target.exists():
+                      missing.append((fp.name, spec))
+          if missing:
+              raise SystemExit(f'Missing relative imports: {missing}')
+
+          app = (root / 'app.js').read_text(encoding='utf-8')
+          if "].filter(Boolean).join('\\n');" not in app:
+              raise SystemExit('Custcel diagnostics newline fix is missing')
+          if "applyPendingCustcelPopulation" in app:
+              raise SystemExit('Legacy Custcel auto-delete path returned')
+          for required in (
+              'inspectCustcelPopulation',
+              'confirmCustcelExportIfPending',
+              'findCustcelPopulationComponents',
+              'Select Non-Pop',
+              'Remove Non-Pop',
+          ):
+              if required not in app:
+                  raise SystemExit(f'Missing integrated population feature: {required}')
+
+          native = re.compile(r'(?<![\w.])(alert|confirm|prompt)\s*\(')
+          offenders = []
+          for fp in root.glob('*.js'):
+              for lineno, line in enumerate(fp.read_text(encoding='utf-8').splitlines(), 1):
+                  if native.search(line):
+                      offenders.append(f'{fp.name}:{lineno}:{line.strip()}')
+          if offenders:
+              raise SystemExit('Native browser popup calls remain:\n' + '\n'.join(offenders))
+
+          css = (root / 'styles.css').read_text(encoding='utf-8')
+          for selector in (
+              '.app-confirm-dialog', '.global-error-dialog', '.cad-submodal-dialog',
+              '.cad-confirm-dialog', 'html[data-theme="light"] .app-confirm-actions .primary'
+          ):
+              if selector not in css:
+                  raise SystemExit(f'Missing unified theme selector: {selector}')
+
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          if './app.js?v=0.29.9' not in html or './styles.css?v=0.29.9' not in html:
+              raise SystemExit('Cache-busted v0.29.9 assets are missing from index.html')
+          sw = (root / 'sw.js').read_text(encoding='utf-8')
+          if "const APP_VERSION = '0.29.9';" not in sw:
+              raise SystemExit('Service Worker cache version was not bumped')
+          PY
+
+          if grep -RIn --exclude='*.png' '0\.29\.8' app.js build-info.json index.html manifest.webmanifest styles.css sw.js; then
+            echo 'Old version marker remains in release-bearing files' >&2
+            exit 1
+          fi
+
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' app.js build-info.json index.html manifest.webmanifest styles.css sw.js | sort)"
+          test "$changed" = "$expected"
+
+          echo 'V0.29.9_HOTFIX_VERIFIED'
+
+      - name: Publish verified hotfix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js build-info.json index.html manifest.webmanifest styles.css sw.js
+          git commit -m 'Release Universal CAD Studio v0.29.9'
+          git push origin HEAD:main
