@@ -567,11 +567,13 @@ export function initNpiWorkspace(context = {}) {
     state.bomLayout = normalizeBomLayout();
     renderBomLayout();
   });
-  $('npiBomExportCsv')?.addEventListener('click', () => {
+  $('npiBomExportCsv')?.addEventListener('click', async () => {
+    if (context.beforeExport && !(await context.beforeExport('Export BOM'))) return;
     const rows = currentBom();
     download(new Blob(['\ufeff', buildBomCsv(rows, state.bomLayout)], { type: 'text/csv;charset=utf-8' }), `bom-r${getProject()?.appliedRevision || 0}.csv`);
   });
   $('npiBomExportXlsx')?.addEventListener('click', async () => {
+    if (context.beforeExport && !(await context.beforeExport('Export BOM'))) return;
     const rows = currentBom();
     const blob = await buildBomXlsx(rows, state.bomLayout, { title: `BOM Revision ${getProject()?.appliedRevision || 0}` });
     download(blob, `bom-r${getProject()?.appliedRevision || 0}.xlsx`);

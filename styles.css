@@ -2586,3 +2586,69 @@ body.cad-editor-user-fullscreen[data-workspace="editor"] #cadEditorOverlay.works
   }
   body[data-workspace="editor"] #editorWorkspaceHost:not(.hidden) { min-height: 620px; }
 }
+
+
+/* v0.29.8 — unified dialog theme. Every confirmation/error/submodal uses the
+   active application theme instead of legacy hard-coded dark surfaces. */
+.modal-overlay,
+.cad-submodal-overlay,
+.cad-confirm-overlay,
+.cad-editor-busy-overlay { background: var(--overlay); }
+.app-confirm-dialog,
+.global-error-dialog,
+.cad-submodal-dialog,
+.cad-confirm-dialog,
+.cad-editor-busy-card {
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.app-confirm-dialog h2,
+.global-error-dialog h2,
+.cad-submodal-dialog h2,
+.cad-confirm-dialog h3,
+.cad-editor-busy-card strong { color: var(--text); }
+.app-confirm-dialog p,
+.global-error-dialog p,
+.cad-submodal-header p,
+.cad-confirm-dialog p,
+.cad-editor-busy-card span:last-child { color: var(--muted); }
+.app-confirm-detail,
+.global-error-meta > *,
+.global-error-dialog details,
+.cad-confirm-summary span,
+.cad-submodal-actions,
+.land-grid-summary span {
+  background: var(--surface-soft);
+  border-color: var(--line-soft);
+  color: var(--text);
+}
+.cad-submodal-header,
+.cad-submodal-actions { border-color: var(--line-soft); }
+.land-grid-controls label,
+.land-grid-summary { color: var(--muted); }
+.land-grid-table-wrap { background: var(--surface); border-color: var(--line); }
+.land-grid-table th,
+.land-grid-table .row-header { background: var(--table-head); color: var(--text); }
+.land-grid-table th,
+.land-grid-table td { border-color: var(--line-soft); }
+.land-grid-cell strong { color: var(--text); }
+.land-grid-cell small,
+.land-grid-cell.empty { color: var(--muted); }
+.land-grid-cell.changed strong { color: var(--good); }
+.land-grid-summary .is-error { color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.app-confirm-actions button,
+.cad-confirm-actions button,
+.global-error-actions button,
+.cad-submodal-actions button { background: var(--control); border-color: var(--line); color: var(--text); }
+.app-confirm-actions .primary,
+.cad-confirm-actions .primary,
+.global-error-actions .primary,
+.cad-submodal-actions .primary { color: #fff; background: linear-gradient(135deg, #178f84, #2479b2); border-color: transparent; }
+html[data-theme="light"] .app-confirm-actions .primary,
+html[data-theme="light"] .cad-confirm-actions .primary,
+html[data-theme="light"] .global-error-actions .primary,
+html[data-theme="light"] .cad-submodal-actions .primary { background: linear-gradient(135deg, #0d8278, #176fa6); }
+.app-confirm-actions .danger,
+.cad-confirm-actions .danger { color: #fff; background: color-mix(in srgb, var(--danger) 82%, #111); border-color: transparent; }
