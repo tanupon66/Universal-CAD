@@ -206,7 +206,8 @@ export function buildPlacementInspectionXml(parsed, options = {}) {
     // the geometry/fallback definition when the TXT row has no explicit Variation.
     const duplicateCount = (seen.get(location) || 0) + 1;
     seen.set(location, duplicateCount);
-    const component = { id: String(components.length + 1), name: location, centerX: x * scale, centerY: y * scale, angle: variation.angle, variant: variation.variant, variation: variation.variant, library, side };
+    const packageName = String(variation.variant || '').trim() || library.library;
+    const component = { id: String(components.length + 1), name: location, packageName, centerX: x * scale, centerY: y * scale, angle: variation.angle, variant: variation.variant, variation: variation.variant, library, side };
     components.push(component);
     libraryCounts.set(library.library, (libraryCounts.get(library.library) || 0) + 1);
     minX = Math.min(minX, component.centerX); maxX = Math.max(maxX, component.centerX);
