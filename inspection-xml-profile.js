@@ -128,7 +128,9 @@ export function exportInspectionXml(model, options = {}) {
     const packageName = String(component.packageName || '').trim() || `PACKAGE_${id}`;
     push(`\t\t\t\t<ComponentInformation Id="${id}" Name="${xmlEscape(component.name || '')}">`);
     push('\t\t\t\t\t<ItemList>');
-    push(`\t\t\t\t\t\t<ComponentInformationItem ComponentNumberId="${xmlEscape(packageName)}" ComponentNumberRevision="${xmlEscape(component.revision || '')}">`);
+    const variation = String(component.variation || '').trim();
+     const variationAttr = variation ? ` UCADVariation="${xmlEscape(variation)}"` : '';
+     push(`\t\t\t\t\t\t<ComponentInformationItem ComponentNumberId="${xmlEscape(packageName)}" ComponentNumberRevision="${xmlEscape(component.revision || '')}"${variationAttr}>`);
     push(`\t\t\t\t\t\t\t<PositionAngle CenterPosX="${geometryNumber(component.centerX ?? 0)}" CenterPosY="${geometryNumber(component.centerY ?? 0)}" Angle="${angleNumber(component.angle ?? 0)}"/>`);
     push('\t\t\t\t\t\t\t<DestinationList>');
     push(`\t\t\t\t\t\t\t\t<Destination Name="${xmlEscape(packageName)}"/>`);
