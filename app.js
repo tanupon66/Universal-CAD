@@ -72,6 +72,7 @@ import { createDiagnosticReport, diagnosticText } from './diagnostics.js';
 import { detectCadFormat } from './format-detector.js';
 import { adaptCadText } from './import-adapters.js';
 import { decodeTextBytes, parseDelimitedText } from './delimited-import.js';
+import { parsePlacementText, detectPlacementColumns, buildPlacementInspectionXml } from './txt-placement-xml.js';
 import { buildLandSpatialIndex } from './spatial-index.js';
 import { transformCadEditorBoard } from './board-transform.js';
 import { buildGeneratedLandMapPlan, buildGridRenamePlan, defaultGridLabels, detectLandGrid } from './land-grid-mapper.js';
@@ -79,7 +80,7 @@ import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
-import { initUiShell } from './ui-shell.js?v=0.29.9';
+import { initUiShell } from './ui-shell.js?v=0.30.0';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
 import { findNonPopComponents, populationInfo } from './component-population.js';
 import { applyCustcelPopulation, findCustcelPopulationComponents, parseCustcelText } from './custcel-population.js';
@@ -92,6 +93,7 @@ import {
 const BOARD_VIEW = '__board__';
 const CAD_EDITOR_RENDER_LIMIT = 500;
 const CAD_EDITOR_LIGHT_SELECTION_LIMIT = 160;
+let txtPlacementDraft = null;
 const $ = (id) => document.getElementById(id);
 const themeCanvasColor = (name, fallback) => {
   if (typeof getComputedStyle !== 'function' || !document?.documentElement) return fallback;
@@ -99,6 +101,7 @@ const themeCanvasColor = (name, fallback) => {
 };
 const els = {
   projectFile: $('projectFile'), dropZone: $('dropZone'), resetButton: $('resetButton'),
+  txtPlacementButton: $('txtPlacementButton'), txtPlacementFile: $('txtPlacementFile'), txtPlacementLocationColumn: $('txtPlacementLocationColumn'), txtPlacementVariationColumn: $('txtPlacementVariationColumn'), txtPlacementXColumn: $('txtPlacementXColumn'), txtPlacementYColumn: $('txtPlacementYColumn'), txtPlacementStartRow: $('txtPlacementStartRow'), txtPlacementUnit: $('txtPlacementUnit'), txtPlacementSide: $('txtPlacementSide'), txtPlacementPadWidth: $('txtPlacementPadWidth'), txtPlacementPadLength: $('txtPlacementPadLength'), txtPlacementPadPitch: $('txtPlacementPadPitch'), txtPlacementGenerate: $('txtPlacementGenerate'), txtPlacementMessage: $('txtPlacementMessage'), txtPlacementRows: $('txtPlacementRows'), txtPlacementLibraries: $('txtPlacementLibraries'),
   originalCadButton: $('originalCadButton'), originalCadFile: $('originalCadFile'), generatedCadButton: $('generatedCadButton'), generatedCadFile: $('generatedCadFile'),
   archiveCadButton: $('archiveCadButton'), archiveCadFile: $('archiveCadFile'),
   restoreButton: $('restoreButton'), restoreFile: $('restoreFile'), projectBackupButton: $('projectBackupButton'), recoveryButton: $('recoveryButton'), storageManagerButton: $('storageManagerButton'),
@@ -6200,7 +6203,88 @@ function visualToggle(property) {
 
 function resizeCanvas() { draw(); drawCadEditorCanvas(); renderHistogram(); if (!els.histogramOverlay.classList.contains('hidden')) renderDetailedHistogram(); }
 
+function txtPlacementColumnOptions(select, selected) {
+  if (!select || !txtPlacementDraft) return;
+  const rows = txtPlacementDraft.rows || [];
+  const header = txtPlacementDraft.hasHeader ? rows[0] || [] : [];
+  select.innerHTML = '';
+  for (let index = 0; index < txtPlacementDraft.columnCount; index += 1) {
+    const sample = rows[txtPlacementDraft.hasHeader ? 1 : 0]?.[index] ?? '';
+    const label = String.fromCharCode(65 + index) + (header[index] ? ' — ' + header[index] : sample ? ' — ' + String(sample).slice(0, 28) : '');
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = label;
+    if (index === selected) option.selected = true;
+    select.append(option);
+  }
+}
+
+function refreshTxtPlacementColumnSelectors() {
+  if (!txtPlacementDraft) return;
+  const guess = detectPlacementColumns(txtPlacementDraft);
+  txtPlacementColumnOptions(els.txtPlacementLocationColumn, guess.location);
+  txtPlacementColumnOptions(els.txtPlacementVariationColumn, guess.variation);
+  txtPlacementColumnOptions(els.txtPlacementXColumn, guess.x);
+  txtPlacementColumnOptions(els.txtPlacementYColumn, guess.y);
+  els.txtPlacementStartRow.value = String((txtPlacementDraft.startRow ?? 0) + 1);
+  els.txtPlacementRows.textContent = String(txtPlacementDraft.rowCount);
+  els.txtPlacementGenerate.disabled = false;
+  els.txtPlacementMessage.textContent = 'TXT loaded. Select the four columns that matter: Location, Variation, X, and Y. All other columns are ignored.';
+}
+
+async function loadTxtPlacementFile(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    txtPlacementDraft = parsePlacementText(text, { fileName: file.name });
+    txtPlacementDraft.fileName = file.name;
+    refreshTxtPlacementColumnSelectors();
+    els.txtPlacementLibraries.textContent = 'Library is generated automatically from Location prefix (R/C/L/D/Q/U/J/etc.). Unknown prefixes use AUTO_DEFAULT_2PAD.';
+    els.importMessage.textContent = 'TXT placement data loaded. No existing CAD source was modified.';
+  } catch (error) {
+    txtPlacementDraft = null;
+    els.txtPlacementGenerate.disabled = true;
+    els.txtPlacementMessage.textContent = error?.message || String(error);
+    showGlobalError(error, { title: 'TXT placement import failed', operation: 'txt-placement-parse', fileName: file?.name });
+  }
+}
+
+function generateTxtPlacementXml() {
+  if (!txtPlacementDraft) return;
+  try {
+    const startRow = Math.max(1, Number(els.txtPlacementStartRow.value) || 1) - 1;
+    const result = buildPlacementInspectionXml(txtPlacementDraft, {
+      locationColumn: Number(els.txtPlacementLocationColumn.value),
+      variationColumn: Number(els.txtPlacementVariationColumn.value),
+      xColumn: Number(els.txtPlacementXColumn.value),
+      yColumn: Number(els.txtPlacementYColumn.value),
+      startRow,
+      unit: els.txtPlacementUnit.value,
+      side: els.txtPlacementSide.value,
+      padWidth: Number(els.txtPlacementPadWidth.value),
+      padLength: Number(els.txtPlacementPadLength.value),
+      padPitch: Number(els.txtPlacementPadPitch.value),
+      boardName: String(txtPlacementDraft.fileName || 'TXT_PLACEMENT_BOARD').replace(/\.[^.]+$/, ''),
+    });
+    const xmlName = String(txtPlacementDraft.fileName || 'placement.txt').replace(/\.[^.]+$/, '') + '_generated.xml';
+    storeCadFile('original', result.xml, xmlName, { sourceFormat: 'txt-placement-xml' });
+    activateCad('original', { rebuild: true, fit: true });
+    els.txtPlacementMessage.textContent = 'Generated ' + xmlName + ' · ' + result.summary.components + ' components · ' + result.summary.lands + ' pads. ' + (result.summary.warnings.length ? result.summary.warnings.length + ' warning(s).' : 'No skipped rows.');
+    els.importMessage.textContent = 'TXT → XML conversion complete. The generated XML is now the active editable CAD source.';
+    if (result.summary.warnings.length) els.archiveDiagnosticsText.textContent = ['TXT → XML warnings', ...result.summary.warnings, '', 'Libraries', ...result.summary.libraries.map((item) => item.name + ': ' + item.count)].join('\n');
+    els.archiveDiagnostics.classList.remove('hidden');
+    toast('TXT converted to XML · ' + result.summary.components + ' components', 5000);
+  } catch (error) {
+    els.txtPlacementMessage.textContent = error?.message || String(error);
+    showGlobalError(error, { title: 'TXT to XML conversion failed', operation: 'txt-placement-xml' });
+  }
+}
+
+
 els.projectFile.addEventListener('change', (event) => processFile(event.target.files[0], 'auto'));
+els.txtPlacementButton.addEventListener('click', () => els.txtPlacementFile.click());
+els.txtPlacementFile.addEventListener('change', (event) => loadTxtPlacementFile(event.target.files[0]));
+els.txtPlacementGenerate.addEventListener('click', generateTxtPlacementXml);
 els.originalCadButton.addEventListener('click', () => els.originalCadFile.click());
 els.originalCadFile.addEventListener('change', (event) => processFile(event.target.files[0], 'original'));
 els.generatedCadButton.addEventListener('click', () => els.generatedCadFile.click());

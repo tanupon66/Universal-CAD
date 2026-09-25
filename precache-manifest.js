@@ -48,6 +48,7 @@ self.__PRECACHE_ASSETS = [
   "./sw.js",
   "./target-profile-engine.js",
   "./transaction-engine.js",
+  "./txt-placement-xml.js",
   "./ui-shell.js",
   "./universal-cad-model.js",
   "./unix-compress.js",

@@ -20,7 +20,7 @@ try {
 }
 </script>
 <link href="./styles.css?v=0.29.9" rel="stylesheet"/>
-<title>Universal CAD Studio v0.29.9</title>
+<title>Universal CAD Studio v0.30.0</title>
 </head>
 <body>
 <header class="topbar">
@@ -103,7 +103,32 @@ try {
 <details class="archive-diagnostics hidden" id="archiveDiagnostics"><summary>File Diagnostics</summary><pre id="archiveDiagnosticsText">—</pre></details>
 </section>
 <section class="panel-section" data-workspace-section="import">
-<span class="eyebrow">2. SOURCE COLUMNS</span>
+<span class="eyebrow">2. TXT → XML PLACEMENT</span>
+<h2>Build XML from Placement TXT</h2>
+<p class="helper-text">Use only the Location, Variation, X, and Y columns. Header names are optional. All other TXT columns are ignored.</p>
+<div class="mini-actions">
+<button id="txtPlacementButton" type="button">Select Placement TXT</button>
+<input accept=".txt,.csv,text/plain,text/csv" hidden id="txtPlacementFile" type="file"/>
+</div>
+<div class="file-row"><span>TXT rows</span><strong id="txtPlacementRows">0</strong></div>
+<div class="form-grid">
+<label>Location<select id="txtPlacementLocationColumn"></select></label>
+<label>Variation / Rotation<select id="txtPlacementVariationColumn"></select></label>
+<label>X<select id="txtPlacementXColumn"></select></label>
+<label>Y<select id="txtPlacementYColumn"></select></label>
+<label>First data row<input id="txtPlacementStartRow" min="1" step="1" type="number" value="2"/></label>
+<label>Units<select id="txtPlacementUnit"><option value="mm">mm</option><option value="inch">inch</option><option value="mil">mil</option></select></label>
+<label>Side<select id="txtPlacementSide"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+<label>Default pad width<input id="txtPlacementPadWidth" min="0.05" step="0.01" type="number" value="0.80"/></label>
+<label>Default pad length<input id="txtPlacementPadLength" min="0.05" step="0.01" type="number" value="0.80"/></label>
+<label>Pad pitch<input id="txtPlacementPadPitch" min="0.05" step="0.01" type="number" value="1.20"/></label>
+</div>
+<p class="helper-text" id="txtPlacementLibraries">Library is generated automatically from Location prefix. Unknown prefixes use the safe default library.</p>
+<button class="primary full" disabled id="txtPlacementGenerate" type="button">Generate XML &amp; Open Board</button>
+<p class="helper-text" id="txtPlacementMessage">No placement TXT loaded.</p>
+</section>
+<section class="panel-section" data-workspace-section="import">
+<span class="eyebrow">3. SOURCE COLUMNS</span>
 <h2>Source Data Columns</h2>
 <div class="form-grid">
 <label>Component<select id="componentColumn"></select></label>
@@ -114,7 +139,7 @@ try {
 <button class="primary full" disabled="" id="remapButton" type="button">Recalculate Mapping</button>
 </section>
 <section class="panel-section stats-section" data-workspace-section="mapping">
-<span class="eyebrow">3. SUMMARY</span>
+<span class="eyebrow">4. SUMMARY</span>
 <div class="stat-grid">
 <div class="stat"><span>Mapped</span><strong id="mappedStat">0</strong></div>
 <div class="stat"><span>Confirmed</span><strong id="verifiedStat">0</strong></div>
@@ -125,7 +150,7 @@ try {
 <div class="formula-card" id="mappingFormula">No mapping strategy yet</div>
 </section>
 <section class="panel-section" data-workspace-section="mapping">
-<span class="eyebrow">VIEW & FILTER</span>
+<span class="eyebrow">5. VIEW & FILTER</span>
 <label>Active CAD
           <select id="activeCadSelect"><option value="">— No CAD loaded —</option></select>
 </label>
@@ -152,7 +177,7 @@ try {
 <section class="home-dashboard" id="homeDashboard">
 <div class="home-hero panel">
 <div><span class="eyebrow">PROJECT HOME</span><h2>Universal CAD Studio</h2><p>Import, edit, map, validate, and export manufacturing data through a guided project workflow.</p></div>
-<div class="home-build"><span>Build</span><strong id="homeBuild">v0.29.9</strong></div>
+<div class="home-build"><span>Build</span><strong id="homeBuild">v0.30.0</strong></div>
 </div>
 <div class="home-card-grid">
 <article class="home-card panel home-project-card"><span class="eyebrow">CURRENT PROJECT</span><h3 id="homeProjectStatus">No project open</h3><p id="homeActiveCad">No CAD loaded</p><div class="home-card-actions"><button data-ui-route="import" type="button">Open / Import</button><button class="primary" data-ui-route="mapping" type="button">Continue Mapping</button></div></article>
@@ -1312,6 +1337,6 @@ try {
 </div>
 </div>
 <div class="toast hidden" id="toast"></div>
-<script src="./app.js?v=0.29.9" type="module"></script>
+<script src="./app.js?v=0.30.0" type="module"></script>
 </body>
 </html>
