@@ -80,7 +80,7 @@ import { exportGenCad14, exportFabmasterAscii } from './pcb-ascii-formats.js';
 import { exportInspectionXml, isStructuredInspectionXml } from './inspection-xml-profile.js';
 import { PerformanceDiagnostics } from './performance-diagnostics.js';
 import { initNpiWorkspace } from './npi-workspace-ui.js';
-import { initUiShell } from './ui-shell.js?v=0.30.2';
+import { initUiShell } from './ui-shell.js?v=0.30.3';
 import { cloneCadValue, universalCadToLegacy } from './universal-cad-model.js';
 import { findNonPopComponents, populationInfo } from './component-population.js';
 import { applyCustcelPopulation, findCustcelPopulationComponents, parseCustcelText } from './custcel-population.js';
@@ -6664,7 +6664,7 @@ if ('serviceWorker' in navigator) {
   });
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=0.30.2', { updateViaCache: 'none' });
+      const registration = await navigator.serviceWorker.register('./sw.js?v=0.30.3', { updateViaCache: 'none' });
       state.serviceWorkerRegistration = registration;
       if (registration.waiting && navigator.serviceWorker.controller) showServiceWorkerUpdate(registration);
       registration.addEventListener('updatefound', () => {
