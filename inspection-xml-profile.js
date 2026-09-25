@@ -63,7 +63,8 @@ function componentLandBounds(component, side = 'all') {
 function packageDefinitions(components, side) {
   const byName = new Map();
   for (const component of components) {
-    const name = String(component.packageName || '').trim() || `PACKAGE_${component.id}`;
+    const variation = String(component.variation || component.variant || '').trim();
+    const name = variation || String(component.packageName || '').trim() || `PACKAGE_${component.id}`;
     if (!byName.has(name)) byName.set(name, componentLandBounds(component, side));
   }
   return byName;
@@ -128,9 +129,10 @@ export function exportInspectionXml(model, options = {}) {
     const packageName = String(component.packageName || '').trim() || `PACKAGE_${id}`;
     push(`\t\t\t\t<ComponentInformation Id="${id}" Name="${xmlEscape(component.name || '')}">`);
     push('\t\t\t\t\t<ItemList>');
-    const variation = String(component.variation || '').trim();
-     const variationAttr = variation ? ` UCADVariation="${xmlEscape(variation)}"` : '';
-     push(`\t\t\t\t\t\t<ComponentInformationItem ComponentNumberId="${xmlEscape(packageName)}" ComponentNumberRevision="${xmlEscape(component.revision || '')}"${variationAttr}>`);
+    const variation = String(component.variation || component.variant || '').trim();
+    const componentNumberId = variation || packageName;
+    const variationAttr = variation ? ` UCADVariation="${xmlEscape(variation)}"` : '';
+    push(`\t\t\t\t\t\t<ComponentInformationItem ComponentNumberId="${xmlEscape(componentNumberId)}" ComponentNumberRevision="${xmlEscape(component.revision || '')}"${variationAttr}>`);
     push(`\t\t\t\t\t\t\t<PositionAngle CenterPosX="${geometryNumber(component.centerX ?? 0)}" CenterPosY="${geometryNumber(component.centerY ?? 0)}" Angle="${angleNumber(component.angle ?? 0)}"/>`);
     push('\t\t\t\t\t\t\t<DestinationList>');
     push(`\t\t\t\t\t\t\t\t<Destination Name="${xmlEscape(packageName)}"/>`);

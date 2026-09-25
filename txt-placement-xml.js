@@ -202,9 +202,11 @@ export function buildPlacementInspectionXml(parsed, options = {}) {
     }
     const variation = parseVariation(row[variationColumn]);
     const library = libraryForLocation(location);
+    // Placement TXT is the source of truth for Variation. Library remains only
+    // the geometry/fallback definition when the TXT row has no explicit Variation.
     const duplicateCount = (seen.get(location) || 0) + 1;
     seen.set(location, duplicateCount);
-    const component = { id: String(components.length + 1), name: location, centerX: x * scale, centerY: y * scale, angle: variation.angle, variant: variation.variant, library, side };
+    const component = { id: String(components.length + 1), name: location, centerX: x * scale, centerY: y * scale, angle: variation.angle, variant: variation.variant, variation: variation.variant, library, side };
     components.push(component);
     libraryCounts.set(library.library, (libraryCounts.get(library.library) || 0) + 1);
     minX = Math.min(minX, component.centerX); maxX = Math.max(maxX, component.centerX);
@@ -238,11 +240,13 @@ export function buildPlacementInspectionXml(parsed, options = {}) {
   for (const component of components) {
     push('      <ComponentInformation Id="' + component.id + '" Name="' + escapeXml(component.name) + '">');
     push('        <ItemList>');
-    const variationAttr = component.variant ? ' UCADVariation="' + escapeXml(component.variant) + '"' : '';
-    push('          <ComponentInformationItem ComponentNumberId="' + escapeXml(component.library.library) + '" ComponentNumberRevision=""' + variationAttr + '>');
+    const variationValue = String(component.variant || component.variation || '').trim();
+    const componentNumberId = variationValue || component.library.library;
+    const variationAttr = variationValue ? ' UCADVariation="' + escapeXml(variationValue) + '"' : '';
+    push('          <ComponentInformationItem ComponentNumberId="' + escapeXml(componentNumberId) + '" ComponentNumberRevision=""' + variationAttr + '>');
     push('            <PositionAngle CenterPosX="' + number(component.centerX) + '" CenterPosY="' + number(component.centerY) + '" Angle="' + angle(component.angle) + '"/>');
     push('            <DestinationList>');
-    push('              <Destination Name="' + escapeXml(component.library.library) + '"/>');
+    push('              <Destination Name="' + escapeXml(componentNumberId) + '"/>');
     push('            </DestinationList>');
     push('          </ComponentInformationItem>');
     push('        </ItemList>');
@@ -253,7 +257,10 @@ export function buildPlacementInspectionXml(parsed, options = {}) {
   push('  <ComponentNumberCollectionXml>');
   push('    <ComponentNumberCollection FormatVersion="">');
   const uniqueLibraries = new Map();
-  for (const component of components) uniqueLibraries.set(component.library.library, component.library);
+  for (const component of components) {
+    const componentNumberId = String(component.variant || component.variation || '').trim() || component.library.library;
+    if (!uniqueLibraries.has(componentNumberId)) uniqueLibraries.set(componentNumberId, component.library);
+  }
   for (const [libraryName, library] of uniqueLibraries) {
     const bodyWidth = library.pads === 1 ? padWidth : pitch + padWidth;
     const bodyLength = library.pads <= 2 ? padLength : pitch + padLength;
