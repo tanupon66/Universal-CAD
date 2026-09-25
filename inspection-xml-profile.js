@@ -126,7 +126,8 @@ export function exportInspectionXml(model, options = {}) {
   push('\t\t\t<Dictionary>');
   for (const component of components) {
     const id = componentIdMap.get(component);
-    const packageName = String(component.packageName || '').trim() || `PACKAGE_${id}`;
+    const variation = String(component.variation || component.variant || '').trim();
+    const packageName = variation || String(component.packageName || '').trim() || `PACKAGE_${id}`;
     push(`\t\t\t\t<ComponentInformation Id="${id}" Name="${xmlEscape(component.name || '')}">`);
     push('\t\t\t\t\t<ItemList>');
     const componentNumberId = packageName;
